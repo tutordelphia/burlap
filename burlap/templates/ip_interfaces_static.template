@@ -1,0 +1,7 @@
+auto {{ ip_interface }}
+iface {{ ip_interface }} inet static
+address {{ ip_address }}
+netmask {{ ip_netmask }}
+broadcast {{ ip_broadcast }}
+gateway {{ ip_gateway }}
+{% if ip_dns_nameservers %}dns-nameservers {{ ip_dns_nameservers }}{% endif %}

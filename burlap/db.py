@@ -1,13 +1,15 @@
 import os
+import re
 import sys
 import datetime
+import glob
+import tempfile
 
 from fabric.api import (
     env,
     local,
     put as _put,
     require,
-    #run as _run,
     run,
     settings,
     sudo,
@@ -16,7 +18,15 @@ from fabric.api import (
 )
 from fabric.contrib import files
 
-from common import run, put
+from common import (
+    #run,
+    put,
+    get_settings,
+    set_site,
+    render_remote_paths,
+    SITE,
+    ROLE,
+)
 
 # This overrides the built-in load command.
 env.db_dump_command = None
@@ -26,8 +36,15 @@ env.db_load_command = None
 
 env.db_app_migration_order = []
 env.db_dump_dest_dir = '/tmp'
+
+# The login for performance administrative tasks (e.g. CREATE/DROP database).
 env.db_root_password = 'root'
 env.db_root_user = 'root'
+
+# If set, allows remote users to connect to the database.
+# This shouldn't be necessary if the webserver and database
+# share the same server.
+env.db_allow_remote_connections = False
 
 env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s | gzip -c > %(db_dump_fn)s'
 env.db_postgresql_createlangs = ['plpgsql'] # plpythonu
@@ -35,16 +52,16 @@ env.db_postgresql_postgres_user = 'postgres'
 
 env.db_mysql_max_allowed_packet = '500M'
 env.db_mysql_net_buffer_length = 1000000
+env.db_mysql_conf = '/etc/mysql/my.cnf'
 env.db_mysql_dump_command = 'mysqldump --opt --compress --max_allowed_packet=%(db_mysql_max_allowed_packet)s --force --single-transaction --quick --user %(db_user)s --password=%(db_password)s -h %(db_host)s %(db_name)s | gzip > %(db_dump_fn)s'
 env.db_mysql_preload_commands = []
 
-def get_settings():
-    module_path = env.settings_module % env
-    module = __import__(module_path, fromlist='.'.join(module_path.split('.')[:-1]))
-    return module
+env.db_fixture_sets = {} # {name:[list of fixtures]}
 
-def set_db(name='default'):
-    settings = get_settings()
+def set_db(name=None, site=None, role=None):
+    name = name or 'default'
+    settings = get_settings(site=site, role=role)
+    print 'settings:',settings
     default_db = settings.DATABASES[name]
     env.db_name = default_db['NAME']
     env.db_user = default_db['USER']
@@ -53,35 +70,99 @@ def set_db(name='default'):
     env.db_engine = default_db['ENGINE']
 
 @task
-def create(drop=0):
+def configure(name=None, site=None, _role=None, dryrun=0):
+    """
+    Configures a fresh install of the database
+    """
+    assert env[ROLE]
+    require('app_name')
+    set_db(name=name, site=site, role=_role)
+    print 'site:',env[SITE]
+    print 'role:',env[ROLE]
+    env.dryrun = int(dryrun)
+    if 'postgres' in env.db_engine:
+        todo
+    elif 'mysql' in env.db_engine:
+        if env.db_allow_remote_connections:
+            
+            # Enable remote connections.
+            sudo("sed -i 's/127.0.0.1/0.0.0.0/g' %(db_mysql_conf)s" % env)
+            
+            # Enable root logins from remote connections.
+            sudo('mysql -u %(db_root_user)s -p%(db_root_password)s --execute="USE mysql; GRANT ALL ON *.* to %(db_root_user)s@\'%%\' IDENTIFIED BY \'%(db_root_password)s\'; FLUSH PRIVILEGES;"' % env)
+            
+            sudo('service mysql restart')
+
+@task
+def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
     """
     Creates the target database
     """
-    require('role', 'app_name')
-    sys.path.insert(0, env.src_dir)
+    assert env[ROLE]
+    require('app_name')
     env.db_drop_flag = '--drop' if int(drop) else ''
-    set_db()
+    set_db(name=name, site=site)
+    print 'site:',env[SITE]
+    print 'role:',env[ROLE]
+    env.dryrun = int(dryrun)
     if 'postgres' in env.db_engine:
         env.src_dir = os.path.abspath(env.src_dir)
         # This assumes the django-extensions app is installed, which
         # provides the convenient sqlcreate command.
-        run('cd %(src_dir)s; ./manage sqlcreate --router=default %(db_drop_flag)s | psql --user=postgres --no-password' % env)
+        cmd = 'cd %(src_dir)s; %(django_manage)s sqlcreate --router=default %(db_drop_flag)s | psql --user=%(db_postgresql_postgres_user)s --no-password' % env
+        sudo(cmd)
         #run('psql --user=postgres -d %(db_name)s -c "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %(db_user)s_ro CASCADE; DROP ROLE IF EXISTS %(db_user)s_ro; DROP USER IF EXISTS %(db_user)s_ro; CREATE USER %(db_user)s_ro WITH PASSWORD \'readonly\'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO %(db_user)s_ro;"')
         with settings(warn_only=True):
-            run('createlang -U postgres plpgsql %(db_name)s' % env)
-        #run('cd %(src_dir)s; ./manage syncdb --noinput --verbosity=2' % env)
-        # First migrate apps in a specific order if given.
-#        for app_name in env.db_app_migration_order:
-#            env.db_app_name = app_name
-#            run('cd %(src_dir)s; ./manage migrate --noinput --delete-ghost-migrations %(db_app_name)s' % env)
-#        # Then migrate everything else remaining.
-#        run('cd %(src_dir)s; ./manage migrate --noinput --delete-ghost-migrations' % env)
-        syncdb()
-        migrate()
-    elif 'mysql' in default_db['ENGINE']:
-        raise NotImplemented
+            cmd = 'createlang -U postgres plpgsql %(db_name)s' % env
+            sudo(cmd)
+    elif 'mysql' in env.db_engine:
+        
+        if int(drop):
+            cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute='DROP DATABASE IF EXISTS %(db_name)s'" % env
+            print cmd
+            if not int(dryrun):
+                sudo(cmd)
+            
+        cmd = "mysqladmin -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s create %(db_name)s" % env
+        print cmd
+        if not int(dryrun):
+            sudo(cmd)
+        
+        # Create user.
+        cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute=\"GRANT USAGE ON *.* TO %(db_user)s@'%%'; DROP USER %(db_user)s@'%%';\"" % env
+        print cmd
+        if not int(dryrun):
+            run(cmd)
+        #cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute=\"CREATE USER %(db_user)s@%(db_host)s IDENTIFIED BY '%(db_password)s';\"" % env
+        #cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute=\"GRANT ALL PRIVILEGES ON %(db_name)s.* TO %(db_user)s@%(db_host)s IDENTIFIED BY '%(db_password)s';\"" % env
+        cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute=\"GRANT ALL PRIVILEGES ON %(db_name)s.* TO %(db_user)s@'%%' IDENTIFIED BY '%(db_password)s';\"" % env
+        print cmd
+        if not int(dryrun):
+            run(cmd)
+            
+        # Let the primary login do so from everywhere.
+#        cmd = 'mysql -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute="USE mysql; GRANT ALL ON %(db_name)s.* to %(db_user)s@\'%\' IDENTIFIED BY \'%(db_password)s\'; FLUSH PRIVILEGES;"'
+#        sudo(cmd)
+    
     else:
         raise NotImplemented
+    
+    if not env.dryrun and int(post_process):
+        post_create(name=name, dryrun=dryrun, site=site)
+
+@task
+def post_create(name=None, dryrun=0, site=None):
+    assert env[ROLE]
+    require('app_name')
+    set_db(name=name, site=site)
+    print 'site:',env[SITE]
+    print 'role:',env[ROLE]
+    env.dryrun = int(dryrun)
+    
+    syncdb(all=True, site=site)
+    migrate(fake=True, site=site)
+    install_sql(name=name, site=site)
+    createsuperuser()
 
 @task
 def dump():
@@ -165,29 +246,146 @@ def load(db_dump_fn):
         raise NotImplemented
 
 @task
-def syncdb():
+def syncdb(site=None, all=0, dryrun=0):
     """
     Wrapper around Django's syncdb command.
     """
-    env.src_dir = os.path.abspath(env.src_dir)
-    run('cd %(src_dir)s; ./manage syncdb --noinput --verbosity=2' % env)
+    set_site(site)
+    
+    render_remote_paths()
+    
+    env.db_syncdb_all_flag = '--all' if int(all) else ''
+    cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s syncdb --noinput %(db_syncdb_all_flag)s -v 3 --traceback' % env
+    print cmd
+    if not int(dryrun):
+        run(cmd)
 
 @task
-def migrate(app_name=''):
+def migrate(app_name='', site=None, fake=0):
     """
     Wrapper around Django's migrate command.
     """
-    env.src_dir = os.path.abspath(env.src_dir)
+    set_site(site)
+    
+    render_remote_paths()
+    
+    env.db_migrate_fake = '--fake' if int(fake) else ''
     if app_name:
         env.db_app_name = app_name
-        run('cd %(src_dir)s; ./manage migrate %(db_app_name)s --noinput --delete-ghost-migrations' % env)
+        run('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations %(db_migrate_fake)s -v 3 --traceback' % env)
     else:
         
         # First migrate apps in a specific order if given.
         for app_name in env.db_app_migration_order:
             env.db_app_name = app_name
-            run('cd %(src_dir)s; ./manage migrate --noinput --delete-ghost-migrations %(db_app_name)s' % env)
+            run('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s %(db_app_name)s -v 3 --traceback' % env)
             
         # Then migrate everything else remaining.
-        run('cd %(src_dir)s; ./manage migrate --noinput --delete-ghost-migrations' % env)
+        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s -v 3 --traceback' % env
+        #print cmd
+        run(cmd)
+
+@task
+def drop_views(name=None, site=None):
+    """
+    Drops all views.
+    """
+    set_db(name=name, site=site)
+    if 'postgres' in env.db_engine:
+        todo
+    elif 'mysql' in env.db_engine:
+        cmd = ("mysql --batch -v -h %(db_host)s " \
+            "-u %(db_root_user)s -p%(db_root_password)s " \
+            "--execute=\"SELECT GROUP_CONCAT(CONCAT(TABLE_SCHEMA,'.',table_name) SEPARATOR ', ') AS views FROM INFORMATION_SCHEMA.views WHERE TABLE_SCHEMA = '%(db_name)s' ORDER BY table_name DESC;\"") % env
+        result = sudo(cmd)
+        result = re.findall(
+            '^views[\s\t\r\n]+(.*)',
+            result,
+            flags=re.IGNORECASE|re.DOTALL|re.MULTILINE)
+        if not result:
+            return
+        env.db_view_list = result[0]
+        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s " \
+            "--execute=\"DROP VIEW %(db_view_list)s CASCADE;\"") % env
+        sudo(cmd)
+    else:
+        raise NotImplementedError
+
+@task
+def install_sql(name=None, site=None):
+    """
+    Installs all custom SQL.
+    """
+    set_db(name=name, site=site)
+    paths = glob.glob('%(src_dir)s/%(app_name)s/*/sql/*' % env)
+    
+    def cmp_paths(d0, d1):
+        if d0[1] and d0[1] in d1[2]:
+            return -1
+        if d1[1] and d1[1] in d0[2]:
+            return +1
+        return cmp(d0[0], d1[0])
+    
+    def get_paths(t):
+        """
+        Returns SQL file paths in an execution order that respect dependencies.
+        """
+        data = [] # [(path, view_name, content)]
+        for path in paths:
+            #print path
+            parts = path.split('.')
+            if len(parts) == 3 and parts[1] != t:
+                continue
+            content = open(path, 'r').read()
+            matches = re.findall('[\s\t]+VIEW[\s\t]+([a-zA-Z0-9_]+)', content, flags=re.IGNORECASE)
+            #assert matches, 'Unable to find view name: %s' % (p,)
+            view_name = ''
+            if matches:
+                view_name = matches[0]
+            data.append((path, view_name, content))
+        for d in sorted(data, cmp=cmp_paths):
+            yield d[0]
+    
+    if 'postgres' in env.db_engine:
+        todo
+    elif 'mysql' in env.db_engine:
+        for path in get_paths('mysql'):
+            put(local_path=path)
+            cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s %(db_name)s < %(put_remote_path)s") % env
+            #print cmd
+            sudo(cmd)
+    else:
+        raise NotImplementedError
+
+@task
+def createsuperuser(username='admin', email=None, password=None, site=None):
+    """
+    Runs the Django createsuperuser management command.
+    """
+    set_site(site)
+    
+    render_remote_paths()
+    
+    env.db_createsuperuser_username = username
+    env.db_createsuperuser_email = email or username
+    run('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s createsuperuser --username=%(db_createsuperuser_username)s --email=%(db_createsuperuser_email)s' % env)
+
+@task
+def install_fixtures(name, site=None):
+    """
+    Installs a set of Django fixtures.
+    """
+    set_site(site)
+    
+    render_remote_paths()
+    
+    fixtures_paths = env.db_fixture_sets.get(name, [])
+    for fixture_path in fixtures_paths:
+        env.db_fq_fixture_path = os.path.join(env.src_dir, env.app_name, fixture_path)
+        print 'Loading %s...' % (env.db_fq_fixture_path,)
+        if not env.is_local:
+            put(local_path=env.db_fq_fixture_path, remote_path='/tmp/data.json', use_sudo=True)
+            env.db_fq_fixture_path = env.put_remote_path
+        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s loaddata %(db_fq_fixture_path)s' % env
+        run(cmd)
         

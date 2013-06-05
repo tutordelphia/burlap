@@ -12,7 +12,7 @@
 -A OUTPUT -j ACCEPT
 
 # Allows HTTP and HTTPS connections from anywhere (the normal ports for websites)
-{% for port in env.iptables_tcp_ports %}
+{% for port in iptables_tcp_ports %}
 -A INPUT -p tcp --dport {{ port }} -j ACCEPT
 {% endfor %}
 
@@ -20,7 +20,7 @@
 #
 # THE -dport NUMBER IS THE SAME ONE YOU SET UP IN THE SSHD_CONFIG FILE
 #
--A INPUT -p tcp -m state --state NEW --dport {{ env.iptables_ssh_port }} -j ACCEPT
+-A INPUT -p tcp -m state --state NEW --dport {{ iptables_ssh_port }} -j ACCEPT
 
 # Allow ping
 -A INPUT -p icmp -m icmp --icmp-type 8 -j ACCEPT
