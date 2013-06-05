@@ -7,6 +7,7 @@ import re
 import sys
 import types
 import yaml
+import importlib
 
 from fabric.api import env
 from fabric.tasks import WrappedCallableTask
@@ -26,13 +27,38 @@ env_default = copy.deepcopy(dict((k, v) for k, v in env.iteritems() if type(v) n
 env._rc = type(env)()
 
 def _get_environ_handler(name, d):
-    def func(site=None):
+    def func(site=None, hostname=None):
         env.update(env_default)
         env[ROLE] = os.environ[ROLE] = name
         if site:
             env[SITE] = os.environ[SITE] = site
         #print name, d
         env.update(d)
+        
+        if env.hosts_retriever:
+            # Dynamically retrieve hosts.
+            #retriever = env.hosts_retrievers[env.hosts_retriever]
+            module_name = '.'.join(env.hosts_retriever.split('.')[:-1])
+            func_name = env.hosts_retriever.split('.')[-1]
+            retriever = getattr(importlib.import_module(module_name), func_name)
+            env.hosts = list(retriever())
+        
+        if hostname:
+            # Filter hosts list by a specific host name.
+            module_name = '.'.join(env.hostname_translator.split('.')[:-1])
+            func_name = env.hostname_translator.split('.')[-1]
+            translator = getattr(importlib.import_module(module_name), func_name)
+            #translator = env.hostname_translators[env.hostname_translator]
+            hostname = translator(hostname=hostname)
+            _hosts = env.hosts
+            env.hosts = [_ for _ in env.hosts if _ == hostname]
+            assert env.hosts, \
+                'Hostname %s does not match any known hosts.' % (hostname,)
+            print 'hosts:',env.hosts
+            sys.exit()
+        
+        sys.exit()
+        
         print 'Loaded role %s.' % (name,)
     func.__doc__ = 'Sets enivronment variables for the "%s" role.' % (name,)
     return func

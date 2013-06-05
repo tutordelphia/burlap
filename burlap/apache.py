@@ -22,6 +22,7 @@ from burlap.common import (
     render_to_string,
     get_packager,
     get_os_version,
+    find_template,
     ROLE,
     SITE,
     YUM,
@@ -44,15 +45,19 @@ env.apache_log_level = 'warn'
 env.apache_enforce_subdomain = True
 
 env.apache_ssl = False
-env.apache_ssl_port = 80
+env.apache_ssl_port = 443
+env.apache_ssl_chmod = 600
+
+# Defines the expected name of the SSL certificates.
+env.apache_ssl_domain_template = '%(apache_domain)s'
 
 env.apache_user = 'www-data'
 env.apache_group = 'www-data'
 env.apache_wsgi_user = 'www-data'
 env.apache_wsgi_group = 'www-data'
-env.apache_chmod = '775'
+env.apache_chmod = 775
 
-env.apache_mods_enabled = ['rewrite', 'wsgi']
+env.apache_mods_enabled = ['rewrite', 'wsgi', 'ssl']
 
 # The value of the Apache's ServerName field. Usually should be set
 # to the domain.
@@ -65,6 +70,7 @@ env.apache_wsgi_dir_template = '/usr/local/%(apache_application_name)s/src/wsgi'
 #env.apache_app_log_dir_template = '/var/log/%(apache_application_name)s'
 env.apache_django_wsgi_template = '%(apache_wsgi_dir)s/%(apache_site)s.wsgi'
 env.apache_ports_template = '%(apache_root)s/ports.conf'
+env.apache_ssl_dir_template = '%(apache_root)s/ssl'
 
 env.apache_wsgi_processes = 5
 
@@ -92,15 +98,30 @@ env.apache_specifics[LINUX][UBUNTU].sites_enabled = '/etc/apache2/sites-enabled'
 env.apache_specifics[LINUX][UBUNTU].log_dir = '/var/log/apache2'
 env.apache_specifics[LINUX][UBUNTU].pid = '/var/run/apache2/apache2.pid'
 
+env.apache_ssl_certificates = None
+env.apache_ssl_certificates_templates = []
+env.apache_ssl_dir_local = 'ssl'
+
 env.apache_sites = {} # {site:site_settings}
 
 # An optional segment to insert into the domain, customizable by role.
 # Useful for easily keying domain-local.com/domain-dev.com/domain-staging.com.
 env.apache_locale = ''
 
-def get_apache_specifics():
+def set_apache_specifics():
     os_version = common.get_os_version()
-    return env.apache_specifics[os_version.type][os_version.distro]
+    apache_specifics = env.apache_specifics[os_version.type][os_version.distro]
+    
+    env.apache_root = apache_specifics.root
+    env.apache_conf = apache_specifics.conf
+    env.apache_sites_available = apache_specifics.sites_available
+    env.apache_sites_enabled = apache_specifics.sites_enabled
+    env.apache_log_dir = apache_specifics.log_dir
+    env.apache_pid = apache_specifics.pid
+    env.apache_ports = env.apache_ports_template % env
+    env.apache_ssl_dir = env.apache_ssl_dir_template % env
+    
+    return apache_specifics
 
 env.apache_service_commands = {
     common.START:{
@@ -121,7 +142,11 @@ env.apache_service_commands = {
     },
     common.RESTART:{
         common.FEDORA: 'systemctl restart httpd.service',
-        common.UBUNTU: 'service apache2 restart',
+        #common.UBUNTU: 'service apache2 restart',
+        # Note, the sleep 5 is necessary because the stop/start appears to
+        # happen in the background but gets aborted if Fabric exits before
+        # it completes.
+        common.UBUNTU: 'service apache2 restart; sleep 5',
     },
 }
 
@@ -157,11 +182,30 @@ def stop():
 def restart():
     cmd = get_service_command(common.RESTART)
     print cmd
-    sudo(cmd)
+    #sudo(cmd)
+    sudo('service apache2 restart; sleep 5')
 
 def check_required():
     for name in ['apache_application_name', 'apache_server_name']:
         assert env[name], 'Missing %s.' % (name,)
+
+def set_apache_site_specifics(site):
+    site_data = env.apache_sites[site]
+    
+    common.get_settings(site=site)
+    
+    # Set site specific values.
+    env.apache_site = site
+    env.update(site_data)
+    env.apache_docroot = env.apache_docroot_template % env
+    env.apache_wsgi_dir = env.apache_wsgi_dir_template % env
+    #env.apache_app_log_dir = env.apache_app_log_dir_template % env
+    env.apache_domain = env.apache_domain_template % env
+    env.apache_server_name = env.apache_domain
+    env.apache_wsgi_python_path = env.apache_wsgi_python_path_template % env
+    env.apache_django_wsgi = env.apache_django_wsgi_template % env
+    env.apache_server_aliases = env.apache_server_aliases_template % env
+    env.apache_ssl_domain = env.apache_ssl_domain_template % env
 
 @task
 def configure(full=0, site=None, delete_old=0):
@@ -169,15 +213,7 @@ def configure(full=0, site=None, delete_old=0):
     Configures Apache to host one or more websites.
     """
     print 'Configuring Apache...'
-    apache_specifics = get_apache_specifics()
-    
-    env.apache_root = apache_specifics.root
-    env.apache_conf = apache_specifics.conf
-    env.apache_sites_available = apache_specifics.sites_available
-    env.apache_sites_enabled = apache_specifics.sites_enabled
-    env.apache_log_dir = apache_specifics.log_dir
-    env.apache_pid = apache_specifics.pid
-    env.apache_ports = env.apache_ports_template % env
+    apache_specifics = set_apache_specifics()
     
     if int(delete_old):
         # Delete all existing enabled and available sites.
@@ -200,29 +236,23 @@ def configure(full=0, site=None, delete_old=0):
     
     for site, site_data in sites:
         print site
+        set_apache_site_specifics(site)
         
-        common.get_settings(site=site)
-        
-        # Set site specific values.
-        env.apache_site = site
-        env.update(site_data)
-        env.apache_docroot = env.apache_docroot_template % env
-        env.apache_wsgi_dir = env.apache_wsgi_dir_template % env
-        #env.apache_app_log_dir = env.apache_app_log_dir_template % env
-        env.apache_domain = env.apache_domain_template % env
-        env.apache_server_name = env.apache_domain
-        env.apache_wsgi_python_path = env.apache_wsgi_python_path_template % env
-        env.apache_django_wsgi = env.apache_django_wsgi_template % env
-        env.apache_server_aliases = env.apache_server_aliases_template % env
+        print 'env.apache_ssl_domain:',env.apache_ssl_domain
+        print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
         
         fn = common.render_to_file('django.template.wsgi')
         put(local_path=fn, remote_path=env.apache_django_wsgi, use_sudo=True)
         
-        fn = common.render_to_file('apache_site.template.conf')
-        env.apache_site_conf = os.path.join(env.apache_sites_available, site+'.conf')
-        put(local_path=fn, remote_path=env.apache_site_conf, use_sudo=True)
+        if env.apache_ssl:
+            env.apache_ssl_certificates = list(iter_certificates())
         
-        sudo('a2ensite %(apache_site)s.conf' % env)
+        fn = common.render_to_file('apache_site.template.conf')
+        env.apache_site_conf = site+'.conf'
+        env.apache_site_conf_fqfn = os.path.join(env.apache_sites_available, env.apache_site_conf)
+        put(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True)
+        
+        sudo('a2ensite %(apache_site_conf)s' % env)
     
     for mod_enabled in env.apache_mods_enabled:
         env.apache_mod_enabled = mod_enabled
@@ -232,12 +262,44 @@ def configure(full=0, site=None, delete_old=0):
     #sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_app_log_dir)s' % env)
 #    sudo('mkdir -p %(apache_log_dir)s' % env)
 #    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_log_dir)s' % env)
-#    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_root)s' % env)
+    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_root)s' % env)
 #    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_docroot)s' % env)
 #    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_pid)s' % env)
 
     #restart()#break apache? run separately?
-        
+
+def iter_certificates():
+    print 'apache_ssl_domain:',env.apache_ssl_domain
+    for cert_type, cert_file_template in env.apache_ssl_certificates_templates:
+        _local_cert_file = os.path.join(env.apache_ssl_dir_local, cert_file_template % env)
+        local_cert_file = find_template(_local_cert_file)
+        assert local_cert_file, 'Unable to find local certificate file: %s' % (_local_cert_file,)
+        remote_cert_file = os.path.join(env.apache_ssl_dir, cert_file_template % env)
+        yield cert_type, local_cert_file, remote_cert_file
+
+@task
+def install_ssl(site=None):
+    apache_specifics = set_apache_specifics()
+    
+    if site:
+        sites = [(site, env.apache_sites[site])]
+    else:
+        sites = env.apache_sites.iteritems()
+    
+    for site, site_data in sites:
+        print site
+        set_apache_site_specifics(site)
+    
+        sudo('mkdir -p %(apache_ssl_dir)s' % env)
+    
+        if env.apache_ssl:
+            for cert_type, local_cert_file, remote_cert_file in iter_certificates():
+                print 'Installing certificate %s...' % (remote_cert_file,)
+                put(local_path=local_cert_file, remote_path=remote_cert_file, use_sudo=True)
+                
+    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_ssl_dir)s' % env)
+    sudo('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s/*' % env)
+    
 #@task
 #def unconfigure():
 #    """

@@ -28,6 +28,8 @@ from common import (
     ROLE,
 )
 
+env.db_dump_fn = None
+
 # This overrides the built-in load command.
 env.db_dump_command = None
 
@@ -165,21 +167,29 @@ def post_create(name=None, dryrun=0, site=None):
     createsuperuser()
 
 @task
-def dump():
+def dump(dryrun=0):
     """
     Exports the target database to a single transportable file appropriate for
     loading using load().
     """
     set_db()
+    print env.hosts
+    return
     env.db_date = datetime.date.today().strftime('%Y%m%d')
-    env.db_dump_fn = '%(env.db_dump_dest_dir)s/%(db_name)s_%(db_date)s.sql.gz' % env
+    env.db_dump_fn = '%(db_dump_dest_dir)s/%(db_name)s_%(db_date)s.sql.gz' % env
     if env.db_dump_command:
         run(env.db_dump_command % env)
     elif 'postgres' in env.db_engine:
         env.db_schemas_str = ' '.join('-n %s' % _ for _ in env.db_schemas)
-        run(env.db_postgresql_dump_command % env)
+        cmd = env.db_postgresql_dump_command % env
+        print cmd
+        if not int(dryrun):
+            local(cmd)
     elif 'mysql' in env.db_engine:
-        run(env.db_mysql_dump_command % env)
+        cmd = env.db_mysql_dump_command % env
+        print cmd
+        if not int(dryrun):
+            local(cmd)
     else:
         raise NotImplemented
     return env.db_dump_fn

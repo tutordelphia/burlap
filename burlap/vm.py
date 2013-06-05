@@ -29,6 +29,19 @@ EC2 = 'ec2'
 
 env.vm_type = None
 
+def retrieve_ec2_hosts():
+    for name, data in list().iteritems():
+        yield data.dns_name
+
+env.hosts_retrievers['ec2'] = retrieve_ec2_hosts
+
+def translate_ec2_hostname(hostname):
+    for name, data in list().iteritems():
+        if name == hostname:
+            return data.dns_name
+
+env.hostname_translators['ec2'] = translate_ec2_hostname
+
 def _ec2():
     assert 'AWS_CREDENTIAL_FILE' in os.environ, \
         'AWS environment variables not set.'

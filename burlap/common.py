@@ -49,6 +49,16 @@ ROLE = 'ROLE'
 # If true, prevents run() from executing its command.
 env.dryrun = 0
 
+env.hosts_retriever = None
+env.hosts_retrievers = {
+    #'default':lambda hostname: hostname,
+}
+
+env.hostname_translator = 'default'
+env.hostname_translators = {
+    'default':lambda hostname: hostname,
+}
+
 env.default_site = None
 
 # This is where your application's custom code will reside on the remote
@@ -263,7 +273,7 @@ env.shell_interactive_shell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(
 env.shell_interactive_djshell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(shell_default_dir)s; /bin/bash -i -c \"./manage shell;\"'
 
 @task
-def shell(gui=1, dryrun=0):
+def shell(gui=0, dryrun=0):
     """
     Opens a UNIX shell.
     """
