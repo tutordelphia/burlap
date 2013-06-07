@@ -1,4 +1,6 @@
 import os
+import sys
+import tempfile
 
 from fabric.api import (
     env,
@@ -9,6 +11,7 @@ from fabric.api import (
     task,
 )
 
+from burlap import common
 from burlap.common import (
     get_packager, APT, YUM, ROLE, SITE, put,
     find_template,
@@ -17,7 +20,8 @@ from burlap.common import (
 @task
 def install(*args, **kwargs):
     """
-    Installs all system packages listed in the appropriate <packager>-requirements.txt.
+    Installs all system packages listed in the appropriate
+    <packager>-requirements.txt.
     """
     packager = get_packager()
     if packager == APT:
@@ -29,13 +33,13 @@ def install(*args, **kwargs):
 
 env.apt_fn = 'apt-requirements.txt'
 
-def install_apt(update=0):
+def install_apt(fn=None, update=0):
     """
     Installs system packages listed in apt-requirements.txt.
     """
     print 'Installing apt requirements...'
     assert env[ROLE]
-    env.apt_fqfn = find_template(env.apt_fn)
+    env.apt_fqfn = fn or find_template(env.apt_fn)
     assert os.path.isfile(env.apt_fqfn)
     if not env.is_local:
         put(local_path=env.apt_fqfn)
@@ -46,12 +50,13 @@ def install_apt(update=0):
 
 env.yum_fn = 'yum-requirements.txt'
 
-def install_yum(update=0):
+def install_yum(fn=None, update=0):
     """
     Installs system packages listed in yum-requirements.txt.
     """
     print 'Installing yum requirements...'
     assert env[ROLE]
+    env.yum_fn = fn or find_template(env.yum_fn)
     assert os.path.isfile(env.yum_fn)
     update = int(update)
     env.yum_remote_fn = env.yum_fn
@@ -61,3 +66,58 @@ def install_yum(update=0):
     if update:
         sudo('yum update --assumeyes')
     sudo('yum install --assumeyes $(cat %(yum_remote_fn)s)' % env)
+
+@task
+def list_required(type=None, service=None):
+    """
+    Displays all packages required by the current role
+    based on the documented services provided.
+    """
+    service = (service or '').strip().upper()
+    type = (type or '').lower().strip()
+    assert not type or type in common.PACKAGE_TYPES, \
+        'Unknown package type: %s' % (type,)
+    packages = set()
+    version = common.get_os_version()
+    for _service in env.services:
+        _service = _service.strip().upper()
+        if service and service != _service:
+            continue
+        _new = []
+        if not type or type == common.SYSTEM:
+            _new.extend(common.required_system_packages.get(
+                _service, {}).get(version.distro, []))
+        if not type or type == common.PYTHON:
+            _new.extend(common.required_python_packages.get(
+                _service, {}).get(version.distro, []))
+        if not type or type == common.RUBY:
+            _new.extend(common.required_ruby_packages.get(
+                _service, {}).get(version.distro, []))
+        if not _new:
+            print>>sys.stderr, \
+                'Warning: no packages found for service %s' % (service,)
+        packages.update(_new)
+    for package in sorted(packages):
+        print package
+    return packages
+
+@task
+def install_required(type=None, service=None):
+    type = (type or '').lower().strip()
+    assert not type or type in common.PACKAGE_TYPES, \
+        'Unknown package type: %s' % (type,)
+    if type:
+        types = [type]
+    else:
+        types = common.PACKAGE_TYPES
+    for type in types:
+        if type == common.SYSTEM:
+            content = '\n'.join(list_required(type=type, service=service))
+            fd, fn = tempfile.mkstemp()
+            fout = open(fn, 'w')
+            fout.write(content)
+            fout.close()
+            install(fn=fn)
+        else:
+            raise NotImplementedError
+        

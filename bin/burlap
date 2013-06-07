@@ -1,0 +1,56 @@
+#!/usr/bin/env python
+"""
+Command line tool for initializing Burlap-structured Django projects.
+"""
+
+import argparse
+import os
+import sys
+
+#sys.path.insert(0, os.path.normpath(os.path.join(os.path.realpath(__file__), '../..')))
+
+import burlap
+
+fabfile_template = os.path.join(
+    os.path.dirname(burlap.__file__),
+    'templates',
+    'burlap_fabfile.template.py')
+
+ACTIONS = (SKEL,) = ('skel',)
+
+def md(d):
+    if os.path.isdir(d):
+        return
+    os.makedirs(d)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description=('Initialize a Burlap structured Django project'),
+    )
+    parser.add_argument(
+        'action',
+        type=str,
+        help='skel=creates project skeleton')
+    parser.add_argument(
+        '--name',
+        type=str,
+        dest='project_name',
+        help='project name')
+    args = parser.parse_args()
+
+    if args.action == SKEL:
+        assert args.project_name, 'Specify project name.'
+        md('roles/all')
+        open('roles/all/settings.yaml', 'w')\
+            .write('''app_name: {project_name}
+default_site: {project_name}
+settings_module: '%(app_name)s.%(app_name)s.settings'
+'''.format(project_name=args.project_name))
+        md('src')
+        os.system('cd src; django-admin.py startproject %s' \
+            % (args.project_name,))
+        content = open(fabfile_template, 'r').read()
+        content = content.format(project_name=args.project_name)
+        open('src/%s/__init__.py' % (args.project_name,), 'w')
+        open('fabfile.py', 'w').write(content)
+        

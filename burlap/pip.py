@@ -17,6 +17,7 @@ from fabric.api import (
 from fabric.contrib import files
 from fabric.tasks import Task
 
+from burlap import common
 from burlap.common import (
     run,
     put,
@@ -42,6 +43,13 @@ env.pip_remote_cache_dir = '/tmp/pip_cache'
 env.pip_local_cache_dir_template = './.pip_cache/%(ROLE)s'
 env.pip_upgrade = ''
 env.pip_install_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install %(pip_upgrade_flag)s --find-links file://%(pip_cache_dir)s --no-index %(pip_package)s; deactivate"
+
+PIP = 'PIP'
+
+common.required_system_packages[PIP] = {
+    common.FEDORA: ['python-pip'],
+    common.UBUNTU: ['python-pip', 'python-virtualenv'],
+}
 
 @task
 def init(clean=0):

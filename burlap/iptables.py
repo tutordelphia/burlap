@@ -45,6 +45,13 @@ env.iptables_service_commands = {
     },
 }
 
+IPTABLES = 'IPTABLES'
+
+common.required_system_packages[IPTABLES] = {
+    common.FEDORA: ['iptables'],
+    common.UBUNTU: ['iptables'],
+}
+
 def get_service_command(action):
     os_version = common.get_os_version()
     return env.iptables_service_commands[action][os_version.distro]

@@ -62,9 +62,12 @@ def create(gzip=1):
     local(cmd)
 
 @task
-def deploy(clean=1):
+def deploy(clean=0):
     """
     Copies the tarball to the target server.
+    
+    Note, clean=1 will delete any dynamically generated files not included
+    in the tarball.
     """
     
     tarball_path = get_tarball_path()

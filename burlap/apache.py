@@ -102,8 +102,6 @@ env.apache_ssl_certificates = None
 env.apache_ssl_certificates_templates = []
 env.apache_ssl_dir_local = 'ssl'
 
-env.apache_sites = {} # {site:site_settings}
-
 # An optional segment to insert into the domain, customizable by role.
 # Useful for easily keying domain-local.com/domain-dev.com/domain-staging.com.
 env.apache_locale = ''
@@ -114,8 +112,8 @@ def set_apache_specifics():
     
     env.apache_root = apache_specifics.root
     env.apache_conf = apache_specifics.conf
-    env.apache_sites_available = apache_specifics.sites_available
-    env.apache_sites_enabled = apache_specifics.sites_enabled
+    env.sites_available = apache_specifics.sites_available
+    env.sites_enabled = apache_specifics.sites_enabled
     env.apache_log_dir = apache_specifics.log_dir
     env.apache_pid = apache_specifics.pid
     env.apache_ports = env.apache_ports_template % env
@@ -148,6 +146,13 @@ env.apache_service_commands = {
         # it completes.
         common.UBUNTU: 'service apache2 restart; sleep 5',
     },
+}
+
+APACHE2 = 'APACHE2'
+
+common.required_system_packages[APACHE2] = {
+    common.FEDORA: ['httpd'],
+    common.UBUNTU: ['apache2', 'mod_ssl', 'mod_wsgi'],
 }
 
 def get_service_command(action):
@@ -190,7 +195,7 @@ def check_required():
         assert env[name], 'Missing %s.' % (name,)
 
 def set_apache_site_specifics(site):
-    site_data = env.apache_sites[site]
+    site_data = env.sites[site]
     
     common.get_settings(site=site)
     
@@ -230,9 +235,9 @@ def configure(full=0, site=None, delete_old=0):
         put(local_path=fn, remote_path=env.apache_ports, use_sudo=True)
     
     if site:
-        sites = [(site, env.apache_sites[site])]
+        sites = [(site, env.sites[site])]
     else:
-        sites = env.apache_sites.iteritems()
+        sites = env.sites.iteritems()
     
     for site, site_data in sites:
         print site
@@ -249,7 +254,7 @@ def configure(full=0, site=None, delete_old=0):
         
         fn = common.render_to_file('apache_site.template.conf')
         env.apache_site_conf = site+'.conf'
-        env.apache_site_conf_fqfn = os.path.join(env.apache_sites_available, env.apache_site_conf)
+        env.apache_site_conf_fqfn = os.path.join(env.sites_available, env.apache_site_conf)
         put(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True)
         
         sudo('a2ensite %(apache_site_conf)s' % env)
@@ -282,9 +287,9 @@ def install_ssl(site=None):
     apache_specifics = set_apache_specifics()
     
     if site:
-        sites = [(site, env.apache_sites[site])]
+        sites = [(site, env.sites[site])]
     else:
-        sites = env.apache_sites.iteritems()
+        sites = env.sites.iteritems()
     
     for site, site_data in sites:
         print site

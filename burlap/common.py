@@ -22,6 +22,15 @@ PACKAGERS = APT, YUM = ('apt-get', 'yum')
 OS_TYPES = LINUX, WINDOWS = ('linux', 'windows')
 OS_DISTRO = FEDORA, UBUNTU = ('fedora', 'ubuntu')
 
+SYSTEM = 'system'
+RUBY = 'ruby'
+PYTHON = 'python'
+PACKAGE_TYPES = (
+    SYSTEM,
+    PYTHON, # pip
+    RUBY, # gem
+)
+
 ALL = 'all' # denotes the global role
 
 START = 'start'
@@ -30,6 +39,7 @@ STATUS = 'status'
 RESTART = 'restart'
 ENABLE = 'enable'
 DISABLE = 'disable'
+STATUS = 'status'
 SERVICE_COMMANDS = (
     START,
     STOP,
@@ -37,6 +47,7 @@ SERVICE_COMMANDS = (
     RESTART,
     ENABLE,
     DISABLE,
+    STATUS,
 )
 
 OS = namedtuple('OS', ['type', 'distro', 'release'])
@@ -46,18 +57,22 @@ ROLE_DIR = env.ROLES_DIR = 'roles'
 SITE = 'SITE'
 ROLE = 'ROLE'
 
+env.sites = {} # {site:site_settings}
+
 # If true, prevents run() from executing its command.
 env.dryrun = 0
 
+env.services = []
+required_system_packages = type(env)() # {service:{os:[packages]}
+required_python_packages = type(env)() # {service:{os:[packages]}
+required_ruby_packages = type(env)() # {service:{os:[packages]}
+
 env.hosts_retriever = None
-env.hosts_retrievers = {
-    #'default':lambda hostname: hostname,
-}
+env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,
 
 env.hostname_translator = 'default'
-env.hostname_translators = {
-    'default':lambda hostname: hostname,
-}
+env.hostname_translators = type(env)()
+env.hostname_translators.default = lambda hostname: hostname
 
 env.default_site = None
 
@@ -91,34 +106,34 @@ from django.conf import settings as _settings
 _settings.configure(TEMPLATE_DIRS=env.template_dirs)
 
 def run(*args, **kwargs):
-    if env.is_local:
-        kwargs['capture'] = True
-        if env.dryrun:
-            print args, kwargs
-        else:
-            print args, kwargs
-            cmd = ' '.join(args)
-            #cmd = ' '.join(args + ('2>&1',))
-            try:
-                output = StringIO()
-                error = StringIO()
-                sys.stdout = output
-                sys.stderr = error
-                result = local(cmd, **kwargs)
-            except:
-                raise
-            finally:
-                sys.stdout = sys.__stdout__
-                sys.stderr = sys.__stderr__
-                print 'stdout:',output.getvalue()
-                print 'stderr:',error.getvalue()
-#            print 'result:',result
-#            print 'stdout:',result.stdout
-#            print 'stderr:',result.stderr
-            print 
-            return result
+#    if env.is_local:
+#        kwargs['capture'] = True
+#        if env.dryrun:
+#            print args, kwargs
+#        else:
+#            print args, kwargs
+#            cmd = ' '.join(args)
+#            #cmd = ' '.join(args + ('2>&1',))
+#            try:
+#                output = StringIO()
+#                error = StringIO()
+#                sys.stdout = output
+#                sys.stderr = error
+#                result = local(cmd, **kwargs)
+#            except:
+#                raise
+#            finally:
+#                sys.stdout = sys.__stdout__
+#                sys.stderr = sys.__stderr__
+#                print 'stdout:',output.getvalue()
+#                print 'stderr:',error.getvalue()
+##            print 'result:',result
+##            print 'stdout:',result.stdout
+##            print 'stderr:',result.stderr
+#            print 
+#            return result
     if env.dryrun:
-        print args, kwargs
+        print ' '.join(map(str, args)), kwargs
     else:
         return _run(*args, **kwargs)
 

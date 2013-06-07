@@ -18,8 +18,9 @@ from fabric.api import (
 )
 from fabric.contrib import files
 
-from common import (
-    #run,
+from burlap import common
+from burlap.common import (
+    run,
     put,
     get_settings,
     set_site,
@@ -52,13 +53,36 @@ env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --forma
 env.db_postgresql_createlangs = ['plpgsql'] # plpythonu
 env.db_postgresql_postgres_user = 'postgres'
 
-env.db_mysql_max_allowed_packet = '500M'
+env.db_mysql_max_allowed_packet = 524288000 # 500M
 env.db_mysql_net_buffer_length = 1000000
 env.db_mysql_conf = '/etc/mysql/my.cnf'
 env.db_mysql_dump_command = 'mysqldump --opt --compress --max_allowed_packet=%(db_mysql_max_allowed_packet)s --force --single-transaction --quick --user %(db_user)s --password=%(db_password)s -h %(db_host)s %(db_name)s | gzip > %(db_dump_fn)s'
 env.db_mysql_preload_commands = []
 
 env.db_fixture_sets = {} # {name:[list of fixtures]}
+
+MYSQL = 'MYSQL'
+MYSQLCLIENT = 'MYSQLCLIENT'
+POSTGRESQL = 'POSTGRESQL'
+POSTGRESQLCLIENT = 'POSTGRESQLCLIENT'
+
+common.required_system_packages[MYSQL] = {
+    common.FEDORA: ['mysql-server'],
+    common.UBUNTU: ['mysql-server'],
+}
+common.required_system_packages[POSTGRESQL] = {
+    common.FEDORA: ['postgresql-server'],
+    common.UBUNTU: ['postgresql-server'],
+}
+
+common.required_system_packages[MYSQLCLIENT] = {
+    common.FEDORA: ['mysql-client'],
+    common.UBUNTU: ['mysql-client'],
+}
+common.required_system_packages[POSTGRESQLCLIENT] = {
+    common.FEDORA: ['postgresql-client'],
+    common.UBUNTU: ['postgresql-client-9.1','python-psycopg2'],
+}
 
 def set_db(name=None, site=None, role=None):
     name = name or 'default'
@@ -169,12 +193,10 @@ def post_create(name=None, dryrun=0, site=None):
 @task
 def dump(dryrun=0):
     """
-    Exports the target database to a single transportable file appropriate for
-    loading using load().
+    Exports the target database to a single transportable file on the localhost,
+    appropriate for loading using load().
     """
     set_db()
-    print env.hosts
-    return
     env.db_date = datetime.date.today().strftime('%Y%m%d')
     env.db_dump_fn = '%(db_dump_dest_dir)s/%(db_name)s_%(db_date)s.sql.gz' % env
     if env.db_dump_command:
@@ -195,12 +217,14 @@ def dump(dryrun=0):
     return env.db_dump_fn
 
 @task
-def load(db_dump_fn):
+def load(db_dump_fn, dryrun=0):
     """
     Restores a database snapshot onto the target database server.
     """
     env.db_dump_fn = db_dump_fn
     set_db()
+    
+    env.dryrun = int(dryrun)
     
     # Copy snapshot file to target.
     missing_local_dump_error = (
@@ -209,7 +233,7 @@ def load(db_dump_fn):
     if not files.exists(env.db_dump_fn):
         assert os.path.isfile(env.db_dump_fn), \
             missing_local_dump_error
-        put(env.db_dump_fn, env.db_dump_fn)
+        put(local_path=env.db_dump_fn, remote_path=env.db_dump_fn)
     
     if env.db_load_command:
         run(env.db_load_command % env)
@@ -229,11 +253,15 @@ def load(db_dump_fn):
     elif 'mysql' in env.db_engine:
         
         # Drop the database if it's there.
-        cmd = "mysql -v -h %(db_host)s -u %(db_user)s -p%(db_password)s --execute='DROP DATABASE IF EXISTS %(db_name)s'" % env
+        #cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p%(db_password)s "
+        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s "
+            "--execute='DROP DATABASE IF EXISTS %(db_name)s'") % env
         run(cmd)
         
         # Now, create the database.
-        cmd = "mysqladmin -h %(db_host)s -u %(db_user)s -p%(db_password)s create %(db_name)s" % env
+        #cmd = ("mysqladmin -h %(db_host)s -u %(db_user)s -p%(db_password)s "
+        cmd = ("mysqladmin -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s "
+            "create %(db_name)s") % env
         run(cmd)
         
         # Raise max packet limitation.
@@ -243,13 +271,16 @@ def load(db_dump_fn):
             'net_buffer_length=%(db_mysql_net_buffer_length)s; SET global '
             'max_allowed_packet=%(db_mysql_max_allowed_packet)s;"') % env)
         
-        # Run any server-specific commands (e.g. to setup permissions) before we load the data.
+        # Run any server-specific commands (e.g. to setup permissions) before
+        # we load the data.
         for command in env.db_mysql_preload_commands:
             run(command % env)
         
         # Restore the database content from the dump file.
         env.db_dump_fn = db_dump_fn
-        cmd = ("gunzip < %(db_dump_fn)s | mysql -u %(db_root_user)s --password=%(db_root_password)s --host=%(db_host)s -D %(db_name)s") % env
+        cmd = ('gunzip < %(db_dump_fn)s | mysql -u %(db_root_user)s '
+            '--password=%(db_root_password)s --host=%(db_host)s '
+            '-D %(db_name)s') % env
         run(cmd)
         
     else:

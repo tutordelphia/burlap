@@ -17,6 +17,7 @@ from fabric.api import (
 from fabric.contrib import files
 from fabric.tasks import Task
 
+from burlap import common
 from burlap.common import (
     #run,
     put,
@@ -28,6 +29,17 @@ from burlap.common import (
 env.AWS_ACCESS_KEY_ID = None
 env.AWS_SECRET_ACCESS_KEY = None
 env.s3_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
+
+S3SYNC = 'S3SYNC'
+
+common.required_system_packages[S3SYNC] = {
+    common.FEDORA: ['ruby'],
+    common.UBUNTU: ['ruby'],
+}
+common.required_ruby_packages[S3SYNC] = {
+    common.FEDORA: ['s3sync'],
+    common.UBUNTU: ['s3sync'],
+}
 
 @task
 def sync(sync_set, dryrun=0):

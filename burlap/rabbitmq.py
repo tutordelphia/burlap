@@ -19,7 +19,21 @@ from fabric.contrib import files
 from burlap.common import run, put
 from burlap import common
 
-env.rabbitmq_erlang_cookie = None
+env.rabbitmq_host = "localhost"
+env.rabbitmq_vhost = "/"
+env.rabbitmq_erlang_cookie = ''
+env.rabbitmq_nodename = "rabbit"
+env.rabbitmq_user = "guest"
+env.rabbitmq_password = "guest"
+env.rabbitmq_node_ip_address = ''
+env.rabbitmq_port = 5672
+env.rabbitmq_erl_args = ""
+env.rabbitmq_cluster = "no"
+env.rabbitmq_cluster_config = "/etc/rabbitmq/rabbitmq_cluster.config"
+env.rabbitmq_logdir = "/var/log/rabbitmq"
+env.rabbitmq_mnesiadir = "/var/lib/rabbitmq/mnesia"
+env.rabbitmq_start_args = ""
+env.rabbitmq_erlang_cookie_template = ''
 
 env.rabbitmq_service_commands = {
     common.START:{
@@ -27,8 +41,8 @@ env.rabbitmq_service_commands = {
         common.UBUNTU: 'service rabbitmq-server start',
     },
     common.STOP:{
-        common.FEDORA: 'systemctl stop httpd.service',
-        common.UBUNTU: 'service apache2 stop',
+        common.FEDORA: 'systemctl stop rabbitmq-server.service',
+        common.UBUNTU: 'service rabbitmq-server stop',
     },
     common.DISABLE:{
         common.FEDORA: 'systemctl disable httpd.service',
@@ -42,11 +56,22 @@ env.rabbitmq_service_commands = {
         common.FEDORA: 'systemctl restart rabbitmq-server.service',
         common.UBUNTU: 'service rabbitmq-server restart; sleep 5',
     },
+    common.STATUS:{
+        common.FEDORA: 'systemctl status rabbitmq-server.service',
+        common.UBUNTU: 'service rabbitmq-server status',
+    },
+}
+
+RABBITMQ = 'RABBITMQ'
+
+common.required_system_packages[RABBITMQ] = {
+    common.FEDORA: ['rabbitmq-server'],
+    common.UBUNTU: ['rabbitmq-server'],
 }
 
 def get_service_command(action):
     os_version = common.get_os_version()
-    return env.apache_service_commands[action][os_version.distro]
+    return env.rabbitmq_service_commands[action][os_version.distro]
 
 @task
 def enable():
@@ -79,7 +104,21 @@ def restart():
     sudo(cmd)
 
 @task
-def configure():
+def status():
+    cmd = get_service_command(common.STATUS)
+    print cmd
+    sudo(cmd)
+    
+@task
+def configure(full=0):
+    """
+    Installs and configures RabbitMQ.
+    """
+    full = int(full)
+    from burlap import package
+    if env.rabbitmq_erlang_cookie_template:
+        env.rabbitmq_erlang_cookie = env.rabbitmq_erlang_cookie_template % env
     assert env.rabbitmq_erlang_cookie
-    todo
+    if full:
+        package.install_required(type=package.common.SYSTEM, service=RABBITMQ)
     

@@ -57,6 +57,9 @@ def _ec2_fetch_running_instances():
 
 @task
 def list():
+    """
+    Retrieves all virtual machines instances in the current environment.
+    """
     require('vm_type')
     assert env.vm_type, 'No VM type specified.'
     env.vm_type = (env.vm_type or '').lower()
@@ -68,7 +71,7 @@ def list():
             data[name]['id'] = instance.id
             data[name]['dns_name'] = instance.dns_name
             data[name]['ip'] = socket.gethostbyname(instance.dns_name)
-        pprint.pprint(data, indent=4)
+        #pprint.pprint(data, indent=4)
         return data
     else:
         raise NotImplementedError
