@@ -28,6 +28,7 @@ from burlap.common import (
 )
 
 env.user_tmp_sudoers_fn = '/tmp/sudoers'
+env.user_groups = []
 
 @task
 def create(username):

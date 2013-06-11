@@ -36,6 +36,7 @@ ALL = 'all' # denotes the global role
 START = 'start'
 STOP = 'stop'
 STATUS = 'status'
+RELOAD = 'reload'
 RESTART = 'restart'
 ENABLE = 'enable'
 DISABLE = 'disable'
@@ -283,7 +284,8 @@ def get_settings(site=None, role=None):
     env.ROLE = os.environ[ROLE] = tmp_role
     return module
 
-env.shell_default_dir_template = '/usr/local/%(app_name)s'
+#env.shell_default_dir_template = '/usr/local/%(app_name)s'
+env.shell_default_dir_template = '%(remote_app_src_package_dir)s'
 env.shell_interactive_shell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(shell_default_dir)s; /bin/bash -i'
 env.shell_interactive_djshell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(shell_default_dir)s; /bin/bash -i -c \"./manage shell;\"'
 
@@ -292,6 +294,8 @@ def shell(gui=0, dryrun=0):
     """
     Opens a UNIX shell.
     """
+    render_remote_paths()
+    print 'env.remote_app_dir:',env.remote_app_dir
     env.SITE = env.SITE or env.default_site
     env.shell_x_opt = '-X' if int(gui) else ''
     if '@' in env.host_string:

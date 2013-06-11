@@ -40,6 +40,10 @@ env.apache_application_name = None
 
 env.apache_log_level = 'warn'
 
+env.apache_auth_basic = False
+env.apache_auth_basic_authuserfile_template = '%(apache_docroot)s/.htpasswd_%(apache_site)s'
+env.apache_auth_basic_users = [] # [(user,password)]
+
 # If true, activates a rewrite rule that causes domain.com to redirect
 # to www.domain.com.
 env.apache_enforce_subdomain = True
@@ -106,6 +110,8 @@ env.apache_ssl_dir_local = 'ssl'
 # Useful for easily keying domain-local.com/domain-dev.com/domain-staging.com.
 env.apache_locale = ''
 
+env.apache_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
+
 def set_apache_specifics():
     os_version = common.get_os_version()
     apache_specifics = env.apache_specifics[os_version.type][os_version.distro]
@@ -137,6 +143,10 @@ env.apache_service_commands = {
     common.ENABLE:{
         common.FEDORA: 'systemctl enable httpd.service',
         common.UBUNTU: 'chkconfig apache2 on',
+    },
+    common.RELOAD:{
+        common.FEDORA: 'systemctl reload httpd.service',
+        common.UBUNTU: 'service apache2 reload',
     },
     common.RESTART:{
         common.FEDORA: 'systemctl restart httpd.service',
@@ -184,11 +194,16 @@ def stop():
     sudo(cmd)
 
 @task
+def reload():
+    cmd = get_service_command(common.RELOAD)
+    print cmd
+    sudo(cmd)
+
+@task
 def restart():
     cmd = get_service_command(common.RESTART)
     print cmd
-    #sudo(cmd)
-    sudo('service apache2 restart; sleep 5')
+    sudo(cmd)
 
 def check_required():
     for name in ['apache_application_name', 'apache_server_name']:
@@ -211,6 +226,7 @@ def set_apache_site_specifics(site):
     env.apache_django_wsgi = env.apache_django_wsgi_template % env
     env.apache_server_aliases = env.apache_server_aliases_template % env
     env.apache_ssl_domain = env.apache_ssl_domain_template % env
+    env.apache_auth_basic_authuserfile = env.apache_auth_basic_authuserfile_template % env
 
 @task
 def configure(full=0, site=None, delete_old=0):
@@ -317,3 +333,59 @@ def install_ssl(site=None):
 #    with settings(warn_only=True):
 #        sudo("[ -f %(apache_root)s/sites-enabled/%(apache_server_name)s ] && rm -f %(apache_root)s/sites-enabled/%(apache_server_name)s" % env)
 #        sudo("[ -f %(apache_root)s/sites-available/%(apache_server_name)s ] && rm -f %(apache_root)s/sites-available/%(apache_server_name)s" % env)
+
+@task
+def install_auth_basic_user_file(site=None):
+    """
+    Installs users for basic httpd auth.
+    """
+    apache_specifics = set_apache_specifics()
+    site = site or env.SITE
+    if site:
+        sites = [(site, env.sites[site])]
+    else:
+        sites = env.sites.iteritems()
+    for site, site_data in sites:
+        print site
+        set_apache_site_specifics(site)
+        assert env.apache_auth_basic, 'This site is not configured for Apache basic authenticated.'
+        assert env.apache_auth_basic_users, 'No apache auth users specified.'
+        for username,password in env.apache_auth_basic_users:
+            env.apache_auth_basic_username = username
+            env.apache_auth_basic_password = password
+            if files.exists(env.apache_auth_basic_authuserfile):
+                sudo('htpasswd -b %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
+            else:
+                sudo('htpasswd -b -c %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
+
+@task
+def sync(sync_set, dryrun=0):
+    """
+    Uploads media to an Apache accessible directory.
+    """
+    
+    apache_specifics = set_apache_specifics()
+    
+    common.render_remote_paths()
+    
+    site_data = env.sites[env.SITE]
+    env.update(site_data)
+    
+    for paths in env.apache_sync_sets[sync_set]:
+        print 'paths:',paths
+        env.apache_sync_local_path = os.path.abspath(paths['local_path'] % env)
+        if paths['local_path'].endswith('/') and not env.apache_sync_local_path.endswith('/'):
+            env.apache_sync_local_path += '/'
+        env.apache_sync_remote_path = paths['remote_path'] % env
+        
+        print 'Syncing %s to %s...' % (env.apache_sync_local_path, env.apache_sync_remote_path)
+        
+        with settings(warn_only=True):
+            sudo('mkdir -p %(apache_sync_remote_path)s' % env, user=env.apache_user)
+            sudo('chmod -R %(apache_chmod)s %(apache_sync_remote_path)s' % env, user=env.apache_user)
+            cmd = ('rsync -avz --progress --recursive --rsh "ssh -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % env
+            print cmd
+            if not int(dryrun):
+                local(cmd)
+        sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
+        

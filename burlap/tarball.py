@@ -28,6 +28,7 @@ env.tarball_exclusions = [
     '*.pyc',
     '*.svn',
     '*.tar.gz',
+    'static',
 ]
 env.tarball_dir = '.tarball_cache'
 
