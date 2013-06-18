@@ -1,0 +1,86 @@
+#!/bin/sh
+# ============================================
+#  celeryd - Starts the Celery worker daemon.
+# ============================================
+
+#chkconfig 2345 80 05
+#description: celery daemon
+### BEGIN INIT INFO
+# Provides:          celeryd
+# Required-Start:    $network $rabbitmq-server $httpd $local_fs $remote_fs
+# Required-Stop:     $network $rabbitmq-server $httpd $local_fs $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: celery task worker daemon
+### END INIT INFO
+
+. /etc/rc.d/init.d/functions
+
+DEFAULT_CELERYD="/usr/bin/celeryd"
+
+if test -f {{ celery_config_path }}; then
+    . {{ celery_config_path }}
+fi
+
+RETVAL=0
+prog="celeryd"
+
+CELERYD_LOG_FILE=${CELERYD_LOG_FILE:-${CELERYD_LOGFILE:-"{{ celery_log_path }}"}}
+CELERYD_PID_FILE=${CELERYD_PID_FILE:-${CELERYD_PIDFILE:-"/var/run/celeryd.pid"}}
+CELERYD_LOG_LEVEL=${CELERYD_LOG_LEVEL:-${CELERYD_LOGLEVEL:-"WARNING"}}
+
+CELERYD=${CELERYD:-$DEFAULT_CELERYD}
+
+export DJANGO_SETTINGS_MODULE
+export DJANG_PROJECT_DIR
+export CELERY_LOADER
+
+# Note: DO NOT USE the -B option in a multi-server environment, or tasks may get executed multiple times!
+#CELERYD_OPTS="$CELERYD_OPTS -f $CELERYD_LOG_FILE -l $CELERYD_LOG_LEVEL --pidfile $CELERYD_PID_FILE -B --scheduler djcelery.schedulers.DatabaseScheduler"
+CELERYD_OPTS="$CELERYD_OPTS -f $CELERYD_LOG_FILE -l $CELERYD_LOG_LEVEL --pidfile $CELERYD_PID_FILE --scheduler djcelery.schedulers.DatabaseScheduler"
+
+if [ -n "$2" ]; then
+    CELERYD_OPTS="$CELERYD_OPTS $2"
+fi
+
+exec="$CELERYD $CELERYD_OPTS"
+
+start () {
+    echo -n $"Starting $prog: with $exec"
+    LOG_FILE='{{ celery_log_path }}' daemonize $exec
+    RETVAL=$?
+	[ $RETVAL -ne 0 ] && exit $RETVAL
+}
+stop()
+{
+    echo -n $"Stopping $prog: "
+    killproc -p $CELERYD_PID_FILE -TERM
+    RETVAL=$?
+    if [ "x$runlevel" = x0 -o "x$runlevel" = x6 ] ; then
+        killall $exec 2>/dev/null
+    fi
+    echo
+    [ "$RETVAL" = 0 ] && rm -f $CELERYD_PID_FILE /var/lock/subsys/$prog
+    return $RETVAL
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        stop
+        start
+        ;;
+    status)
+        status -p $CELERYD_PID_FILE $prog
+        RETVAL=$?
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|restart|status}"
+        RETVAL=1
+esac
+exit $RETVAL
