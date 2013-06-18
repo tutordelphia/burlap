@@ -1,6 +1,8 @@
 import os
 import re
 import sys
+import types
+import copy
 import tempfile
 from collections import namedtuple
 from StringIO import StringIO
@@ -58,6 +60,15 @@ ROLE_DIR = env.ROLES_DIR = 'roles'
 SITE = 'SITE'
 ROLE = 'ROLE'
 
+env.is_local = None
+env.base_config_dir = '.'
+env.src_dir = 'src' # The path relative to fab where the code resides.
+
+env.django_settings_module_template = '%(app_name)s.settings.settings'
+
+env[SITE] = None
+env[ROLE] = None
+
 env.sites = {} # {site:site_settings}
 
 # If true, prevents run() from executing its command.
@@ -67,6 +78,9 @@ env.services = []
 required_system_packages = type(env)() # {service:{os:[packages]}
 required_python_packages = type(env)() # {service:{os:[packages]}
 required_ruby_packages = type(env)() # {service:{os:[packages]}
+service_configurators = type(env)() # {service:{[func]}
+service_deployers = type(env)() # {service:{[func]}
+service_restarters = type(env)() # {service:{[func]}
 
 env.hosts_retriever = None
 env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,
@@ -77,20 +91,27 @@ env.hostname_translators.default = lambda hostname: hostname
 
 env.default_site = None
 
+#env.shell_default_dir_template = '/usr/local/%(app_name)s'
+env.shell_default_dir_template = '%(remote_app_src_package_dir)s'
+env.shell_interactive_shell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(shell_default_dir)s; /bin/bash -i'
+env.shell_interactive_djshell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(shell_default_dir)s; /bin/bash -i -c \"./manage shell;\"'
+
 # This is where your application's custom code will reside on the remote
 # server.
 env.remote_app_dir_template = '/usr/local/%(app_name)s'
 env.remote_app_src_dir_template = '/usr/local/%(app_name)s/%(src_dir)s'
 env.remote_app_src_package_dir_template = '/usr/local/%(app_name)s/%(src_dir)s/%(app_name)s'
 
+# This is the name of the executable to call to access Django's management
+# features.
+env.django_manage = './manage'
+
+env.post_callbacks = []
+
 def render_remote_paths():
     env.remote_app_dir = env.remote_app_dir_template % env
     env.remote_app_src_dir = env.remote_app_src_dir_template % env
     env.remote_app_src_package_dir = env.remote_app_src_package_dir_template % env
-
-# This is the name of the executable to call to access Django's management
-# features.
-env.django_manage = './manage'
 
 def get_template_dirs():
     yield os.path.join(env.ROLES_DIR, env[ROLE])
@@ -102,6 +123,17 @@ def get_template_dirs():
     env.template_dirs = get_template_dirs()
 
 env.template_dirs = get_template_dirs()
+
+def save_env():
+    env_default = {}
+    for k, v in env.iteritems():
+        if k.startswith('_'):
+            continue
+        elif isinstance(v, (types.GeneratorType,)):
+            #print 'Skipping copy: %s' % (type(v,))
+            continue
+        env_default[k] = copy.deepcopy(v)
+    return env_default
 
 from django.conf import settings as _settings
 _settings.configure(TEMPLATE_DIRS=env.template_dirs)
@@ -241,6 +273,7 @@ def render_to_string(template):
     t = Template(template_content)
     c = Context(env)
     rendered_content = t.render(c)
+    rendered_content = rendered_content.replace('&quot;', '"')
     return rendered_content
 
 def render_to_file(template, fn=None):
@@ -250,6 +283,17 @@ def render_to_file(template, fn=None):
     """
     import tempfile
     content = render_to_string(template)
+    if fn:
+        fout = open(fn, 'w')
+    else:
+        fd,fn = tempfile.mkstemp()
+        fout = os.fdopen(fd, 'wt')
+    fout.write(content)
+    fout.close()
+    return fn
+
+def write_to_file(content, fn=None):
+    import tempfile
     if fn:
         fout = open(fn, 'w')
     else:
@@ -277,17 +321,19 @@ def get_settings(site=None, role=None):
     print 'environ.ROLE:',os.environ.get(ROLE)
     env.django_settings_module = env.django_settings_module_template % env
     print 'django_settings_module:',env.django_settings_module
-    module = __import__(
-        env.django_settings_module,
-        fromlist='.'.join(env.django_settings_module.split('.')[:-1]))
-    print 'module:',module
-    env.ROLE = os.environ[ROLE] = tmp_role
+    try:
+        module = __import__(
+            env.django_settings_module,
+            fromlist='.'.join(env.django_settings_module.split('.')[:-1]))
+        #print 'module:',module
+        module = reload(module)
+    except ImportError, e:
+        print 'Warning: Could not import settings for site "%s"' % (site,)
+        #raise # breaks *_secure pseudo sites
+        return
+    finally:
+        env.ROLE = os.environ[ROLE] = tmp_role
     return module
-
-#env.shell_default_dir_template = '/usr/local/%(app_name)s'
-env.shell_default_dir_template = '%(remote_app_src_package_dir)s'
-env.shell_interactive_shell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(shell_default_dir)s; /bin/bash -i'
-env.shell_interactive_djshell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(shell_default_dir)s; /bin/bash -i -c \"./manage shell;\"'
 
 @task
 def shell(gui=0, dryrun=0):
@@ -330,3 +376,20 @@ def djshell():
         cmd = 'ssh -t -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_djshell_str)s"' % env
     #print cmd
     os.system(cmd)
+
+def iter_sites(sites, renderer=None, setter=None):
+    """
+    Iterates over sites, safely setting environment variables for each site.
+    """
+    renderer = renderer or render_remote_paths
+    env_default = save_env()
+    for site, site_data in sites:
+        env.update(env_default)
+        env.update(env.sites[site])
+        env.SITE = site
+        renderer()
+        if setter:
+            setter(site)
+        yield site, site_data
+    env.update(env_default)
+    

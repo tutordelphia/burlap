@@ -1,5 +1,6 @@
 import os
 import re
+import tempfile
 
 from fabric.api import (
     env,
@@ -36,20 +37,37 @@ env.pip_virtual_env_dir = '.env'
 env.pip_virtual_env_exe = sudo
 env.pip_requirements_fn = 'pip-requirements.txt'
 env.pip_use_virt = True
+env.pip_build_dir = '/tmp/pip-build'
 env.pip_path = 'pip-%(pip_python_version)s'
-env.pip_update_command = '%(pip_path_versioned)s install --use-mirrors --timeout=120 --no-install %(pip_no_deps)s --download %(pip_cache_dir)s --exists-action w %(pip_package)s'
+env.pip_update_command = '%(pip_path_versioned)s install --use-mirrors --timeout=120 --no-install %(pip_no_deps)s --build %(pip_build_dir)s --download %(pip_cache_dir)s --exists-action w %(pip_package)s'
 #env.pip_install_command = 'cd %(pip_virtual_env_dir)s; . %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade --timeout=60 "%(pip_package)s"; deactivate'
 env.pip_remote_cache_dir = '/tmp/pip_cache'
 env.pip_local_cache_dir_template = './.pip_cache/%(ROLE)s'
 env.pip_upgrade = ''
-env.pip_install_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install %(pip_upgrade_flag)s --find-links file://%(pip_cache_dir)s --no-index %(pip_package)s; deactivate"
+env.pip_install_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install %(pip_upgrade_flag)s --build %(pip_build_dir)s --find-links file://%(pip_cache_dir)s --no-index %(pip_package)s; deactivate"
 
 PIP = 'PIP'
 
 common.required_system_packages[PIP] = {
     common.FEDORA: ['python-pip'],
-    common.UBUNTU: ['python-pip', 'python-virtualenv'],
+    common.UBUNTU: ['python-pip', 'python-virtualenv', 'gcc', 'python-dev'],
 }
+
+def render_paths():
+    env.pip_path_versioned = env.pip_path % env
+    render_remote_paths()
+    if env.pip_virtual_env_dir_template:
+        env.pip_virtual_env_dir = env.pip_virtual_env_dir_template % env
+    if env.is_local:
+        env.pip_virtual_env_dir = os.path.abspath(env.pip_virtual_env_dir)
+
+def clean_virtualenv():
+    render_paths()
+    with settings(warn_only=True):
+        print 'Deleting old virtual environment...'
+        sudo('rm -Rf %(pip_virtual_env_dir)s' % env)
+    assert not files.exists(env.pip_virtual_env_dir), \
+        'Unable to delete pre-existing environment.'
 
 @task
 def init(clean=0):
@@ -58,19 +76,11 @@ def init(clean=0):
     """
     assert env[ROLE]
     
-    env.pip_path_versioned = env.pip_path % env
-    
-    render_remote_paths()
-    if env.pip_virtual_env_dir_template:
-        env.pip_virtual_env_dir = env.pip_virtual_env_dir_template % env
+    render_paths()
     
     # Delete any pre-existing environment.
     if int(clean):
-        with settings(warn_only=True):
-            print 'Deleting old virtual environment...'
-            sudo('rm -Rf %(pip_virtual_env_dir)s' % env)
-        assert not files.exists(env.pip_virtual_env_dir), \
-            'Unable to delete pre-existing environment.'
+        clean_virtualenv()
     
     print env.pip_virtual_env_dir
     if not files.exists(env.pip_virtual_env_dir):
@@ -186,6 +196,8 @@ def check():
 def update(package='', ignore_errors=0, no_deps=0, all=0):
     """
     Updates the local cache of pip packages.
+    
+    If all=1, skips check of host and simply updates everything.
     """
     assert env[ROLE]
     ignore_errors = int(ignore_errors)
@@ -196,6 +208,7 @@ def update(package='', ignore_errors=0, no_deps=0, all=0):
         os.makedirs(env.pip_cache_dir)
     env.pip_package = (package or '').strip()
     env.pip_no_deps = '--no-deps' if int(no_deps) else ''
+    env.pip_build_dir = tempfile.mkdtemp()
     with settings(warn_only=ignore_errors):
         if package:
             # Download a single specific package.
@@ -207,7 +220,7 @@ def update(package='', ignore_errors=0, no_deps=0, all=0):
             # to pip separately.
             
             if int(all):
-                packages = list(iter_pip_requirements)
+                packages = list(iter_pip_requirements())
             else:
                 packages = [k for k,v in check()]
             
@@ -223,6 +236,10 @@ def install(package='', clean=0, all=0, upgrade=1):
     print 'Installing pip requirements...'
     assert env[ROLE]
     require('is_local')
+    
+    # Delete any pre-existing environment.
+    if int(clean):
+        clean_virtualenv()
     
     render_remote_paths()
     if env.pip_virtual_env_dir_template:
@@ -243,12 +260,13 @@ def install(package='', clean=0, all=0, upgrade=1):
         env.pip_upgrade_flag = ' -U '
     
     if int(all):
-        packages = list(iter_pip_requirements)
+        packages = list(iter_pip_requirements())
     elif package:
         packages = [package]
     else:
         packages = [k for k,v in check()]
     
+    env.pip_build_dir = tempfile.mkdtemp()
     for package in packages:
         env.pip_package = package
         run(env.pip_install_command % env)

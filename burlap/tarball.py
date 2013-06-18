@@ -28,9 +28,10 @@ env.tarball_exclusions = [
     '*.pyc',
     '*.svn',
     '*.tar.gz',
-    'static',
+    #'static',
 ]
 env.tarball_dir = '.tarball_cache'
+env.tarball_extra_dirs = []
 
 def get_tarball_path():
     env.tarball_gzip_flag = ''
@@ -89,6 +90,13 @@ def deploy(clean=0):
     print 'Extracting tarball...'
     sudo('mkdir -p %(remote_app_src_dir)s' % env)
     sudo('tar -xvzf %(put_remote_path)s -C %(remote_app_src_dir)s' % env)
+    
+    for path in env.tarball_extra_dirs:
+        env.tarball_extra_dir_path = path % env
+        if path.startswith('/'):
+            sudo('mkdir -p %(tarball_extra_dir_path)s' % env)
+        else:
+            sudo('mkdir -p %(remote_app_dir)s/%(tarball_extra_dir_path)s' % env)
     
     # Mark executables.
     print 'Marking source files as executable...'

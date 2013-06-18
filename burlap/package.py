@@ -41,12 +41,20 @@ def install_apt(fn=None, update=0):
     assert env[ROLE]
     env.apt_fqfn = fn or find_template(env.apt_fn)
     assert os.path.isfile(env.apt_fqfn)
+    fd, tmp_fn = tempfile.mkstemp()
+    lines = [
+        _ for _ in open(env.apt_fqfn).readlines()
+        if _.strip() and not _.strip().startswith('#')
+    ]
+    fout = open(tmp_fn, 'w')
+    fout.write('\n'.join(lines))
+    fout.close()
     if not env.is_local:
-        put(local_path=env.apt_fqfn)
+        put(local_path=tmp_fn)
         env.apt_fqfn = env.put_remote_path
     if int(update):
         sudo('apt-get update -y')
-    sudo('apt-get install -y `cat "%(apt_fqfn)s" | tr "\\n" " "`' % env)
+    sudo('apt-get install -y `cat "%(put_remote_path)s" | tr "\\n" " "`' % env)
 
 env.yum_fn = 'yum-requirements.txt'
 
@@ -95,7 +103,7 @@ def list_required(type=None, service=None):
                 _service, {}).get(version.distro, []))
         if not _new:
             print>>sys.stderr, \
-                'Warning: no packages found for service %s' % (service,)
+                'Warning: no packages found for service "%s"' % (_service,)
         packages.update(_new)
     for package in sorted(packages):
         print package

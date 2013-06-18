@@ -19,7 +19,7 @@ from fabric.contrib import files
 from burlap.common import run, put
 from burlap import common
 
-env.rabbitmq_host = "localhost"
+env.rabbitmq_host = "loca"
 env.rabbitmq_vhost = "/"
 env.rabbitmq_erlang_cookie = ''
 env.rabbitmq_nodename = "rabbit"
@@ -108,17 +108,62 @@ def status():
     cmd = get_service_command(common.STATUS)
     print cmd
     sudo(cmd)
-    
+
+def render_paths():
+    common.render_remote_paths()
+    if env.rabbitmq_erlang_cookie_template:
+        env.rabbitmq_erlang_cookie = env.rabbitmq_erlang_cookie_template % env
+
+
 @task
-def configure(full=0):
+def configure(site=None, full=0, dryrun=0):
     """
     Installs and configures RabbitMQ.
     """
     full = int(full)
+    dryrun = int(dryrun)
+    
     from burlap import package
-    if env.rabbitmq_erlang_cookie_template:
-        env.rabbitmq_erlang_cookie = env.rabbitmq_erlang_cookie_template % env
-    assert env.rabbitmq_erlang_cookie
+#    assert env.rabbitmq_erlang_cookie
     if full:
         package.install_required(type=package.common.SYSTEM, service=RABBITMQ)
     
+    #render_paths()
+    
+    site = site or env.SITE
+    if site == 'all':
+        sites = env.sites.iteritems()
+    else:
+        sites = [(site, env.sites[site])]
+    
+    params = set() # [(user,vhost)]
+    for site, site_data in common.iter_sites(sites, renderer=render_paths):
+        print '!'*80
+        print site
+        _settings = common.get_settings(site=site)
+        #print '_settings:',_settings
+        if not _settings:
+            continue
+        print 'RabbitMQ:',_settings.BROKER_USER, _settings.BROKER_VHOST
+        params.add((_settings.BROKER_USER, _settings.BROKER_VHOST))
+    
+    for user, vhost in params:
+        env.rabbitmq_broker_user = user
+        env.rabbitmq_broker_vhost = vhost
+        with settings(warn_only=True):
+            cmd = 'rabbitmqctl add_vhost %(rabbitmq_broker_vhost)s' % env
+            print cmd
+            if not dryrun:
+                sudo(cmd)
+            cmd = 'rabbitmqctl set_permissions -p %(rabbitmq_broker_vhost)s %(rabbitmq_broker_user)s ".*" ".*" ".*"' % env
+            print cmd
+            if not dryrun:
+                sudo(cmd)
+
+def configure_all(**kwargs):
+    kwargs['site'] = 'all'
+    return configure(**kwargs)
+
+common.service_configurators[RABBITMQ] = [configure_all]
+#common.service_deployers[RABBITMQ] = [deploy]
+common.service_restarters[RABBITMQ] = [restart]

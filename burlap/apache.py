@@ -50,7 +50,7 @@ env.apache_enforce_subdomain = True
 
 env.apache_ssl = False
 env.apache_ssl_port = 443
-env.apache_ssl_chmod = 600
+env.apache_ssl_chmod = 440
 
 # Defines the expected name of the SSL certificates.
 env.apache_ssl_domain_template = '%(apache_domain)s'
@@ -104,6 +104,8 @@ env.apache_specifics[LINUX][UBUNTU].pid = '/var/run/apache2/apache2.pid'
 
 env.apache_ssl_certificates = None
 env.apache_ssl_certificates_templates = []
+
+# The local and remote relative directory where the SSL certificates are stored.
 env.apache_ssl_dir_local = 'ssl'
 
 # An optional segment to insert into the domain, customizable by role.
@@ -118,8 +120,8 @@ def set_apache_specifics():
     
     env.apache_root = apache_specifics.root
     env.apache_conf = apache_specifics.conf
-    env.sites_available = apache_specifics.sites_available
-    env.sites_enabled = apache_specifics.sites_enabled
+    env.apache_sites_available = apache_specifics.sites_available
+    env.apache_sites_enabled = apache_specifics.sites_enabled
     env.apache_log_dir = apache_specifics.log_dir
     env.apache_pid = apache_specifics.pid
     env.apache_ports = env.apache_ports_template % env
@@ -154,7 +156,7 @@ env.apache_service_commands = {
         # Note, the sleep 5 is necessary because the stop/start appears to
         # happen in the background but gets aborted if Fabric exits before
         # it completes.
-        common.UBUNTU: 'service apache2 restart; sleep 5',
+        common.UBUNTU: 'service apache2 restart; sleep 3',
     },
 }
 
@@ -162,7 +164,8 @@ APACHE2 = 'APACHE2'
 
 common.required_system_packages[APACHE2] = {
     common.FEDORA: ['httpd'],
-    common.UBUNTU: ['apache2', 'mod_ssl', 'mod_wsgi'],
+    #common.UBUNTU: ['apache2', 'mod_ssl', 'mod_wsgi'],
+    common.UBUNTU: ['apache2', 'libapache2-mod-wsgi'],
 }
 
 def get_service_command(action):
@@ -255,8 +258,11 @@ def configure(full=0, site=None, delete_old=0):
     else:
         sites = env.sites.iteritems()
     
+    env_default = common.save_env()
     for site, site_data in sites:
         print site
+        env.update(env_default)
+        env.update(env.sites[site])
         set_apache_site_specifics(site)
         
         print 'env.apache_ssl_domain:',env.apache_ssl_domain
@@ -270,7 +276,7 @@ def configure(full=0, site=None, delete_old=0):
         
         fn = common.render_to_file('apache_site.template.conf')
         env.apache_site_conf = site+'.conf'
-        env.apache_site_conf_fqfn = os.path.join(env.sites_available, env.apache_site_conf)
+        env.apache_site_conf_fqfn = os.path.join(env.apache_sites_available, env.apache_site_conf)
         put(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True)
         
         sudo('a2ensite %(apache_site_conf)s' % env)
@@ -289,9 +295,15 @@ def configure(full=0, site=None, delete_old=0):
 
     #restart()#break apache? run separately?
 
+@task
+def configure_clean(**kwargs):
+    kwargs['delete_old'] = 1
+    return configure(**kwargs)
+
 def iter_certificates():
     print 'apache_ssl_domain:',env.apache_ssl_domain
     for cert_type, cert_file_template in env.apache_ssl_certificates_templates:
+        print 'cert_type, cert_file_template:',cert_type, cert_file_template
         _local_cert_file = os.path.join(env.apache_ssl_dir_local, cert_file_template % env)
         local_cert_file = find_template(_local_cert_file)
         assert local_cert_file, 'Unable to find local certificate file: %s' % (_local_cert_file,)
@@ -299,7 +311,7 @@ def iter_certificates():
         yield cert_type, local_cert_file, remote_cert_file
 
 @task
-def install_ssl(site=None):
+def install_ssl(site=None, dryrun=0):
     apache_specifics = set_apache_specifics()
     
     if site:
@@ -307,19 +319,28 @@ def install_ssl(site=None):
     else:
         sites = env.sites.iteritems()
     
+    env_default = common.save_env()
     for site, site_data in sites:
         print site
+        env.update(env_default)
+        env.update(env.sites[site])
+        env.SITE = site
+        
         set_apache_site_specifics(site)
     
         sudo('mkdir -p %(apache_ssl_dir)s' % env)
     
         if env.apache_ssl:
             for cert_type, local_cert_file, remote_cert_file in iter_certificates():
+                print '='*80
                 print 'Installing certificate %s...' % (remote_cert_file,)
-                put(local_path=local_cert_file, remote_path=remote_cert_file, use_sudo=True)
+                if not int(dryrun):
+                    put(
+                        local_path=local_cert_file,
+                        remote_path=remote_cert_file, use_sudo=True)
                 
     sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_ssl_dir)s' % env)
-    sudo('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s/*' % env)
+    sudo('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s' % env)
     
 #@task
 #def unconfigure():
@@ -345,10 +366,18 @@ def install_auth_basic_user_file(site=None):
         sites = [(site, env.sites[site])]
     else:
         sites = env.sites.iteritems()
-    for site, site_data in sites:
+    
+    #env_default = common.save_env()
+    for site, site_data in common.iter_sites(sites=sites, setter=set_apache_site_specifics):
         print site
-        set_apache_site_specifics(site)
-        assert env.apache_auth_basic, 'This site is not configured for Apache basic authenticated.'
+        #env.update(env_default)
+        #env.update(env.sites[site])
+        #set_apache_site_specifics(site)
+        
+        if not env.apache_auth_basic:
+            continue
+        
+        #assert env.apache_auth_basic, 'This site is not configured for Apache basic authenticated.'
         assert env.apache_auth_basic_users, 'No apache auth users specified.'
         for username,password in env.apache_auth_basic_users:
             env.apache_auth_basic_username = username
@@ -359,9 +388,9 @@ def install_auth_basic_user_file(site=None):
                 sudo('htpasswd -b -c %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
 
 @task
-def sync(sync_set, dryrun=0):
+def sync_media(sync_set=None, dryrun=0):
     """
-    Uploads media to an Apache accessible directory.
+    Uploads select media to an Apache accessible directory.
     """
     
     apache_specifics = set_apache_specifics()
@@ -371,21 +400,31 @@ def sync(sync_set, dryrun=0):
     site_data = env.sites[env.SITE]
     env.update(site_data)
     
-    for paths in env.apache_sync_sets[sync_set]:
-        print 'paths:',paths
-        env.apache_sync_local_path = os.path.abspath(paths['local_path'] % env)
-        if paths['local_path'].endswith('/') and not env.apache_sync_local_path.endswith('/'):
-            env.apache_sync_local_path += '/'
-        env.apache_sync_remote_path = paths['remote_path'] % env
-        
-        print 'Syncing %s to %s...' % (env.apache_sync_local_path, env.apache_sync_remote_path)
-        
-        with settings(warn_only=True):
+    sync_sets = env.apache_sync_sets
+    if sync_set:
+        sync_sets = [sync_set]
+    
+    for sync_set in sync_sets:
+        for paths in env.apache_sync_sets[sync_set]:
+            print 'paths:',paths
+            env.apache_sync_local_path = os.path.abspath(paths['local_path'] % env)
+            if paths['local_path'].endswith('/') and not env.apache_sync_local_path.endswith('/'):
+                env.apache_sync_local_path += '/'
+            env.apache_sync_remote_path = paths['remote_path'] % env
+            
+            print 'Syncing %s to %s...' % (env.apache_sync_local_path, env.apache_sync_remote_path)
+            
+            env.apache_tmp_chmod = paths.get('chmod',  env.apache_chmod)
+            #with settings(warn_only=True):
             sudo('mkdir -p %(apache_sync_remote_path)s' % env, user=env.apache_user)
-            sudo('chmod -R %(apache_chmod)s %(apache_sync_remote_path)s' % env, user=env.apache_user)
-            cmd = ('rsync -avz --progress --recursive --rsh "ssh -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % env
+            sudo('chmod -R %(apache_tmp_chmod)s %(apache_sync_remote_path)s' % env, user=env.apache_user)
+            cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % env
+            print '!'*80
             print cmd
             if not int(dryrun):
                 local(cmd)
-        sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
-        
+            sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
+
+common.service_configurators[APACHE2] = [configure_clean, install_auth_basic_user_file, install_ssl, sync_media]
+#common.service_deployers[APACHE2] = [configure]
+common.service_restarters[APACHE2] = [reload]

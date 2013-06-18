@@ -67,8 +67,7 @@ POSTGRESQL = 'POSTGRESQL'
 POSTGRESQLCLIENT = 'POSTGRESQLCLIENT'
 
 common.required_system_packages[MYSQL] = {
-    common.FEDORA: ['mysql-server'],
-    common.UBUNTU: ['mysql-server'],
+    common.FEDORA: ['mysql-server'],    common.UBUNTU: ['mysql-server', 'libmysqlclient-dev'],
 }
 common.required_system_packages[POSTGRESQL] = {
     common.FEDORA: ['postgresql-server'],
@@ -77,7 +76,7 @@ common.required_system_packages[POSTGRESQL] = {
 
 common.required_system_packages[MYSQLCLIENT] = {
     common.FEDORA: ['mysql-client'],
-    common.UBUNTU: ['mysql-client'],
+    common.UBUNTU: ['mysql-client', 'libmysqlclient-dev'],
 }
 common.required_system_packages[POSTGRESQLCLIENT] = {
     common.FEDORA: ['postgresql-client'],
@@ -189,6 +188,16 @@ def post_create(name=None, dryrun=0, site=None):
     migrate(fake=True, site=site)
     install_sql(name=name, site=site)
     createsuperuser()
+
+@task
+def update(name=None, site=None):
+    """
+    Updates schema and custom SQL.
+    """
+    set_db(name=name, site=site)
+    syncdb(site=site)
+    migrate(site=site)
+    install_sql(name=name, site=site)
 
 @task
 def dump(dryrun=0):
@@ -336,7 +345,8 @@ def drop_views(name=None, site=None):
         todo
     elif 'mysql' in env.db_engine:
         cmd = ("mysql --batch -v -h %(db_host)s " \
-            "-u %(db_root_user)s -p%(db_root_password)s " \
+            #"-u %(db_root_user)s -p%(db_root_password)s " \
+            "-u %(db_user)s -p%(db_password)s " \
             "--execute=\"SELECT GROUP_CONCAT(CONCAT(TABLE_SCHEMA,'.',table_name) SEPARATOR ', ') AS views FROM INFORMATION_SCHEMA.views WHERE TABLE_SCHEMA = '%(db_name)s' ORDER BY table_name DESC;\"") % env
         result = sudo(cmd)
         result = re.findall(
@@ -346,7 +356,8 @@ def drop_views(name=None, site=None):
         if not result:
             return
         env.db_view_list = result[0]
-        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s " \
+        #cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s " \
+        cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p%(db_password)s " \
             "--execute=\"DROP VIEW %(db_view_list)s CASCADE;\"") % env
         sudo(cmd)
     else:
@@ -357,6 +368,7 @@ def install_sql(name=None, site=None):
     """
     Installs all custom SQL.
     """
+    #_settings = get_settings(site=site, role=env.ROLE)
     set_db(name=name, site=site)
     paths = glob.glob('%(src_dir)s/%(app_name)s/*/sql/*' % env)
     
@@ -392,7 +404,7 @@ def install_sql(name=None, site=None):
     elif 'mysql' in env.db_engine:
         for path in get_paths('mysql'):
             put(local_path=path)
-            cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s %(db_name)s < %(put_remote_path)s") % env
+            cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p%(db_password)s %(db_name)s < %(put_remote_path)s") % env
             #print cmd
             sudo(cmd)
     else:
@@ -429,4 +441,7 @@ def install_fixtures(name, site=None):
             env.db_fq_fixture_path = env.put_remote_path
         cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s loaddata %(db_fq_fixture_path)s' % env
         run(cmd)
-        
+
+common.service_configurators[MYSQL] = [configure]
+common.service_configurators[POSTGRESQL] = [configure]
+common.service_deployers[MYSQL] = [update]

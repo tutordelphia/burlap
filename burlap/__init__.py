@@ -16,23 +16,9 @@ from fabric.tasks import WrappedCallableTask
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
 
-env.is_local = None
-env.base_config_dir = '.'
-env.src_dir = 'src' # The path relative to fab where the code resides.
-
 import common
 
-env.django_settings_module_template = '%(app_name)s.settings.settings'
-
-env[common.SITE] = None
-env[common.ROLE] = None
-
-env_default = {}
-for k, v in env.iteritems():
-    if isinstance(v, (types.GeneratorType,)):
-        #print 'Skipping copy: %s' % (type(v,))
-        continue
-    env_default[k] = copy.deepcopy(v)
+env_default = common.save_env()
 
 # Variables cached per-role. Must be after deepcopy.
 env._rc = type(env)()
@@ -41,34 +27,59 @@ def _get_environ_handler(name, d):
     """
     Dynamically creates a Fabric task for each configuration role.
     """
-    def func(site=None, hostname=None):
+    def func(site=None, **kwargs):
         site = site or env.SITE
+        hostname = kwargs.get('hostname', kwargs.get('hn', kwargs.get('h')))
+        
+        # Load environment for current role.
         env.update(env_default)
         env[common.ROLE] = os.environ[common.ROLE] = name
         if site:
             env[common.SITE] = os.environ[common.SITE] = site
         env.update(d)
         
+        # Load host retriever.
+        retriever = None
         if env.hosts_retriever:
             # Dynamically retrieve hosts.
-            #retriever = env.hosts_retrievers[env.hosts_retriever]
             module_name = '.'.join(env.hosts_retriever.split('.')[:-1])
             func_name = env.hosts_retriever.split('.')[-1]
             retriever = getattr(importlib.import_module(module_name), func_name)
-            env.hosts = list(retriever())
         
+        # Load host translator.
+        translator = None
         if hostname:
             # Filter hosts list by a specific host name.
             module_name = '.'.join(env.hostname_translator.split('.')[:-1])
             func_name = env.hostname_translator.split('.')[-1]
             translator = getattr(importlib.import_module(module_name), func_name)
-            #translator = env.hostname_translators[env.hostname_translator]
+        
+        # Re-load environment for current role, incase loading
+        # the retriever/translator reset some environment values.
+        env.update(env_default)
+        env[common.ROLE] = os.environ[common.ROLE] = name
+        if site:
+            env[common.SITE] = os.environ[common.SITE] = site
+        env.update(d)
+#        print 'd:'
+#        for k in sorted(d.keys()):
+#            print k,d[k]
+        #print 'env.vm_type0:',env.vm_type
+        
+        # Dynamically retrieve hosts.
+        if env.hosts_retriever:
+            env.hosts = list(retriever())
+            
+        #print 'env.vm_type1:',env.vm_type
+        # Filter hosts list by a specific host name.
+        if hostname:
             hostname = translator(hostname=hostname)
             _hosts = env.hosts
             env.hosts = [_ for _ in env.hosts if _ == hostname]
             assert env.hosts, \
                 'Hostname %s does not match any known hosts.' % (hostname,)
         
+        #print 'env.vm_type2:',env.vm_type
         print 'Loaded role %s.' % (name,)
     func.__doc__ = 'Sets enivronment variables for the "%s" role.' % (name,)
     return func
@@ -170,3 +181,10 @@ def populate_fabfile():
 
 if burlap_populate_stack:
     populate_fabfile()
+
+# Execute any callbacks registered by sub-modules.
+# These are useful for calling inter-sub-module functions
+# after the modules tasks are registered so task names don't get
+# mistakenly registered under the wrong module.
+for cb in env.post_callbacks:
+    cb()

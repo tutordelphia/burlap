@@ -29,6 +29,9 @@ from burlap.common import (
 
 env.user_tmp_sudoers_fn = '/tmp/sudoers'
 env.user_groups = []
+env.user_key_type = 'rsa' # e.g. rsa|dsa
+env.user_key_bits = 2048 # e.g. 1024, 2048, or 4096
+env.user_key_filename = None
 
 @task
 def create(username):
@@ -38,24 +41,39 @@ def create(username):
     sudo('adduser %s' % username)
 
 @task
-def togroups(username, groups):
+def togroups(user=None, groups=None):
     """
     Adds the user to the given list of groups.
     """
+    user = user or env.user
+    groups = groups or env.user_groups
     if isinstance(groups, basestring):
         groups = [_ for _ in groups.split(',') if _.strip()]
     for group in groups:
-        env.user_username = username
+        env.user_username = user
         env.user_group = group
         sudo('adduser %(user_username)s %(user_group)s' % env)
 
 @task
-def passwordless(username, pubkey):
+def generate_keys():
+    """
+    Generates *.pem and *.pub key files suitable for setting up passwordless SSH.
+    """
+    env.user_key_filename = env.user_key_filename or env.key_filename
+    local('ssh-keygen -t %(user_key_type)s -b %(user_key_bits)s -f %(user_key_filename)s' % env)
+    if env.user_key_filename.endswith('.pem'):
+        src = env.user_key_filename+'.pub'
+        dst = (env.user_key_filename+'.pub').replace('.pem', '')
+        print src, dst
+        os.rename(src, dst)
+
+@task
+def passwordless(username=None, pubkey=None):
     """
     Configures the user to use an SSL key without a password.
     """
-    env.user_username = username
-    env.user_pubkey = pubkey
+    env.user_username = username or env.user
+    env.user_pubkey = pubkey or env.key_filename
     assert os.path.isfile(pubkey)
     
     first = os.path.splitext(pubkey)[0]

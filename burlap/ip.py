@@ -29,6 +29,7 @@ from burlap.common import (
 
 env.ip_type = 'static' # |dynamic
 env.ip_interface = 'eth0'
+env.ip_address = None
 env.ip_netmask = '255.255.255.0'
 env.ip_broadcast = '10.157.10.255'
 env.ip_gateway = '10.157.10.1'
