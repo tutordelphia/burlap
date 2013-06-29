@@ -42,7 +42,7 @@ def get_tarball_path():
     if not os.path.isdir(env.tarball_dir):
         os.makedirs(env.tarball_dir)
     env.absolute_src_dir = os.path.abspath(env.src_dir)
-    env.tarball_path = os.path.abspath('%(tarball_dir)s/code-%(ROLE)s-%(SITE)s.%(tarball_ext)s' % env)
+    env.tarball_path = os.path.abspath('%(tarball_dir)s/code-%(ROLE)s-%(SITE)s-%(host_string)s.%(tarball_ext)s' % env)
     return env.tarball_path
 
 @task

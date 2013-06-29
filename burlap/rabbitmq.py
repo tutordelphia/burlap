@@ -114,7 +114,20 @@ def render_paths():
     if env.rabbitmq_erlang_cookie_template:
         env.rabbitmq_erlang_cookie = env.rabbitmq_erlang_cookie_template % env
 
+@task
+def list_vhosts():
+    """
+    Displays a list of configured RabbitMQ vhosts.
+    """
+    sudo('rabbitmqctl list_vhosts')
 
+@task
+def list_users():
+    """
+    Displays a list of configured RabbitMQ users.
+    """
+    sudo('rabbitmqctl list_users')
+    
 @task
 def configure(site=None, full=0, dryrun=0):
     """
@@ -130,14 +143,8 @@ def configure(site=None, full=0, dryrun=0):
     
     #render_paths()
     
-    site = site or env.SITE
-    if site == 'all':
-        sites = env.sites.iteritems()
-    else:
-        sites = [(site, env.sites[site])]
-    
     params = set() # [(user,vhost)]
-    for site, site_data in common.iter_sites(sites, renderer=render_paths):
+    for site, site_data in common.iter_sites(site=site, renderer=render_paths):
         print '!'*80
         print site
         _settings = common.get_settings(site=site)
@@ -161,7 +168,7 @@ def configure(site=None, full=0, dryrun=0):
                 sudo(cmd)
 
 def configure_all(**kwargs):
-    kwargs['site'] = 'all'
+    kwargs['site'] = common.ALL
     return configure(**kwargs)
 
 common.service_configurators[RABBITMQ] = [configure_all]

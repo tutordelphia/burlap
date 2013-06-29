@@ -114,7 +114,7 @@ def configure(name=None, site=None, _role=None, dryrun=0):
             sudo("sed -i 's/127.0.0.1/0.0.0.0/g' %(db_mysql_conf)s" % env)
             
             # Enable root logins from remote connections.
-            sudo('mysql -u %(db_root_user)s -p%(db_root_password)s --execute="USE mysql; GRANT ALL ON *.* to %(db_root_user)s@\'%%\' IDENTIFIED BY \'%(db_root_password)s\'; FLUSH PRIVILEGES;"' % env)
+            sudo('mysql -u %(db_root_user)s -p"%(db_root_password)s" --execute="USE mysql; GRANT ALL ON *.* to %(db_root_user)s@\'%%\' IDENTIFIED BY \'%(db_root_password)s\'; FLUSH PRIVILEGES;"' % env)
             
             sudo('service mysql restart')
 
@@ -143,30 +143,30 @@ def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
     elif 'mysql' in env.db_engine:
         
         if int(drop):
-            cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute='DROP DATABASE IF EXISTS %(db_name)s'" % env
+            cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute='DROP DATABASE IF EXISTS %(db_name)s'" % env
             print cmd
             if not int(dryrun):
                 sudo(cmd)
             
-        cmd = "mysqladmin -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s create %(db_name)s" % env
+        cmd = "mysqladmin -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' create %(db_name)s" % env
         print cmd
         if not int(dryrun):
             sudo(cmd)
         
         # Create user.
-        cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute=\"GRANT USAGE ON *.* TO %(db_user)s@'%%'; DROP USER %(db_user)s@'%%';\"" % env
+        cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute=\"GRANT USAGE ON *.* TO %(db_user)s@'%%'; DROP USER %(db_user)s@'%%';\"" % env
         print cmd
         if not int(dryrun):
             run(cmd)
-        #cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute=\"CREATE USER %(db_user)s@%(db_host)s IDENTIFIED BY '%(db_password)s';\"" % env
-        #cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute=\"GRANT ALL PRIVILEGES ON %(db_name)s.* TO %(db_user)s@%(db_host)s IDENTIFIED BY '%(db_password)s';\"" % env
-        cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute=\"GRANT ALL PRIVILEGES ON %(db_name)s.* TO %(db_user)s@'%%' IDENTIFIED BY '%(db_password)s';\"" % env
+        #cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute=\"CREATE USER %(db_user)s@%(db_host)s IDENTIFIED BY '%(db_password)s';\"" % env
+        #cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute=\"GRANT ALL PRIVILEGES ON %(db_name)s.* TO %(db_user)s@%(db_host)s IDENTIFIED BY '%(db_password)s';\"" % env
+        cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute=\"GRANT ALL PRIVILEGES ON %(db_name)s.* TO %(db_user)s@'%%' IDENTIFIED BY '%(db_password)s';\"" % env
         print cmd
         if not int(dryrun):
             run(cmd)
             
         # Let the primary login do so from everywhere.
-#        cmd = 'mysql -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s --execute="USE mysql; GRANT ALL ON %(db_name)s.* to %(db_user)s@\'%\' IDENTIFIED BY \'%(db_password)s\'; FLUSH PRIVILEGES;"'
+#        cmd = 'mysql -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute="USE mysql; GRANT ALL ON %(db_name)s.* to %(db_user)s@\'%\' IDENTIFIED BY \'%(db_password)s\'; FLUSH PRIVILEGES;"'
 #        sudo(cmd)
     
     else:
@@ -262,21 +262,21 @@ def load(db_dump_fn, dryrun=0):
     elif 'mysql' in env.db_engine:
         
         # Drop the database if it's there.
-        #cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p%(db_password)s "
-        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s "
+        #cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' "
+        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
             "--execute='DROP DATABASE IF EXISTS %(db_name)s'") % env
         run(cmd)
         
         # Now, create the database.
-        #cmd = ("mysqladmin -h %(db_host)s -u %(db_user)s -p%(db_password)s "
-        cmd = ("mysqladmin -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s "
+        #cmd = ("mysqladmin -h %(db_host)s -u %(db_user)s -p'%(db_password)s' "
+        cmd = ("mysqladmin -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
             "create %(db_name)s") % env
         run(cmd)
         
         # Raise max packet limitation.
         run(
             ('mysql -v -h %(db_host)s -D %(db_name)s -u %(db_root_user)s '
-            '-p%(db_root_password)s --execute="SET global '
+            '-p"%(db_root_password)s" --execute="SET global '
             'net_buffer_length=%(db_mysql_net_buffer_length)s; SET global '
             'max_allowed_packet=%(db_mysql_max_allowed_packet)s;"') % env)
         
@@ -345,8 +345,8 @@ def drop_views(name=None, site=None):
         todo
     elif 'mysql' in env.db_engine:
         cmd = ("mysql --batch -v -h %(db_host)s " \
-            #"-u %(db_root_user)s -p%(db_root_password)s " \
-            "-u %(db_user)s -p%(db_password)s " \
+            #"-u %(db_root_user)s -p'%(db_root_password)s' " \
+            "-u %(db_user)s -p'%(db_password)s' " \
             "--execute=\"SELECT GROUP_CONCAT(CONCAT(TABLE_SCHEMA,'.',table_name) SEPARATOR ', ') AS views FROM INFORMATION_SCHEMA.views WHERE TABLE_SCHEMA = '%(db_name)s' ORDER BY table_name DESC;\"") % env
         result = sudo(cmd)
         result = re.findall(
@@ -356,8 +356,8 @@ def drop_views(name=None, site=None):
         if not result:
             return
         env.db_view_list = result[0]
-        #cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p%(db_root_password)s " \
-        cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p%(db_password)s " \
+        #cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' " \
+        cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' " \
             "--execute=\"DROP VIEW %(db_view_list)s CASCADE;\"") % env
         sudo(cmd)
     else:
@@ -404,7 +404,7 @@ def install_sql(name=None, site=None):
     elif 'mysql' in env.db_engine:
         for path in get_paths('mysql'):
             put(local_path=path)
-            cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p%(db_password)s %(db_name)s < %(put_remote_path)s") % env
+            cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s") % env
             #print cmd
             sudo(cmd)
     else:
@@ -434,12 +434,13 @@ def install_fixtures(name, site=None):
     
     fixtures_paths = env.db_fixture_sets.get(name, [])
     for fixture_path in fixtures_paths:
-        env.db_fq_fixture_path = os.path.join(env.src_dir, env.app_name, fixture_path)
+        env.db_fq_fixture_path = os.path.join(env.remote_app_src_package_dir, fixture_path)
         print 'Loading %s...' % (env.db_fq_fixture_path,)
-        if not env.is_local:
+        if not env.is_local and not files.exists(env.db_fq_fixture_path):
             put(local_path=env.db_fq_fixture_path, remote_path='/tmp/data.json', use_sudo=True)
             env.db_fq_fixture_path = env.put_remote_path
         cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s loaddata %(db_fq_fixture_path)s' % env
+        print cmd
         run(cmd)
 
 common.service_configurators[MYSQL] = [configure]

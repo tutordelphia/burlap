@@ -128,16 +128,9 @@ def deploy(site=None, dryrun=0):
     """
     Writes entire crontab to the host.
     """
-    #assert crontab, 'No crontab specified.'
-    
-    site = site or env.SITE
-    if site == 'all':
-        sites = env.sites.iteritems()
-    else:
-        sites = [(site, env.sites[site])]
     
     cron_crontabs = []
-    for site, site_data in common.iter_sites(sites, renderer=render_paths):
+    for site, site_data in common.iter_sites(site=site, renderer=render_paths):
         print site
         for selected_crontab in env.cron_crontabs_selected:
             for line in env.cron_crontabs_available.get(selected_crontab, []):
@@ -156,7 +149,7 @@ def deploy(site=None, dryrun=0):
 
 @task
 def deploy_all(**kwargs):
-    kwargs['site'] = 'all'
+    kwargs['site'] = common.ALL
     return deploy(**kwargs)
 
 #common.service_configurators[CRON] = [configure]

@@ -18,6 +18,19 @@ from burlap.common import (
 )
 
 @task
+def prepare():
+    """
+    Preparse the packaging system for installations.
+    """
+    packager = get_packager()
+    if packager == APT:
+        sudo('apt-get update')
+    elif package == YUM:
+        sudo('yum update')
+    else:
+        raise Exception, 'Unknown packager: %s' % (packager,)
+
+@task
 def install(*args, **kwargs):
     """
     Installs all system packages listed in the appropriate

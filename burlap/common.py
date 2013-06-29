@@ -106,12 +106,22 @@ env.remote_app_src_package_dir_template = '/usr/local/%(app_name)s/%(src_dir)s/%
 # features.
 env.django_manage = './manage'
 
+# The command run to determine the percent of disk usage.
+env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{ print $5 " " $1 }'"
+
 env.post_callbacks = []
 
 def render_remote_paths():
     env.remote_app_dir = env.remote_app_dir_template % env
     env.remote_app_src_dir = env.remote_app_src_dir_template % env
     env.remote_app_src_package_dir = env.remote_app_src_package_dir_template % env
+    if env.is_local:
+        if env.remote_app_dir.startswith('./'):
+            env.remote_app_dir = os.path.abspath(env.remote_app_dir)
+        if env.remote_app_src_dir.startswith('./'):
+            env.remote_app_src_dir = os.path.abspath(env.remote_app_src_dir)
+        if env.remote_app_src_package_dir.startswith('./'):
+            env.remote_app_src_package_dir = os.path.abspath(env.remote_app_src_package_dir)
 
 def get_template_dirs():
     yield os.path.join(env.ROLES_DIR, env[ROLE])
@@ -377,10 +387,18 @@ def djshell():
     #print cmd
     os.system(cmd)
 
-def iter_sites(sites, renderer=None, setter=None):
+def iter_sites(sites=None, site=None, renderer=None, setter=None):
     """
     Iterates over sites, safely setting environment variables for each site.
     """
+    assert sites or site, 'Either site or sites must be specified.'
+    if sites is None:
+        site = site or env.SITE
+        if site == ALL:
+            sites = env.sites.iteritems()
+        else:
+            sites = [(site, env.sites[site])]
+        
     renderer = renderer or render_remote_paths
     env_default = save_env()
     for site, site_data in sites:
@@ -392,4 +410,11 @@ def iter_sites(sites, renderer=None, setter=None):
             setter(site)
         yield site, site_data
     env.update(env_default)
+
+@task
+def disk():
+    """
+    Display percent of disk usage.
+    """
+    run(env.disk_usage_command % env)
     

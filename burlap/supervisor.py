@@ -155,13 +155,7 @@ def deploy_services(site=None, dryrun=0):
     
     render_paths()
     
-    site = site or env.SITE
-    if site == 'all':
-        sites = env.sites.iteritems()
-    else:
-        sites = [(site, env.sites[site])]
-    
-    for site, site_data in common.iter_sites(sites, renderer=render_paths):
+    for site, site_data in common.iter_sites(site=site, renderer=render_paths):
         print site
         for cb in env._supervisor_create_service_callbacks:
             ret = cb()
@@ -181,7 +175,7 @@ def deploy_services(site=None, dryrun=0):
 
 @task
 def deploy_all_services(**kwargs):
-    kwargs['site'] = 'all'
+    kwargs['site'] = common.ALL
     return deploy_services(**kwargs)
 
 common.service_configurators[SUPERVISOR] = [configure]

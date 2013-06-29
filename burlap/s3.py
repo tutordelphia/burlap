@@ -14,6 +14,11 @@ from fabric.api import (
     task,
 )
 
+try:
+    import boto
+except ImportError:
+    boto = None
+    
 from fabric.contrib import files
 from fabric.tasks import Task
 
@@ -28,6 +33,7 @@ from burlap.common import (
 
 env.AWS_ACCESS_KEY_ID = None
 env.AWS_SECRET_ACCESS_KEY = None
+env.s3_sync_enabled = False
 env.s3_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
 env.s3_media_postfix = ''
 
@@ -43,7 +49,7 @@ common.required_ruby_packages[S3SYNC] = {
 }
 
 @task
-def sync(sync_set, dryrun=0):
+def sync(sync_set, dryrun=0, auto_invalidate=True):
     """
     Uploads media to an Amazon S3 bucket using s3sync.
     
@@ -63,6 +69,7 @@ def sync(sync_set, dryrun=0):
     site_data = env.sites[env.SITE]
     env.update(site_data)
     
+    rets = []
     for paths in env.s3_sync_sets[sync_set]:
         is_local = paths.get('is_local', True)
         local_path = paths['local_path'] % env
@@ -70,7 +77,7 @@ def sync(sync_set, dryrun=0):
         local_path = local_path % env
         
         if is_local:
-            local('which s3sync')
+            local('which s3sync')#, capture=True)
             env.s3_local_path = os.path.abspath(local_path)
         else:
             run('which s3sync')
@@ -90,7 +97,57 @@ def sync(sync_set, dryrun=0):
         print cmd
         if not int(dryrun):
             if is_local:
-                local(cmd)
+                rets.append(local(cmd, capture=True)) # can't see progress
+                #rets.append(run(cmd))
             else:
-                run(cmd)
+                rets.append(run(cmd))
+    
+    if auto_invalidate:
+        for ret in rets:
+            print 's3sync:', ret
+            paths = re.findall(
+                '(?:Create|Update)\s+node\s+([^\n]+)',
+                ret,
+                flags=re.DOTALL|re.MULTILINE|re.IGNORECASE)
+            print 'paths:', paths
+            #TODO:handle more than 1000 paths?
+            invalidate(*paths)
+
+@task
+def invalidate(*paths):
+    """
+    Issues invalidation requests to a Cloudfront distribution
+    for the current static media bucket, triggering it to reload the specified
+    paths from the origin.
+    
+    Note, only 1000 paths can be issued in a request at any one time.
+    """
+    # http://boto.readthedocs.org/en/latest/cloudfront_tut.html
+    _settings = common.get_settings()
+    if not _settings.AWS_STATIC_BUCKET_NAME:
+        print 'No static media bucket set.'
+        return
+    if isinstance(paths, basestring):
+        paths = paths.split(',')
+    paths = map(str.strip, paths)
+    assert len(paths) <= 1000, \
+        'Cloudfront invalidation request limited to 1000 paths or less.'
+    #print 'paths:',paths
+    c = boto.connect_cloudfront()
+    rs = c.get_all_distributions()
+    target_dist = None
+    for dist in rs:
+        print dist.domain_name, dir(dist), dist.__dict__
+        bucket_name = dist.origin.dns_name.replace('.s3.amazonaws.com', '')
+        if bucket_name == _settings.AWS_STATIC_BUCKET_NAME:
+            target_dist = dist
+            break
+    if not target_dist:
+        raise Exception, \
+            'Target distribution %s could not be found in the AWS account.' \
+                % (settings.AWS_STATIC_BUCKET_NAME,)
+    print 'Using distribution %s associated with origin %s.' \
+        % (target_dist.id, _settings.AWS_STATIC_BUCKET_NAME)
+    inval_req = c.create_invalidation_request(target_dist.id, paths)
+    print 'Issue invalidation request %s.' % (inval_req,)
     

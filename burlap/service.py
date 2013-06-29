@@ -31,12 +31,15 @@ def configure():
     """
     Applies one-time settings changes to the host, usually to initialize the service.
     """
-    for service in env.services:
+    print 'env.services:',env.services
+    for service in list(env.services):
         service = service.strip().upper()
         funcs = common.service_configurators.get(service, [])
         if funcs:
+            print '!'*80
             print 'Configuring service %s...' % (service,)
             for func in funcs:
+                print 'Function:',func
                 func()
     
 @task

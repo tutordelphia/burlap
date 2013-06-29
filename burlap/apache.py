@@ -17,6 +17,7 @@ from fabric.api import (
 from fabric.contrib import files
 
 from burlap.common import (
+    ALL,
     run,
     put,
     render_to_string,
@@ -51,6 +52,10 @@ env.apache_enforce_subdomain = True
 env.apache_ssl = False
 env.apache_ssl_port = 443
 env.apache_ssl_chmod = 440
+env.apache_listen_ports = [80, 443]
+
+# A list of path patterns that should have HTTPS enforced.
+env.apache_ssl_secure_paths = ['/admin/(.*)']
 
 # Defines the expected name of the SSL certificates.
 env.apache_ssl_domain_template = '%(apache_domain)s'
@@ -232,7 +237,7 @@ def set_apache_site_specifics(site):
     env.apache_auth_basic_authuserfile = env.apache_auth_basic_authuserfile_template % env
 
 @task
-def configure(full=0, site=None, delete_old=0):
+def configure(full=0, site=ALL, delete_old=0):
     """
     Configures Apache to host one or more websites.
     """
@@ -246,24 +251,15 @@ def configure(full=0, site=None, delete_old=0):
     
     if int(full):
         # Write master Apache configuration file.
-        fn = common.render_to_file('apache.template.conf')
+        fn = common.render_to_file('apache_httpd.template.conf')
         put(local_path=fn, remote_path=env.apache_conf, use_sudo=True)
         
         # Write Apache listening ports configuration.
-        fn = common.render_to_file('apache_ports.conf')
+        fn = common.render_to_file('apache_ports.template.conf')
         put(local_path=fn, remote_path=env.apache_ports, use_sudo=True)
     
-    if site:
-        sites = [(site, env.sites[site])]
-    else:
-        sites = env.sites.iteritems()
-    
-    env_default = common.save_env()
-    for site, site_data in sites:
+    for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
         print site
-        env.update(env_default)
-        env.update(env.sites[site])
-        set_apache_site_specifics(site)
         
         print 'env.apache_ssl_domain:',env.apache_ssl_domain
         print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
@@ -295,11 +291,6 @@ def configure(full=0, site=None, delete_old=0):
 
     #restart()#break apache? run separately?
 
-@task
-def configure_clean(**kwargs):
-    kwargs['delete_old'] = 1
-    return configure(**kwargs)
-
 def iter_certificates():
     print 'apache_ssl_domain:',env.apache_ssl_domain
     for cert_type, cert_file_template in env.apache_ssl_certificates_templates:
@@ -314,17 +305,8 @@ def iter_certificates():
 def install_ssl(site=None, dryrun=0):
     apache_specifics = set_apache_specifics()
     
-    if site:
-        sites = [(site, env.sites[site])]
-    else:
-        sites = env.sites.iteritems()
-    
-    env_default = common.save_env()
-    for site, site_data in sites:
+    for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
         print site
-        env.update(env_default)
-        env.update(env.sites[site])
-        env.SITE = site
         
         set_apache_site_specifics(site)
     
@@ -361,19 +343,15 @@ def install_auth_basic_user_file(site=None):
     Installs users for basic httpd auth.
     """
     apache_specifics = set_apache_specifics()
-    site = site or env.SITE
-    if site:
-        sites = [(site, env.sites[site])]
-    else:
-        sites = env.sites.iteritems()
     
-    #env_default = common.save_env()
-    for site, site_data in common.iter_sites(sites=sites, setter=set_apache_site_specifics):
-        print site
+    for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
+        print '~'*80
+        print 'Site:',site
         #env.update(env_default)
         #env.update(env.sites[site])
         #set_apache_site_specifics(site)
         
+        print 'env.apache_auth_basic:',env.apache_auth_basic
         if not env.apache_auth_basic:
             continue
         
@@ -425,6 +403,11 @@ def sync_media(sync_set=None, dryrun=0):
                 local(cmd)
             sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
 
-common.service_configurators[APACHE2] = [configure_clean, install_auth_basic_user_file, install_ssl, sync_media]
+common.service_configurators[APACHE2] = [
+    lambda: configure(full=1, site=ALL, delete_old=1),
+    lambda: install_auth_basic_user_file(site=ALL),
+    lambda: install_ssl(site=ALL),
+    sync_media,
+]
 #common.service_deployers[APACHE2] = [configure]
 common.service_restarters[APACHE2] = [reload]
