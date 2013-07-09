@@ -122,6 +122,8 @@ def invalidate(*paths):
     
     Note, only 1000 paths can be issued in a request at any one time.
     """
+    if not paths:
+        return
     # http://boto.readthedocs.org/en/latest/cloudfront_tut.html
     _settings = common.get_settings()
     if not _settings.AWS_STATIC_BUCKET_NAME:

@@ -16,6 +16,24 @@ system administration tasks for Django web applications, such as:
 - user creation
 - configuration of multiple deployment roles (e.g. development, staging and production)
 
+My general philosophy behind this project is if I have to manually SSH into a
+server to modify configuration files, I'm probably doing something wrong.
+
+To increase maintainability and reliability of production systems, all
+configuration should be represented in a version-controlled system and be
+deployed via automated methods.
+
+To that end, I've created this project to organize the dozens of Fabric
+commands I've written over the years to help deploy Django sites.
+
+It's not comprehensive, and only covers the platforms I've personally used,
+which is primarily an Apache web server with a PostgreSQL or Amazon RDS hosted
+MySQL database backend.
+
+Although many modules in this package can be used for non-Django applications,
+it largely assumes a basic Django setup, and expects to find a Django settings
+module containing database credentials and static media lists.
+
 Installation
 ------------
 

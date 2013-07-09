@@ -176,6 +176,7 @@ def populate_fabfile():
         locals_['common'] = common
         locals_['shell'] = common.shell
         locals_['djshell'] = common.djshell
+        locals_['tunnel'] = common.tunnel
     finally:
         del stack
 

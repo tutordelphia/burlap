@@ -71,7 +71,7 @@ common.required_system_packages[MYSQL] = {
 }
 common.required_system_packages[POSTGRESQL] = {
     common.FEDORA: ['postgresql-server'],
-    common.UBUNTU: ['postgresql-server'],
+    common.UBUNTU: ['postgresql-9.1'],
 }
 
 common.required_system_packages[MYSQLCLIENT] = {
@@ -106,7 +106,38 @@ def configure(name=None, site=None, _role=None, dryrun=0):
     print 'role:',env[ROLE]
     env.dryrun = int(dryrun)
     if 'postgres' in env.db_engine:
-        todo
+
+        env.pg_ver = run('psql --version | grep -o -E "[0-9]+.[0-9]+"')
+        print 'PostgreSQL version %(pg_ver)s detected.' % env
+        
+        print 'Backing up PostgreSQL configuration files...'
+        sudo('cp /etc/postgresql/%(pg_ver)s/main/postgresql.conf /etc/postgresql/%(pg_ver)s/main/postgresql.conf.$(date +%%Y%%m%%d%%H%%M).bak' % env)
+        sudo('cp /etc/postgresql/%(pg_ver)s/main/pg_hba.conf /etc/postgresql/%(pg_ver)s/main/pg_hba.conf.$(date +%%Y%%m%%d%%H%%M).bak' % env)
+        
+        print 'Allowing remote connections...'
+        fn = common.render_to_file('pg_hba.template.conf')
+        put(local_path=fn,
+            remote_path='/etc/postgresql/%(pg_ver)s/main/pg_hba.conf' % env,
+            use_sudo=True)
+        
+        # Don't do this. Keep it locked down and use an SSH tunnel instead.
+        # See common.tunnel()
+        #sudo('sed -i "s/#listen_addresses = \'localhost\'/listen_addresses = \'*\'/g" /etc/postgresql/%(pg_ver)s/main/postgresql.conf' % env)
+        
+        print 'Enabling auto-vacuuming...'
+        sudo('sed -i "s/#autovacuum = on/autovacuum = on/g" /etc/postgresql/%(pg_ver)s/main/postgresql.conf' % env)
+        sudo('sed -i "s/#track_counts = on/track_counts = on/g" /etc/postgresql/%(pg_ver)s/main/postgresql.conf' % env)
+        
+        # Set UTF-8 as the default database encoding.
+        sudo('psql --user=postgres --no-password --command="'
+            'UPDATE pg_database SET datistemplate = FALSE WHERE datname = \'template1\';'
+            'DROP DATABASE template1;'
+            'CREATE DATABASE template1 WITH TEMPLATE = template0 ENCODING = \'UNICODE\';'
+            'UPDATE pg_database SET datistemplate = TRUE WHERE datname = \'template1\';'
+            '\c template1'
+            'VACUUM FREEZE;'
+            'UPDATE pg_database SET datallowconn = FALSE WHERE datname = \'template1\';"')
+
     elif 'mysql' in env.db_engine:
         if env.db_allow_remote_connections:
             
@@ -124,6 +155,8 @@ def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
     Creates the target database
     """
     assert env[ROLE]
+    dryrun = int(dryrun)
+    render_remote_paths()
     require('app_name')
     env.db_drop_flag = '--drop' if int(drop) else ''
     set_db(name=name, site=site)
@@ -134,12 +167,20 @@ def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
         env.src_dir = os.path.abspath(env.src_dir)
         # This assumes the django-extensions app is installed, which
         # provides the convenient sqlcreate command.
-        cmd = 'cd %(src_dir)s; %(django_manage)s sqlcreate --router=default %(db_drop_flag)s | psql --user=%(db_postgresql_postgres_user)s --no-password' % env
-        sudo(cmd)
+        if env.is_local:
+            env.db_src_dir = env.src_dir
+        else:
+            env.db_src_dir = env.remote_app_src_dir
+        cmd = 'cd %(db_src_dir)s; export SITE=%(SITE)s; export ROLE=%(ROLE)s; %(django_manage)s sqlcreate --router=default %(db_drop_flag)s | psql --user=%(db_postgresql_postgres_user)s --no-password' % env
+        print cmd
+        if not dryrun:
+            sudo(cmd)
         #run('psql --user=postgres -d %(db_name)s -c "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %(db_user)s_ro CASCADE; DROP ROLE IF EXISTS %(db_user)s_ro; DROP USER IF EXISTS %(db_user)s_ro; CREATE USER %(db_user)s_ro WITH PASSWORD \'readonly\'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO %(db_user)s_ro;"')
         with settings(warn_only=True):
             cmd = 'createlang -U postgres plpgsql %(db_name)s' % env
-            sudo(cmd)
+            print cmd
+            if not dryrun:
+                sudo(cmd)
     elif 'mysql' in env.db_engine:
         
         if int(drop):
@@ -200,17 +241,21 @@ def update(name=None, site=None):
     install_sql(name=name, site=site)
 
 @task
-def dump(dryrun=0):
+def dump(dryrun=0, dest_dir=None):
     """
     Exports the target database to a single transportable file on the localhost,
     appropriate for loading using load().
     """
     set_db()
+    if dest_dir:
+        env.db_dump_dest_dir = dest_dir
     env.db_date = datetime.date.today().strftime('%Y%m%d')
     env.db_dump_fn = '%(db_dump_dest_dir)s/%(db_name)s_%(db_date)s.sql.gz' % env
     if env.db_dump_command:
         run(env.db_dump_command % env)
     elif 'postgres' in env.db_engine:
+        assert env.db_schemas, \
+            'Please specify the list of schemas to dump in db_schemas.'
         env.db_schemas_str = ' '.join('-n %s' % _ for _ in env.db_schemas)
         cmd = env.db_postgresql_dump_command % env
         print cmd
@@ -233,31 +278,50 @@ def load(db_dump_fn, dryrun=0):
     env.db_dump_fn = db_dump_fn
     set_db()
     
-    env.dryrun = int(dryrun)
+    dryrun = int(dryrun)
     
     # Copy snapshot file to target.
     missing_local_dump_error = (
         "Database dump file %(db_dump_fn)s does not exist."
     ) % env
-    if not files.exists(env.db_dump_fn):
+    env.db_remote_dump_fn = '/tmp/'+os.path.split(env.db_dump_fn)[-1]
+    if not dryrun and not files.exists(env.db_dump_fn):
         assert os.path.isfile(env.db_dump_fn), \
             missing_local_dump_error
-        put(local_path=env.db_dump_fn, remote_path=env.db_dump_fn)
+        put(local_path=env.db_dump_fn, remote_path=env.db_remote_dump_fn)
     
     if env.db_load_command:
         run(env.db_load_command % env)
     elif 'postgres' in env.db_engine:
         
-        run('dropdb --user=%(db_postgresql_postgres_user)s %(db_name)s' % env)
-        run('psql --user=%(db_postgresql_postgres_user)s -c "CREATE DATABASE %(db_name)s;"' % env)
-        run('psql --user=%(db_postgresql_postgres_user)s -c "DROP OWNED BY %(db_user)s CASCADE;"' % env)
-        run('psql --user=%(db_postgresql_postgres_user)s -c "DROP USER IF EXISTS %(db_user)s; '
+        cmd = 'dropdb --user=%(db_postgresql_postgres_user)s %(db_name)s' % env
+        print cmd
+        if not dryrun:
+            run(cmd)
+        cmd = 'psql --user=%(db_postgresql_postgres_user)s -c "CREATE DATABASE %(db_name)s;"' % env
+        print cmd
+        if not dryrun:
+            run(cmd)
+        cmd = 'psql --user=%(db_postgresql_postgres_user)s -c "DROP OWNED BY %(db_user)s CASCADE;"' % env
+        print cmd
+        if not dryrun:
+            run(cmd)
+        cmd = ('psql --user=%(db_postgresql_postgres_user)s -c "DROP USER IF EXISTS %(db_user)s; '
             'CREATE USER %(db_user)s WITH PASSWORD \'%(db_password)s\'; '
-            'GRANT ALL PRIVILEGES ON DATABASE %(db_name)s to %(db_user)s;"' % env)
+            'GRANT ALL PRIVILEGES ON DATABASE %(db_name)s to %(db_user)s;"') % env
+        print cmd
+        if not dryrun:
+            run(cmd)
         for createlang in env.db_postgresql_createlangs:
             env.db_createlang = createlang
-            run('createlang -U %(db_postgresql_postgres_user)s %(db_createlang)s %(db_name)s || true' % env)
-        run('gunzip -c %(db_dump_fn)s | pg_restore -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s' % env)
+            cmd = 'createlang -U %(db_postgresql_postgres_user)s %(db_createlang)s %(db_name)s || true' % env
+            print cmd
+            if not dryrun:
+                run(cmd)
+        cmd = 'gunzip -c %(db_remote_dump_fn)s | pg_restore -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s' % env
+        print cmd
+        if not dryrun:
+            run(cmd)
         
     elif 'mysql' in env.db_engine:
         
@@ -305,7 +369,7 @@ def syncdb(site=None, all=0, dryrun=0):
     render_remote_paths()
     
     env.db_syncdb_all_flag = '--all' if int(all) else ''
-    cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s syncdb --noinput %(db_syncdb_all_flag)s -v 3 --traceback' % env
+    cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --noinput %(db_syncdb_all_flag)s -v 3 --traceback' % env
     print cmd
     if not int(dryrun):
         run(cmd)
@@ -322,16 +386,16 @@ def migrate(app_name='', site=None, fake=0):
     env.db_migrate_fake = '--fake' if int(fake) else ''
     if app_name:
         env.db_app_name = app_name
-        run('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations %(db_migrate_fake)s -v 3 --traceback' % env)
+        run('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations %(db_migrate_fake)s -v 3 --traceback' % env)
     else:
         
         # First migrate apps in a specific order if given.
         for app_name in env.db_app_migration_order:
             env.db_app_name = app_name
-            run('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s %(db_app_name)s -v 3 --traceback' % env)
+            run('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s %(db_app_name)s -v 3 --traceback' % env)
             
         # Then migrate everything else remaining.
-        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s -v 3 --traceback' % env
+        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s -v 3 --traceback' % env
         #print cmd
         run(cmd)
 
@@ -363,6 +427,8 @@ def drop_views(name=None, site=None):
     else:
         raise NotImplementedError
 
+env.db_install_sql_path_template = '%(src_dir)s/%(app_name)s/*/sql/*'
+
 @task
 def install_sql(name=None, site=None):
     """
@@ -370,7 +436,8 @@ def install_sql(name=None, site=None):
     """
     #_settings = get_settings(site=site, role=env.ROLE)
     set_db(name=name, site=site)
-    paths = glob.glob('%(src_dir)s/%(app_name)s/*/sql/*' % env)
+    paths = glob.glob(env.db_install_sql_path_template % env)
+    #paths = glob.glob('%(src_dir)s/%(app_name)s/*/sql/*' % env)
     
     def cmp_paths(d0, d1):
         if d0[1] and d0[1] in d1[2]:
@@ -400,7 +467,13 @@ def install_sql(name=None, site=None):
             yield d[0]
     
     if 'postgres' in env.db_engine:
-        todo
+        #print 'postgres'
+        for path in get_paths('postgresql'):
+            put(local_path=path)
+            #cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s") % env
+            cmd = ("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s") % env
+            #print cmd
+            sudo(cmd)
     elif 'mysql' in env.db_engine:
         for path in get_paths('mysql'):
             put(local_path=path)
@@ -421,7 +494,7 @@ def createsuperuser(username='admin', email=None, password=None, site=None):
     
     env.db_createsuperuser_username = username
     env.db_createsuperuser_email = email or username
-    run('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s createsuperuser --username=%(db_createsuperuser_username)s --email=%(db_createsuperuser_email)s' % env)
+    run('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s createsuperuser --username=%(db_createsuperuser_username)s --email=%(db_createsuperuser_email)s' % env)
 
 @task
 def install_fixtures(name, site=None):
@@ -439,10 +512,44 @@ def install_fixtures(name, site=None):
         if not env.is_local and not files.exists(env.db_fq_fixture_path):
             put(local_path=env.db_fq_fixture_path, remote_path='/tmp/data.json', use_sudo=True)
             env.db_fq_fixture_path = env.put_remote_path
-        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(django_manage)s loaddata %(db_fq_fixture_path)s' % env
+        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s loaddata %(db_fq_fixture_path)s' % env
         print cmd
         run(cmd)
+
+@task
+def restart(site=common.ALL):
+    for site, site_data in common.iter_sites(site=site, renderer=lambda: set_db(name='default')):
+        print site
+        #set_db(name=name, site=site)
+        if 'postgres' in env.db_engine:
+            sudo('service postgresql restart; sleep 3')
+#        elif 'mysql' in env.db_engine:
+#            sudo('service mysql restart')
+
+@task
+def save_db_password(user, password):
+    set_db(name='default')
+    if 'postgres' in env.db_engine:
+        env.db_save_user = user
+        env.db_save_password = password
+        # Note, this requires pg_hba.conf needs the line:
+        # local   all         postgres                          ident
+        #assert env.db_postgresql_postgres_password
+#        sudo('sudo -u postgres psql -c "ALTER USER postgres PASSWORD \'%(db_postgresql_postgres_password)s\';"' % env)
+#        sudo('echo "localhost:5432:*:postgres:%(db_postgresql_postgres_password)s" >> ~/.pgpass' % env)
+
+        sudo('sudo -u postgres psql -c "ALTER USER %(db_save_user)s PASSWORD \'%(db_save_password)s\';"' % env)
+        
+        #'if [ "$(cat ~/.pgpass | grep issue_mapper)" ]; then echo "found"; else echo "none"; fi' % env
+        #sudo('sed -i "s/#listen_addresses = \'localhost\'/listen_addresses = \'*\'/g" /etc/postgresql/%(pg_ver)s/main/postgresql.conf' % env)
+        sudo("sed -i '/%(db_save_user)s/d' ~/.pgpass" % env)
+        sudo('echo "localhost:5432:*:%(db_save_user)s:%(db_save_password)s" >> ~/.pgpass' % env)
+        sudo('chmod 600 ~/.pgpass')
+    else:
+        raise NotImplementedError
 
 common.service_configurators[MYSQL] = [configure]
 common.service_configurators[POSTGRESQL] = [configure]
 common.service_deployers[MYSQL] = [update]
+common.service_restarters[POSTGRESQL] = [restart]
+common.service_restarters[MYSQL] = [restart]

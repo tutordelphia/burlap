@@ -87,6 +87,15 @@ env.apache_wsgi_threads = 15
 
 env.apache_extra_rewrite_rules = ''
 
+env.apache_modevasive_DOSEmailNotify = 'admin@localhost'
+env.apache_modevasive_DOSPageInterval = 1 # seconds
+env.apache_modevasive_DOSPageCount = 2
+env.apache_modevasive_DOSSiteCount = 50
+env.apache_modevasive_DOSSiteInterval = 1 # seconds
+env.apache_modevasive_DOSBlockingPeriod = 10 # seconds
+
+env.apache_modsecurity_download_url = 'https://github.com/SpiderLabs/owasp-modsecurity-crs/tarball/master'
+
 env.apache_wsgi_python_path_template = '%(apache_docroot)s/.env/lib/python%(pip_python_version)s/site-packages'
 
 # OS specific default settings.
@@ -118,6 +127,9 @@ env.apache_ssl_dir_local = 'ssl'
 env.apache_locale = ''
 
 env.apache_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
+
+# This will be appended to the custom Apache configuration file.
+env.apache_httpd_conf_append = []
 
 def set_apache_specifics():
     os_version = common.get_os_version()
@@ -166,11 +178,19 @@ env.apache_service_commands = {
 }
 
 APACHE2 = 'APACHE2'
+APACHE2_MODEVASIVE = 'APACHE2_MODEVASIVE'
+APACHE2_MODSECURITY = 'APACHE2_MODSECURITY'
 
 common.required_system_packages[APACHE2] = {
     common.FEDORA: ['httpd'],
     #common.UBUNTU: ['apache2', 'mod_ssl', 'mod_wsgi'],
     common.UBUNTU: ['apache2', 'libapache2-mod-wsgi'],
+}
+common.required_system_packages[APACHE2_MODEVASIVE] = {
+    common.UBUNTU: ['libapache2-mod-evasive'],
+}
+common.required_system_packages[APACHE2_MODEVASIVE] = {
+    common.UBUNTU: ['libapache2-modsecurity'],
 }
 
 def get_service_command(action):
@@ -237,10 +257,12 @@ def set_apache_site_specifics(site):
     env.apache_auth_basic_authuserfile = env.apache_auth_basic_authuserfile_template % env
 
 @task
-def configure(full=0, site=ALL, delete_old=0):
+def configure(full=1, site=ALL, delete_old=0):
     """
     Configures Apache to host one or more websites.
     """
+    from burlap import service
+    
     print 'Configuring Apache...'
     apache_specifics = set_apache_specifics()
     
@@ -248,15 +270,6 @@ def configure(full=0, site=ALL, delete_old=0):
         # Delete all existing enabled and available sites.
         sudo('rm -f %(apache_sites_available)s/*' % env)
         sudo('rm -f %(apache_sites_enabled)s/*' % env)
-    
-    if int(full):
-        # Write master Apache configuration file.
-        fn = common.render_to_file('apache_httpd.template.conf')
-        put(local_path=fn, remote_path=env.apache_conf, use_sudo=True)
-        
-        # Write Apache listening ports configuration.
-        fn = common.render_to_file('apache_ports.template.conf')
-        put(local_path=fn, remote_path=env.apache_ports, use_sudo=True)
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
         print site
@@ -277,10 +290,25 @@ def configure(full=0, site=ALL, delete_old=0):
         
         sudo('a2ensite %(apache_site_conf)s' % env)
     
+    if service.is_selected(APACHE2_MODEVASIVE):
+        configure_modevasive()
+        
+    if service.is_selected(APACHE2_MODSECURITY):
+        configure_modsecurity()
+    
     for mod_enabled in env.apache_mods_enabled:
         env.apache_mod_enabled = mod_enabled
         sudo('a2enmod %(apache_mod_enabled)s' % env)
-    
+        
+    if int(full):
+        # Write master Apache configuration file.
+        fn = common.render_to_file('apache_httpd.template.conf')
+        put(local_path=fn, remote_path=env.apache_conf, use_sudo=True)
+        
+        # Write Apache listening ports configuration.
+        fn = common.render_to_file('apache_ports.template.conf')
+        put(local_path=fn, remote_path=env.apache_ports, use_sudo=True)
+        
     #sudo('mkdir -p %(apache_app_log_dir)s' % env)
     #sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_app_log_dir)s' % env)
 #    sudo('mkdir -p %(apache_log_dir)s' % env)
@@ -291,6 +319,39 @@ def configure(full=0, site=ALL, delete_old=0):
 
     #restart()#break apache? run separately?
 
+@task
+def configure_modsecurity():
+    
+    env.apache_mods_enabled.append('mod-security')
+    env.apache_mods_enabled.append('headers')
+    
+    # Write modsecurity.conf.
+    fn = common.render_to_file('apache_modsecurity.template.conf')
+    put(local_path=fn, remote_path='/etc/modsecurity/modsecurity.conf', use_sudo=True)
+    
+    # Write OWASP rules.
+    env.apache_modsecurity_download_filename = '/tmp/owasp-modsecurity-crs.tar.gz'
+    sudo('cd /tmp; wget --output-document=%(apache_modsecurity_download_filename)s %(apache_modsecurity_download_url)s' % env)
+    env.apache_modsecurity_download_top = sudo("cd /tmp; tar tzf %(apache_modsecurity_download_filename)s | sed -e 's@/.*@@' | uniq" % env)
+    sudo('cd /tmp; tar -zxvf %(apache_modsecurity_download_filename)s' % env)
+    sudo('cd /tmp; cp -R %(apache_modsecurity_download_top)s/* /etc/modsecurity/' % env)
+    sudo('mv /etc/modsecurity/modsecurity_crs_10_setup.conf.example  /etc/modsecurity/modsecurity_crs_10_setup.conf' % env)
+    
+    sudo('rm -f /etc/modsecurity/activated_rules/*')
+    sudo('cd /etc/modsecurity/base_rules; for f in * ; do ln -s /etc/modsecurity/base_rules/$f /etc/modsecurity/activated_rules/$f ; done')
+    sudo('cd /etc/modsecurity/optional_rules; for f in * ; do ln -s /etc/modsecurity/optional_rules/$f /etc/modsecurity/activated_rules/$f ; done')
+    
+    env.apache_httpd_conf_append.append('Include "/etc/modsecurity/activated_rules/*.conf"')
+
+@task
+def configure_modevasive():
+    
+    env.apache_mods_enabled.append('mod-evasive')
+    
+    # Write modsecurity.conf.
+    fn = common.render_to_file('apache_modevasive.template.conf')
+    put(local_path=fn, remote_path='/etc/apache2/mods-available/mod-evasive.conf', use_sudo=True)
+    
 def iter_certificates():
     print 'apache_ssl_domain:',env.apache_ssl_domain
     for cert_type, cert_file_template in env.apache_ssl_certificates_templates:
@@ -302,7 +363,7 @@ def iter_certificates():
         yield cert_type, local_cert_file, remote_cert_file
 
 @task
-def install_ssl(site=None, dryrun=0):
+def install_ssl(site=ALL, dryrun=0):
     apache_specifics = set_apache_specifics()
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
@@ -397,17 +458,22 @@ def sync_media(sync_set=None, dryrun=0):
             sudo('mkdir -p %(apache_sync_remote_path)s' % env, user=env.apache_user)
             sudo('chmod -R %(apache_tmp_chmod)s %(apache_sync_remote_path)s' % env, user=env.apache_user)
             cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % env
-            print '!'*80
-            print cmd
+#            print '!'*80
+#            print cmd
             if not int(dryrun):
                 local(cmd)
             sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
 
+# These tasks are run when the service.configure task is run.
 common.service_configurators[APACHE2] = [
     lambda: configure(full=1, site=ALL, delete_old=1),
     lambda: install_auth_basic_user_file(site=ALL),
     lambda: install_ssl(site=ALL),
     sync_media,
 ]
+
+# These tasks are run when the service.deploy task is run.
 #common.service_deployers[APACHE2] = [configure]
+
+# These tasks are run when the service.restart task is run.
 common.service_restarters[APACHE2] = [reload]

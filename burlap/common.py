@@ -101,6 +101,7 @@ env.shell_interactive_djshell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd 
 env.remote_app_dir_template = '/usr/local/%(app_name)s'
 env.remote_app_src_dir_template = '/usr/local/%(app_name)s/%(src_dir)s'
 env.remote_app_src_package_dir_template = '/usr/local/%(app_name)s/%(src_dir)s/%(app_name)s'
+env.remote_manage_dir_template = '%(remote_app_src_package_dir_template)s'
 
 # This is the name of the executable to call to access Django's management
 # features.
@@ -122,10 +123,13 @@ def render_remote_paths():
             env.remote_app_src_dir = os.path.abspath(env.remote_app_src_dir)
         if env.remote_app_src_package_dir.startswith('./'):
             env.remote_app_src_package_dir = os.path.abspath(env.remote_app_src_package_dir)
+    env.remote_manage_dir = env.remote_manage_dir_template % env
 
 def get_template_dirs():
+    yield os.path.join(env.ROLES_DIR, env[ROLE], 'templates')
     yield os.path.join(env.ROLES_DIR, env[ROLE])
     yield os.path.join(env.ROLES_DIR, '..', 'templates', env[ROLE])
+    yield os.path.join(env.ROLES_DIR, ALL, 'templates')
     yield os.path.join(env.ROLES_DIR, ALL)
     yield os.path.join(env.ROLES_DIR, '..', 'templates', ALL)
     yield os.path.join(env.ROLES_DIR, '..', 'templates')
@@ -323,6 +327,8 @@ def get_settings(site=None, role=None):
     Retrieves the Django settings dictionary.
     """
     sys.path.insert(0, env.src_dir)
+    if site and site.endswith('_secure'):
+        site = site[:-7]
     set_site(site)
     tmp_role = env.ROLE
     if role:
@@ -417,4 +423,14 @@ def disk():
     Display percent of disk usage.
     """
     run(env.disk_usage_command % env)
+
+@task
+def tunnel(local_port, remote_port):
+    """
+    Creates an SSH tunnel.
+    """
+    env.tunnel_local_port = local_port
+    env.tunnel_remote_port = remote_port
+    local(' ssh -i %(key_filename)s -L %(tunnel_local_port)s:localhost:%(tunnel_remote_port)s %(user)s@%(host_string)s -N' % env)
+    
     

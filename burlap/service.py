@@ -64,4 +64,10 @@ def restart():
             print 'Restarting service %s...' % (service,)
             for func in funcs:
                 func()
-                
+
+def is_selected(name):
+    name = name.strip().upper()
+    for service in env.services:
+        if service.strip().upper() == name:
+            return True
+    return False

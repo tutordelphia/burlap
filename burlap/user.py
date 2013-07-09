@@ -32,6 +32,7 @@ env.user_groups = []
 env.user_key_type = 'rsa' # e.g. rsa|dsa
 env.user_key_bits = 2048 # e.g. 1024, 2048, or 4096
 env.user_key_filename = None
+env.user_home_template = '/home/%(user_username)s'
 
 @task
 def create(username):
@@ -74,15 +75,18 @@ def passwordless(username=None, pubkey=None):
     """
     env.user_username = username or env.user
     env.user_pubkey = pubkey or env.key_filename
-    assert os.path.isfile(pubkey)
+    assert os.path.isfile(env.user_pubkey), \
+        'Public key file "%s" does not exist.' % (env.user_pubkey,)
     
-    first = os.path.splitext(pubkey)[0]
+    first = os.path.splitext(env.user_pubkey)[0]
+    env.user_pubkey = first+'.pub'
     env.user_pemkey = first+'.pem'
+    env.user_home = env.user_home_template % env
     
     # Upload the SSH key.
-    put(local_path=pubkey)
-    sudo('mkdir -p /home/%(user_username)s/.ssh' % env)
-    sudo('cat %(put_remote_path)s >> /home/%(user_username)s/.ssh/authorized_keys' % env)
+    put(local_path=env.user_pubkey)
+    sudo('mkdir -p %(user_home)s/.ssh' % env)
+    sudo('cat %(put_remote_path)s >> %(user_home)s/.ssh/authorized_keys' % env)
     sudo('rm -f %(put_remote_path)s' % env)
     
     # Disable password.

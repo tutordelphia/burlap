@@ -17,6 +17,9 @@ from burlap.common import (
     find_template,
 )
 
+env.package_install_apt_extras = []
+env.package_install_yum_extras = []
+
 @task
 def prepare():
     """

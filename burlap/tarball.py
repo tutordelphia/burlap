@@ -59,7 +59,7 @@ def create(gzip=1):
         "--exclude='%s'" % _ for _ in env.tarball_exclusions)
     cmd = ("cd %(absolute_src_dir)s; " \
         "tar %(tarball_exclusions_str)s --exclude-vcs %(tarball_gzip_flag)s " \
-        "--create --verbose --file %(tarball_path)s *") % env
+        "--create --verbose --dereference --file %(tarball_path)s *") % env
     print cmd
     local(cmd)
 

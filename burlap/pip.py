@@ -82,10 +82,14 @@ def init(clean=0):
     if int(clean):
         clean_virtualenv()
     
+    # Important. Default Ubuntu 12.04 package uses Pip 1.0, which
+    # is horribly buggy. Should use 1.3 or later.
+    sudo('pip install --upgrade pip')
+    
     print env.pip_virtual_env_dir
     if not files.exists(env.pip_virtual_env_dir):
         print 'Creating new virtual environment...'
-        sudo('virtualenv %(pip_virtual_env_dir)s' % env)
+        sudo('virtualenv --no-site-packages %(pip_virtual_env_dir)s' % env)
         
     sudo('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
     sudo('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
