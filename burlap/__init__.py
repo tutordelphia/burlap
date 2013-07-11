@@ -78,6 +78,12 @@ def _get_environ_handler(name, d):
             env.hosts = [_ for _ in env.hosts if _ == hostname]
             assert env.hosts, \
                 'Hostname %s does not match any known hosts.' % (hostname,)
+                
+        if env.is_local is None:
+            if env.hosts:
+                env.is_local = 'localhost' in env.hosts or '127.0.0.1' in env.hosts
+            elif env.host_string:
+                env.is_local = 'localhost' in env.host_string or '127.0.0.1' in env.host_string
         
         #print 'env.vm_type2:',env.vm_type
         print 'Loaded role %s.' % (name,)

@@ -241,7 +241,7 @@ def update(name=None, site=None):
     install_sql(name=name, site=site)
 
 @task
-def dump(dryrun=0, dest_dir=None):
+def dump(dryrun=0, dest_dir=None, to_local=None):
     """
     Exports the target database to a single transportable file on the localhost,
     appropriate for loading using load().
@@ -251,6 +251,8 @@ def dump(dryrun=0, dest_dir=None):
         env.db_dump_dest_dir = dest_dir
     env.db_date = datetime.date.today().strftime('%Y%m%d')
     env.db_dump_fn = '%(db_dump_dest_dir)s/%(db_name)s_%(db_date)s.sql.gz' % env
+    if to_local is None and not env.is_local:
+        to_local = 1
     if env.db_dump_command:
         run(env.db_dump_command % env)
     elif 'postgres' in env.db_engine:
@@ -260,14 +262,26 @@ def dump(dryrun=0, dest_dir=None):
         cmd = env.db_postgresql_dump_command % env
         print cmd
         if not int(dryrun):
-            local(cmd)
+            if env.is_local:
+                local(cmd)
+            else:
+                sudo(cmd)
     elif 'mysql' in env.db_engine:
         cmd = env.db_mysql_dump_command % env
         print cmd
         if not int(dryrun):
-            local(cmd)
+            if env.is_local:
+                local(cmd)
+            else:
+                sudo(cmd)
     else:
         raise NotImplemented
+    
+    # Download the database dump file on the remote host to localhost.
+    if int(to_local) and not env.is_local:
+        cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -i %(key_filename)s" %(user)s@%(host_string)s:%(db_dump_fn)s %(db_dump_fn)s') % env
+        local(cmd)
+    
     return env.db_dump_fn
 
 @task
