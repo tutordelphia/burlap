@@ -19,7 +19,7 @@ from fabric.contrib import files
 from burlap.common import run, put
 from burlap import common
 
-env.rabbitmq_host = "loca"
+env.rabbitmq_host = "localhost"
 env.rabbitmq_vhost = "/"
 env.rabbitmq_erlang_cookie = ''
 env.rabbitmq_nodename = "rabbit"
@@ -45,11 +45,11 @@ env.rabbitmq_service_commands = {
         common.UBUNTU: 'service rabbitmq-server stop',
     },
     common.DISABLE:{
-        common.FEDORA: 'systemctl disable httpd.service',
+        common.FEDORA: 'systemctl disable rabbitmq-server.service',
         common.UBUNTU: 'chkconfig rabbitmq-server off',
     },
     common.ENABLE:{
-        common.FEDORA: 'systemctl enable httpd.service',
+        common.FEDORA: 'systemctl enable rabbitmq-server.service',
         common.UBUNTU: 'chkconfig rabbitmq-server on',
     },
     common.RESTART:{

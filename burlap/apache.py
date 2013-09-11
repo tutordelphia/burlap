@@ -81,6 +81,11 @@ env.apache_django_wsgi_template = '%(apache_wsgi_dir)s/%(apache_site)s.wsgi'
 env.apache_ports_template = '%(apache_root)s/ports.conf'
 env.apache_ssl_dir_template = '%(apache_root)s/ssl'
 
+env.apache_domain_with_sub_template = ''
+env.apache_domain_without_sub_template = ''
+env.apache_domain_with_sub = None
+env.apache_domain_without_sub = None
+
 env.apache_wsgi_processes = 5
 
 env.apache_wsgi_threads = 15
@@ -134,6 +139,9 @@ env.apache_httpd_conf_append = []
 def set_apache_specifics():
     os_version = common.get_os_version()
     apache_specifics = env.apache_specifics[os_version.type][os_version.distro]
+    
+#    from pprint import pprint
+#    pprint(apache_specifics, indent=4)
     
     env.apache_root = apache_specifics.root
     env.apache_conf = apache_specifics.conf
@@ -255,6 +263,13 @@ def set_apache_site_specifics(site):
     env.apache_server_aliases = env.apache_server_aliases_template % env
     env.apache_ssl_domain = env.apache_ssl_domain_template % env
     env.apache_auth_basic_authuserfile = env.apache_auth_basic_authuserfile_template % env
+    env.apache_domain_with_sub = env.apache_domain_with_sub_template % env
+    env.apache_domain_without_sub = env.apache_domain_without_sub_template % env
+#    print 'site:',env.SITE
+#    print 'env.apache_domain_with_sub_template:',env.apache_domain_with_sub_template
+#    print 'env.apache_domain_with_sub:',env.apache_domain_with_sub
+#    print 'env.apache_enforce_subdomain:',env.apache_enforce_subdomain
+#    raw_input('<enter>')
 
 @task
 def configure(full=1, site=ALL, delete_old=0):
@@ -272,7 +287,9 @@ def configure(full=1, site=ALL, delete_old=0):
         sudo('rm -f %(apache_sites_enabled)s/*' % env)
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
+        #print '-'*80
         print site
+        #continue
         
         print 'env.apache_ssl_domain:',env.apache_ssl_domain
         print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
@@ -289,7 +306,7 @@ def configure(full=1, site=ALL, delete_old=0):
         put(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True)
         
         sudo('a2ensite %(apache_site_conf)s' % env)
-    
+    #return
     if service.is_selected(APACHE2_MODEVASIVE):
         configure_modevasive()
         

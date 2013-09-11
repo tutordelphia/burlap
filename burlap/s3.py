@@ -131,25 +131,33 @@ def invalidate(*paths):
         return
     if isinstance(paths, basestring):
         paths = paths.split(',')
-    paths = map(str.strip, paths)
-    assert len(paths) <= 1000, \
-        'Cloudfront invalidation request limited to 1000 paths or less.'
-    #print 'paths:',paths
-    c = boto.connect_cloudfront()
-    rs = c.get_all_distributions()
-    target_dist = None
-    for dist in rs:
-        print dist.domain_name, dir(dist), dist.__dict__
-        bucket_name = dist.origin.dns_name.replace('.s3.amazonaws.com', '')
-        if bucket_name == _settings.AWS_STATIC_BUCKET_NAME:
-            target_dist = dist
+    all_paths = map(str.strip, paths)
+#    assert len(paths) <= 1000, \
+#        'Cloudfront invalidation request limited to 1000 paths or less.'
+    i = 0
+    while 1:
+        paths = all_paths[i:i+1000]
+        if not paths:
             break
-    if not target_dist:
-        raise Exception, \
-            'Target distribution %s could not be found in the AWS account.' \
-                % (settings.AWS_STATIC_BUCKET_NAME,)
-    print 'Using distribution %s associated with origin %s.' \
-        % (target_dist.id, _settings.AWS_STATIC_BUCKET_NAME)
-    inval_req = c.create_invalidation_request(target_dist.id, paths)
-    print 'Issue invalidation request %s.' % (inval_req,)
-    
+        
+        #print 'paths:',paths
+        c = boto.connect_cloudfront()
+        rs = c.get_all_distributions()
+        target_dist = None
+        for dist in rs:
+            print dist.domain_name, dir(dist), dist.__dict__
+            bucket_name = dist.origin.dns_name.replace('.s3.amazonaws.com', '')
+            if bucket_name == _settings.AWS_STATIC_BUCKET_NAME:
+                target_dist = dist
+                break
+        if not target_dist:
+            raise Exception, \
+                'Target distribution %s could not be found in the AWS account.' \
+                    % (settings.AWS_STATIC_BUCKET_NAME,)
+        print 'Using distribution %s associated with origin %s.' \
+            % (target_dist.id, _settings.AWS_STATIC_BUCKET_NAME)
+        inval_req = c.create_invalidation_request(target_dist.id, paths)
+        print 'Issue invalidation request %s.' % (inval_req,)
+        
+        i += 1000
+        

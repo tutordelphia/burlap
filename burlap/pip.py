@@ -28,6 +28,7 @@ from burlap.common import (
     find_template,
 )
 
+env.pip_build_directory = '/tmp/pip-build-root/pip'
 env.pip_user = 'www-data'
 env.pip_group = 'www-data'
 env.pip_chmod = '775'
@@ -176,15 +177,17 @@ def check():
     
     obsolete = {}
     for k,(v,line) in desired_package_version.iteritems():
+        #line
         if v != 'current' and v != installed_package_versions.get(k,v):
             obsolete[k] = (v, line)
     if obsolete:
         print '!'*80
         print 'Obsolete:'
         for k,(v0,line) in sorted(obsolete.iteritems(), key=lambda o:o[0]):
-            v0nums = get_version_nums(v0)
+            v0nums = get_version_nums(v0) or v0
             v1 = installed_package_versions[k]
-            v1nums = get_version_nums(v1)
+            v1nums = get_version_nums(v1) or v1
+            #print 'v1nums > v0nums:',v1nums, v0nums
             installed_is_newer = v1nums > v0nums
             newer_str = ''
             if installed_is_newer:
@@ -213,6 +216,10 @@ def update(package='', ignore_errors=0, no_deps=0, all=0):
     env.pip_package = (package or '').strip()
     env.pip_no_deps = '--no-deps' if int(no_deps) else ''
     env.pip_build_dir = tempfile.mkdtemp()
+    
+    # Clear build directory in case it wasn't properly cleaned up previously.
+    sudo('rm -Rf %(pip_build_directory)s' % env)
+    
     with settings(warn_only=ignore_errors):
         if package:
             # Download a single specific package.

@@ -99,9 +99,12 @@ env.shell_interactive_djshell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd 
 # This is where your application's custom code will reside on the remote
 # server.
 env.remote_app_dir_template = '/usr/local/%(app_name)s'
-env.remote_app_src_dir_template = '/usr/local/%(app_name)s/%(src_dir)s'
-env.remote_app_src_package_dir_template = '/usr/local/%(app_name)s/%(src_dir)s/%(app_name)s'
-env.remote_manage_dir_template = '%(remote_app_src_package_dir_template)s'
+env.remote_app_src_dir_template = '%(remote_app_dir)s/%(src_dir)s'
+env.remote_app_src_package_dir_template = '%(remote_app_src_dir)s/%(app_name)s'
+env.remote_manage_dir_template = '%(remote_app_src_package_dir)s'
+
+# A list of all site names that should be available on the current host.
+env.available_sites = []
 
 # This is the name of the executable to call to access Django's management
 # features.
@@ -144,7 +147,6 @@ def save_env():
         if k.startswith('_'):
             continue
         elif isinstance(v, (types.GeneratorType,)):
-            #print 'Skipping copy: %s' % (type(v,))
             continue
         env_default[k] = copy.deepcopy(v)
     return env_default

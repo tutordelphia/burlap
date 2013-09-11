@@ -53,14 +53,20 @@ env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --forma
 env.db_postgresql_createlangs = ['plpgsql'] # plpythonu
 env.db_postgresql_postgres_user = 'postgres'
 
+# You want this to be large, and set in both the client and server.
+# Otherwise, MySQL may silently truncate database dumps, leading to much
+# frustration.
 env.db_mysql_max_allowed_packet = 524288000 # 500M
+
 env.db_mysql_net_buffer_length = 1000000
+
 env.db_mysql_conf = '/etc/mysql/my.cnf'
 env.db_mysql_dump_command = 'mysqldump --opt --compress --max_allowed_packet=%(db_mysql_max_allowed_packet)s --force --single-transaction --quick --user %(db_user)s --password=%(db_password)s -h %(db_host)s %(db_name)s | gzip > %(db_dump_fn)s'
 env.db_mysql_preload_commands = []
 
 env.db_fixture_sets = {} # {name:[list of fixtures]}
 
+# Service names.
 MYSQL = 'MYSQL'
 MYSQLCLIENT = 'MYSQLCLIENT'
 POSTGRESQL = 'POSTGRESQL'
@@ -85,8 +91,12 @@ common.required_system_packages[POSTGRESQLCLIENT] = {
 
 def set_db(name=None, site=None, role=None):
     name = name or 'default'
+    print '!'*80
+    print 'set_db.site:',site
+    print 'set_db.role:',role
     settings = get_settings(site=site, role=role)
     print 'settings:',settings
+    print 'databases:',settings.DATABASES
     default_db = settings.DATABASES[name]
     env.db_name = default_db['NAME']
     env.db_user = default_db['USER']
@@ -241,6 +251,15 @@ def update(name=None, site=None):
     install_sql(name=name, site=site)
 
 @task
+def update_all():
+    """
+    Runs the Django migrate command for all unique databases
+    for all available sites.
+    """
+    for site in env.available_sites:
+        db.update(site=site)
+
+@task
 def dump(dryrun=0, dest_dir=None, to_local=None):
     """
     Exports the target database to a single transportable file on the localhost,
@@ -285,7 +304,7 @@ def dump(dryrun=0, dest_dir=None, to_local=None):
     return env.db_dump_fn
 
 @task
-def load(db_dump_fn, dryrun=0):
+def load(db_dump_fn, dryrun=0, force_upload=0):
     """
     Restores a database snapshot onto the target database server.
     """
@@ -298,11 +317,20 @@ def load(db_dump_fn, dryrun=0):
     missing_local_dump_error = (
         "Database dump file %(db_dump_fn)s does not exist."
     ) % env
-    env.db_remote_dump_fn = '/tmp/'+os.path.split(env.db_dump_fn)[-1]
-    if not dryrun and not files.exists(env.db_dump_fn):
+    if env.is_local:
+        env.db_remote_dump_fn = db_dump_fn
+    else:
+        env.db_remote_dump_fn = '/tmp/'+os.path.split(env.db_dump_fn)[-1]
+        
+    if int(force_upload) or (not dryrun and not env.is_local and not files.exists(env.db_dump_fn)):
         assert os.path.isfile(env.db_dump_fn), \
             missing_local_dump_error
+        print 'Uploading database snapshot...'
         put(local_path=env.db_dump_fn, remote_path=env.db_remote_dump_fn)
+    
+    if env.is_local:
+        assert os.path.isfile(env.db_dump_fn), \
+            missing_local_dump_error
     
     if env.db_load_command:
         run(env.db_load_command % env)
@@ -384,7 +412,7 @@ def syncdb(site=None, all=0, dryrun=0):
     
     env.db_syncdb_all_flag = '--all' if int(all) else ''
     cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --noinput %(db_syncdb_all_flag)s -v 3 --traceback' % env
-    print cmd
+    print 'cmd:',cmd
     if not int(dryrun):
         run(cmd)
 
