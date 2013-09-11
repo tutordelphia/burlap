@@ -257,7 +257,7 @@ def update_all():
     for all available sites.
     """
     for site in env.available_sites:
-        db.update(site=site)
+        update(site=site)
 
 @task
 def dump(dryrun=0, dest_dir=None, to_local=None):
