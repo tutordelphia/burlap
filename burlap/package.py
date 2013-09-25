@@ -65,6 +65,7 @@ def install_apt(fn=None, update=0):
     fout = open(tmp_fn, 'w')
     fout.write('\n'.join(lines))
     fout.close()
+    env.apt_fqfn = tmp_fn
     if not env.is_local:
         put(local_path=tmp_fn)
         env.apt_fqfn = env.put_remote_path
