@@ -4,6 +4,7 @@ import sys
 import types
 import copy
 import tempfile
+import importlib
 from collections import namedtuple
 from StringIO import StringIO
 from fabric.api import (
@@ -335,16 +336,19 @@ def get_settings(site=None, role=None):
     tmp_role = env.ROLE
     if role:
         env.ROLE = os.environ[ROLE] = role
-    print 'environ.SITE:',os.environ.get(SITE)
-    print 'environ.ROLE:',os.environ.get(ROLE)
     env.django_settings_module = env.django_settings_module_template % env
-    print 'django_settings_module:',env.django_settings_module
     try:
-        module = __import__(
-            env.django_settings_module,
-            fromlist='.'.join(env.django_settings_module.split('.')[:-1]))
-        #print 'module:',module
+#        module = __import__(
+#            env.django_settings_module,
+#            fromlist='.'.join(env.django_settings_module.split('.')[:-1]))
+        module = importlib.import_module(env.django_settings_module)
+        sys.modules[module.__name__] = module # This isn't done automatically by import?!
+        
+        # Note, this reload is essential for projects that call commands across
+        # different roles.
+        # e.g. dump production database and load onto dev server
         module = reload(module)
+        
     except ImportError, e:
         print 'Warning: Could not import settings for site "%s"' % (site,)
         #raise # breaks *_secure pseudo sites

@@ -131,7 +131,8 @@ def deploy(site=None, dryrun=0):
     
     cron_crontabs = []
     for site, site_data in common.iter_sites(site=site, renderer=render_paths):
-        print site
+        print 'site:',site
+        print 'cron_crontabs_selected:',env.cron_crontabs_selected
         for selected_crontab in env.cron_crontabs_selected:
             for line in env.cron_crontabs_available.get(selected_crontab, []):
                 cron_crontabs.append(line % env)

@@ -70,7 +70,7 @@ def install_apt(fn=None, update=0):
         env.apt_fqfn = env.put_remote_path
     if int(update):
         sudo('apt-get update -y')
-    sudo('apt-get install -y `cat "%(put_remote_path)s" | tr "\\n" " "`' % env)
+    sudo('apt-get install -y `cat "%(apt_fqfn)s" | tr "\\n" " "`' % env)
 
 env.yum_fn = 'yum-requirements.txt'
 
@@ -83,13 +83,12 @@ def install_yum(fn=None, update=0):
     env.yum_fn = fn or find_template(env.yum_fn)
     assert os.path.isfile(env.yum_fn)
     update = int(update)
-    env.yum_remote_fn = env.yum_fn
     if env.is_local:
         put(local_path=env.yum_fn)
-        env.yum_remote_fn = env.put_remote_fn
+        env.yum_fn = env.put_remote_fn
     if update:
         sudo('yum update --assumeyes')
-    sudo('yum install --assumeyes $(cat %(yum_remote_fn)s)' % env)
+    sudo('yum install --assumeyes $(cat %(yum_fn)s)' % env)
 
 @task
 def list_required(type=None, service=None):

@@ -91,12 +91,12 @@ common.required_system_packages[POSTGRESQLCLIENT] = {
 
 def set_db(name=None, site=None, role=None):
     name = name or 'default'
-    print '!'*80
-    print 'set_db.site:',site
-    print 'set_db.role:',role
+#    print '!'*80
+#    print 'set_db.site:',site
+#    print 'set_db.role:',role
     settings = get_settings(site=site, role=role)
-    print 'settings:',settings
-    print 'databases:',settings.DATABASES
+#    print 'settings:',settings
+#    print 'databases:',settings.DATABASES
     default_db = settings.DATABASES[name]
     env.db_name = default_db['NAME']
     env.db_user = default_db['USER']
@@ -112,8 +112,8 @@ def configure(name=None, site=None, _role=None, dryrun=0):
     assert env[ROLE]
     require('app_name')
     set_db(name=name, site=site, role=_role)
-    print 'site:',env[SITE]
-    print 'role:',env[ROLE]
+#    print 'site:',env[SITE]
+#    print 'role:',env[ROLE]
     env.dryrun = int(dryrun)
     if 'postgres' in env.db_engine:
 
@@ -308,8 +308,11 @@ def load(db_dump_fn, dryrun=0, force_upload=0):
     """
     Restores a database snapshot onto the target database server.
     """
+    print '!'*80
+    print 'db.load.site:',env.SITE
+    print 'db.load.role:',env.ROLE
     env.db_dump_fn = db_dump_fn
-    set_db()
+    set_db(site=env.SITE, role=env.ROLE)
     
     dryrun = int(dryrun)
     
@@ -421,7 +424,8 @@ def migrate(app_name='', site=None, fake=0):
     """
     Wrapper around Django's migrate command.
     """
-    set_site(site)
+    print 'Migrating...'
+    set_site(site or env.SITE)
     
     render_remote_paths()
     

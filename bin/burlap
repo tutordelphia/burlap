@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 """
 Command line tool for initializing Burlap-structured Django projects.
+
+e.g.
+
+    burlap skel --name=myproject
 """
 
 import argparse
@@ -40,17 +44,113 @@ if __name__ == "__main__":
 
     if args.action == SKEL:
         assert args.project_name, 'Specify project name.'
+        site_name = args.project_name + '_site'
+        
+        print 'Creating folders...'
         md('roles/all')
-        open('roles/all/settings.yaml', 'w')\
-            .write('''app_name: {project_name}
-default_site: {project_name}
-settings_module: '%(app_name)s.%(app_name)s.settings'
-'''.format(project_name=args.project_name))
+        md('roles/dev')
+        md('roles/prod')
         md('src')
-        os.system('cd src; django-admin.py startproject %s' \
-            % (args.project_name,))
+        md('media')
+        md('static')
+        
+        print 'Creating roles...'
+        open('roles/all/settings.yaml', 'w')\
+            .write('''# This is the name of the Django app that contains the global settings for your site.
+app_name: {site_name}
+
+# This is the name of the Apache site that will host your Django app.
+default_site: {site_name}
+
+# This the template used to retrieving your Django app settings.
+settings_module: '%(app_name)s.settings'
+'''.format(project_name=args.project_name, site_name=site_name))
+        open('roles/dev/settings.yaml', 'w')\
+            .write('''# Note, these settings will inherit everything in ../all/settings.yaml.
+# You can override by entering additional settings below.
+
+# Set this to the domain/IP of your dev server(s).
+# For now, let's assume we'll do most development locally...
+hosts: ['localhost']
+
+# This is the base directory where all files will be installed once deployed.
+# For development, we'll just make this the CWD.
+remote_app_dir_template: "."
+'''.format(project_name=args.project_name, site_name=site_name))
+        open('roles/prod/settings.yaml', 'w')\
+            .write('''# Note, these settings will inherit everything in ../all/settings.yaml.
+# You can override by entering additional settings below.
+
+# Set this to the domain/IP of your production server(s).
+hosts: ['?']
+'''.format(project_name=args.project_name, site_name=site_name))
+            
+        open('roles/all/pip-requirements.txt', 'w').write('Django')
+        
+        if not os.path.isdir('src/%s' % site_name):
+            print 'Initializing base django project...'
+            os.system('django-admin.py startproject %s src' \
+                % (site_name,))
+        #sys.exit()
         content = open(fabfile_template, 'r').read()
         content = content.format(project_name=args.project_name)
-        open('src/%s/__init__.py' % (args.project_name,), 'w')
+        
+        print 'Creating helper scripts...'
+        open('src/manage', 'w').write('''#!/bin/bash
+# Helper script for ensuring we use the Python binary in our local
+# virtual environment when calling management commands.
+# Otherwise, we'd have to always run `. ../.env/bin/activate`, which can be
+# annoying.
+# Be sue to run `fab <role> pip.init` first in order to setup
+# the target role's Python virtual environment.
+DIR=`dirname $0`;
+cd $DIR;
+../.env/bin/python manage.py $@''')
+        open('src/runserver', 'w').write('''#!/bin/bash
+# Helper script for running the local dev server, ensuring
+# our virtual environment is used.
+script_dir=`dirname $0`
+cd $script_dir
+if [ -z "$PORT" ]; then
+    export PORT=8111
+fi
+if [ -z "$ROLE" ]; then
+    export ROLE=dev
+fi
+. ~/.bash_aliases
+./manage runserver localhost:$PORT''')
+        open('src/shell', 'w').write('''#!/bin/bash
+# Creates a local PIP-aware shell.
+script_dir=`dirname $0`
+cd $script_dir
+/bin/bash -c ". ../.env/bin/activate; exec /bin/bash -i"''')
+        os.system('chmod +x src/shell')
+        os.system('chmod +x src/manage')
+        os.system('chmod +x src/runserver')
+        
         open('fabfile.py', 'w').write(content)
+        
+        print 'Initializing local development virtual environment...'
+        os.system('fab dev pip.update pip.install')
+        
+        # Create the primary app for containing models/urls/views.
+        if not os.path.isdir('src/%s' % args.project_name):
+            os.system('cd src; ./manage startapp %s' % (args.project_name,))
+        
+        print '='*80
+        print
+        print 'Skeleton created for project %s!' % (args.project_name.title(),)
+        print
+        print '''Some introductory notes:
+        
+    * The term "role" will be used to denote different server environments. e.g. The "prod" role will refer to production while the "dev" role will refer to development.
+    * There's a global settings file located at roles/all/settings.yaml. Additionally, each role has its own settings file, located at roles/<role>/settings.yaml, that inherits from the global settings.
+    * You can run fabric commands for each role using shell comands of the form `fab <role> <command>`. e.g. To do a full deployment to production, you'd run `fab prod deploy1`.
+    * The fabfile.py has been pre-populated with some sample commands for performing deployments, but it can be customized however you like.
+    * Modify the file `src/{site_name}/settings.py` to contain your database connection parameters and other custom parameters. Use os.environ.get('ROLE') to specify settings for different roles.
+    * If you database server requires configuration, update the appropriate role settings.yaml file and then run `fab <role> db.configure. Only PostgreSQL and MySQL are currently supported.
+    * Add your custom models to src/{project_name}/models.py and/or create other custom apps using `src/manage startapp <myapp>`.
+    * Initialize your new project's local development database by running `fab dev db.create:post_process=1`.
+    * Run the script `src/runserver` to start the local Django dev server.
+        '''.format(project_name=args.project_name, site_name=site_name)
         

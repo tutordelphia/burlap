@@ -71,7 +71,7 @@ def clean_virtualenv():
         'Unable to delete pre-existing environment.'
 
 @task
-def init(clean=0):
+def init(clean=0, check_global=0):
     """
     Creates the virtual environment.
     """
@@ -85,15 +85,22 @@ def init(clean=0):
     
     # Important. Default Ubuntu 12.04 package uses Pip 1.0, which
     # is horribly buggy. Should use 1.3 or later.
-    sudo('pip install --upgrade pip')
+    if int(check_global):
+        print 'Ensuring the global pip install is up-to-date.'
+        sudo('pip install --upgrade pip')
     
     print env.pip_virtual_env_dir
     if not files.exists(env.pip_virtual_env_dir):
         print 'Creating new virtual environment...'
-        sudo('virtualenv --no-site-packages %(pip_virtual_env_dir)s' % env)
+        cmd = 'virtualenv --no-site-packages %(pip_virtual_env_dir)s' % env
+        if env.is_local:
+            run(cmd)
+        else:
+            sudo(cmd)
         
-    sudo('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
-    sudo('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
+    if not env.is_local:
+        sudo('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
+        sudo('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
 
 def iter_pip_requirements():
     for line in open(find_template(env.pip_requirements_fn)):
