@@ -72,6 +72,7 @@ def generate_keys():
 def passwordless(username=None, pubkey=None):
     """
     Configures the user to use an SSL key without a password.
+    Assumes you've run generate_keys() first.
     """
     env.user_username = username or env.user
     env.user_pubkey = pubkey or env.key_filename

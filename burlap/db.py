@@ -86,7 +86,7 @@ common.required_system_packages[MYSQLCLIENT] = {
 }
 common.required_system_packages[POSTGRESQLCLIENT] = {
     common.FEDORA: ['postgresql-client'],
-    common.UBUNTU: ['postgresql-client-9.1','python-psycopg2'],
+    common.UBUNTU: ['postgresql-client-9.1', 'python-psycopg2', 'postgresql-server-dev-9.1'],
 }
 
 def set_db(name=None, site=None, role=None):
@@ -144,7 +144,7 @@ def configure(name=None, site=None, _role=None, dryrun=0):
             'DROP DATABASE template1;'
             'CREATE DATABASE template1 WITH TEMPLATE = template0 ENCODING = \'UNICODE\';'
             'UPDATE pg_database SET datistemplate = TRUE WHERE datname = \'template1\';'
-            '\c template1'
+            '\c template1\n'
             'VACUUM FREEZE;'
             'UPDATE pg_database SET datallowconn = FALSE WHERE datname = \'template1\';"')
 
@@ -158,6 +158,9 @@ def configure(name=None, site=None, _role=None, dryrun=0):
             sudo('mysql -u %(db_root_user)s -p"%(db_root_password)s" --execute="USE mysql; GRANT ALL ON *.* to %(db_root_user)s@\'%%\' IDENTIFIED BY \'%(db_root_password)s\'; FLUSH PRIVILEGES;"' % env)
             
             sudo('service mysql restart')
+            
+    else:
+        print 'No database parameters found.'
 
 @task
 def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
@@ -297,7 +300,7 @@ def dump(dryrun=0, dest_dir=None, to_local=None):
         raise NotImplemented
     
     # Download the database dump file on the remote host to localhost.
-    if int(to_local) and not env.is_local:
+    if (0 if to_local is None else int(to_local)) and not env.is_local:
         cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -i %(key_filename)s" %(user)s@%(host_string)s:%(db_dump_fn)s %(db_dump_fn)s') % env
         local(cmd)
     
@@ -339,18 +342,23 @@ def load(db_dump_fn, dryrun=0, force_upload=0):
         run(env.db_load_command % env)
     elif 'postgres' in env.db_engine:
         
-        cmd = 'dropdb --user=%(db_postgresql_postgres_user)s %(db_name)s' % env
-        print cmd
-        if not dryrun:
-            run(cmd)
+        with settings(warn_only=True):
+            cmd = 'dropdb --user=%(db_postgresql_postgres_user)s %(db_name)s' % env
+            print cmd
+            if not dryrun:
+                run(cmd)
+                
         cmd = 'psql --user=%(db_postgresql_postgres_user)s -c "CREATE DATABASE %(db_name)s;"' % env
         print cmd
         if not dryrun:
             run(cmd)
-        cmd = 'psql --user=%(db_postgresql_postgres_user)s -c "DROP OWNED BY %(db_user)s CASCADE;"' % env
-        print cmd
-        if not dryrun:
-            run(cmd)
+            
+        with settings(warn_only=True):
+            cmd = 'psql --user=%(db_postgresql_postgres_user)s -c "DROP OWNED BY %(db_user)s CASCADE;"' % env
+            print cmd
+            if not dryrun:
+                run(cmd)
+            
         cmd = ('psql --user=%(db_postgresql_postgres_user)s -c "DROP USER IF EXISTS %(db_user)s; '
             'CREATE USER %(db_user)s WITH PASSWORD \'%(db_password)s\'; '
             'GRANT ALL PRIVILEGES ON DATABASE %(db_name)s to %(db_user)s;"') % env
@@ -381,6 +389,15 @@ def load(db_dump_fn, dryrun=0, force_upload=0):
         cmd = ("mysqladmin -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
             "create %(db_name)s") % env
         run(cmd)
+        
+        #TODO:create user
+#        DROP USER '<username>'@'%';
+#        CREATE USER '<username>'@'%' IDENTIFIED BY '<password>';
+#        GRANT ALL PRIVILEGES ON *.* TO '<username>'@'%' WITH GRANT OPTION;
+#        FLUSH PRIVILEGES;
+        
+        #set collation to unicode?
+        #ALTER DATABASE <database> CHARACTER SET utf8 COLLATE utf8_general_ci;
         
         # Raise max packet limitation.
         run(

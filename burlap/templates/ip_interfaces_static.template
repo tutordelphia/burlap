@@ -1,6 +1,10 @@
+auto lo
+iface lo inet loopback
+
 auto {{ ip_interface }}
 iface {{ ip_interface }} inet static
 address {{ ip_address }}
+network {{ ip_network }}
 netmask {{ ip_netmask }}
 broadcast {{ ip_broadcast }}
 gateway {{ ip_gateway }}

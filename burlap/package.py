@@ -56,6 +56,8 @@ def install_apt(fn=None, update=0):
     print 'Installing apt requirements...'
     assert env[ROLE]
     env.apt_fqfn = fn or find_template(env.apt_fn)
+    if not env.apt_fqfn:
+        return
     assert os.path.isfile(env.apt_fqfn)
     fd, tmp_fn = tempfile.mkstemp()
     lines = [

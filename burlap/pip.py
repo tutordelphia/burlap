@@ -247,6 +247,14 @@ def update(package='', ignore_errors=0, no_deps=0, all=0):
                 local(env.pip_update_command % env)
 
 @task
+def upgrade_pip():
+    render_remote_paths()
+    if env.pip_virtual_env_dir_template:
+        env.pip_virtual_env_dir = env.pip_virtual_env_dir_template % env
+    run(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade setuptools" % env)
+    run(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade distribute" % env)
+
+@task
 def install(package='', clean=0, all=0, upgrade=1):
     """
     Installs the local cache of pip packages.
@@ -287,4 +295,12 @@ def install(package='', clean=0, all=0, upgrade=1):
     env.pip_build_dir = tempfile.mkdtemp()
     for package in packages:
         env.pip_package = package
-        run(env.pip_install_command % env)
+        if env.is_local:
+            run(env.pip_install_command % env)
+        else:
+            sudo(env.pip_install_command % env)
+
+    if not env.is_local:
+        sudo('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
+        sudo('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
+        
