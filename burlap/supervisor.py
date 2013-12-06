@@ -181,3 +181,5 @@ def deploy_all_services(**kwargs):
 common.service_configurators[SUPERVISOR] = [configure]
 common.service_deployers[SUPERVISOR] = [deploy_all_services]
 common.service_restarters[SUPERVISOR] = [restart]
+common.service_pre_deployers[SUPERVISOR] = [stop]
+common.service_post_deployers[SUPERVISOR] = [start]

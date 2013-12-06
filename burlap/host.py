@@ -42,15 +42,16 @@ def set_hostname(name):
     sudo('echo "127.0.0.1 %(host_hostname)s" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts' % env)
     sudo('service hostname restart; sleep 3')
 
+#TODO:deprecated?
 @task
 def mount(dryrun=0):
     """
-    Mounts /i and /medialibrary from NFS on alphafs to prodadmin.
+    Mounts file systems.
     
     TODO:Remove? This should be no longer be an issue now that
-    prodadmin:/etc/fstab has the proper mount settings.
+    /etc/fstab has the proper mount settings.
     
-    alphafs:/data/media/production  /data/media             nfs     _netdev,soft,intr,rw,bg        0 0
+    remote_host:remote_path  /data/media             nfs     _netdev,soft,intr,rw,bg        0 0
     """
     #TODO:these are temporary commands, change to auto-mount in /etc/fstab?
     dryrun = int(dryrun)
@@ -59,7 +60,17 @@ def mount(dryrun=0):
 #    env.key_filename = "%s.pem" % config.local_key
 #    run("mount -t nfs alphafs:/data/media/development/i /data/media/i")
 #    run("mount -t nfs alphafs:/data/media/development/medialibrary /data/media/medialibrary")
-    for from_path, to_path, owner, group, perms in env.media_mount_dirs:
+    for data in env.media_mount_dirs:
+        if isinstance(data, (list, tuple)):
+            from_path, to_path, owner, group, perms = data
+        else:
+            assert isinstance(data, dict)
+            from_path = data['src']
+            to_path = data['dst']
+            owner = data['owner']
+            group = data['group']
+            perms = data['perms']
+            
         with settings(warn_only=1):
             
             cmd = 'umount %s' % to_path

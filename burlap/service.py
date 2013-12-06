@@ -21,7 +21,6 @@ from burlap import common
 from burlap.common import (
     #run,
     put,
-    get_settings,
     SITE,
     ROLE,
 )
@@ -41,7 +40,20 @@ def configure():
             for func in funcs:
                 print 'Function:',func
                 func()
-    
+
+@task
+def pre_deploy():
+    """
+    Runs methods services have requested be run before each deployment.
+    """
+    for service in env.services:
+        service = service.strip().upper()
+        funcs = common.service_pre_deployers.get(service)
+        if funcs:
+            print 'Running pre-deployments for service %s...' % (service,)
+            for func in funcs:
+                func()
+                
 @task
 def deploy():
     """
@@ -52,6 +64,19 @@ def deploy():
         funcs = common.service_deployers.get(service)
         if funcs:
             print 'Deploying service %s...' % (service,)
+            for func in funcs:
+                func()
+
+@task
+def post_deploy():
+    """
+    Runs methods services have requested be run before after deployment.
+    """
+    for service in env.services:
+        service = service.strip().upper()
+        funcs = common.service_post_deployers.get(service)
+        if funcs:
+            print 'Running post-deployments for service %s...' % (service,)
             for func in funcs:
                 func()
 

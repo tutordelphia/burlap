@@ -10,14 +10,37 @@ import yaml
 import importlib
 import pkgutil
 import inspect
+import warnings
 
 from fabric.api import env
 from fabric.tasks import WrappedCallableTask
+from fabric.utils import _AliasDict
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
 
 import common
 
+def _represent_dictorder(self, data):
+#    if isinstance(data, type(env)):
+#        return self.represent_mapping('tag:yaml.org,2002:map', data.items())
+#    else:
+    return self.represent_mapping(u'tag:yaml.org,2002:map', data.items())
+
+def _represent_tuple(self, data):
+    return self.represent_sequence(u'tag:yaml.org,2002:seq', data)
+
+def _construct_tuple(self, node):
+    return tuple(self.construct_sequence(node))
+
+def _represent_function(self, data):
+    return self.represent_scalar(u'tag:yaml.org,2002:null', u'null')
+
+yaml.add_representer(type(env), _represent_dictorder)
+yaml.add_representer(_AliasDict, _represent_dictorder)
+#yaml.add_representer(tuple, _represent_tuple) # we need tuples for hash keys
+yaml.add_constructor(u'tag:yaml.org,2002:python/tuple', _construct_tuple)
+yaml.add_representer(types.FunctionType, _represent_function)
+    
 env_default = common.save_env()
 
 # Variables cached per-role. Must be after deepcopy.
@@ -27,8 +50,9 @@ def _get_environ_handler(name, d):
     """
     Dynamically creates a Fabric task for each configuration role.
     """
+    
     def func(site=None, **kwargs):
-        site = site or env.SITE
+        site = site or d.get('default_site') or env.SITE
         hostname = kwargs.get('hostname', kwargs.get('hn', kwargs.get('h')))
         
         # Load environment for current role.
@@ -108,23 +132,61 @@ def update_merge(d, u):
             d[k] = u[k]
     return d
 
+def find_yaml_settings_fn(name, local=False):
+    if local:
+        settings_fn = os.path.join(common.ROLE_DIR, name, 'settings_local.yaml')
+    else:
+        settings_fn = os.path.join(common.ROLE_DIR, name, 'settings.yaml')
+    if os.path.isfile(settings_fn):
+        return settings_fn
+
+def load_yaml_settings(name, priors=None):
+    config = type(env)()
+    if priors is None:
+        priors = set()
+    if name in priors:
+        return config
+    priors.add(name)
+    
+    settings_fn = find_yaml_settings_fn(name)
+    if not settings_fn:
+        warnings.warn('Warning: Could not find Yaml settings for role %s.' % (name,))
+        return config
+    config.update(yaml.safe_load(open(settings_fn)) or type(env)())
+    if 'inherits' in config:
+        parent_name = config['inherits']
+        del config['inherits']
+        parent_config = load_yaml_settings(parent_name, priors=priors)
+        parent_config.update(config)
+        config = parent_config
+    
+    # Load local overrides.
+    settings_local_fn = find_yaml_settings_fn(name, local=True)
+    if settings_local_fn:
+        config.update(yaml.safe_load(open(settings_local_fn)) or type(env)())
+    
+    return config
+
 # Dynamically create a Fabric task for each role.
 role_commands = {}
-_common = type(env)()
-_common_fn = os.path.join(common.ROLE_DIR, 'all', 'settings.yaml')
-if os.path.isfile(_common_fn):
-    _common = yaml.safe_load(open(_common_fn))
+#_common = type(env)()
+#_common_fn = os.path.join(common.ROLE_DIR, 'all', 'settings.yaml')
+#if os.path.isfile(_common_fn):
+#    _common = yaml.safe_load(open(_common_fn))
 if os.path.isdir(common.ROLE_DIR):
     for _name in os.listdir(common.ROLE_DIR):
-        #print 'checking',_name
         _settings_fn = os.path.join(common.ROLE_DIR, _name, 'settings.yaml')
-        if _name == 'all' or not os.path.isfile(_settings_fn):
+        if _name.startswith('.') or not os.path.isfile(_settings_fn):
             continue
-        _config = copy.deepcopy(_common)
-        _config.update(yaml.safe_load(open(_settings_fn)) or type(env)())
-        _settings_local_fn = os.path.join(common.ROLE_DIR, _name, 'settings_local.yaml')
-        if os.path.isfile(_settings_local_fn):
-            _config.update(yaml.safe_load(open(_settings_local_fn)) or type(env)())
+        #print 'Checking %s...' % (_name,)
+#        if _name == 'all' or not :
+#            continue
+#        _config = copy.deepcopy(_common)
+#        _config.update(yaml.safe_load(open(_settings_fn)) or type(env)())
+#        _settings_local_fn = os.path.join(common.ROLE_DIR, _name, 'settings_local.yaml')
+#        if os.path.isfile(_settings_local_fn):
+#            _config.update(yaml.safe_load(open(_settings_local_fn)) or type(env)())
+        _config = load_yaml_settings(_name)
         _f = _get_environ_handler(_name, _config)
         _var_name = 'role_'+_name
         _f = WrappedCallableTask(_f, name=_name)
@@ -181,6 +243,7 @@ def populate_fabfile():
             locals_[role_name] = role_func
         locals_['common'] = common
         locals_['shell'] = common.shell
+        locals_['info'] = common.info
         locals_['djshell'] = common.djshell
         locals_['tunnel'] = common.tunnel
     finally:

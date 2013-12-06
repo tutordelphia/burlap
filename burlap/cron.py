@@ -107,9 +107,12 @@ def start():
 
 @task
 def stop():
-    cmd = get_service_command(common.STOP)
-    print cmd
-    sudo(cmd)
+    # If cron service already stopped, will throw the error
+    # "Instance unknown:" on Ubuntu.
+    with settings(warn_only=True):
+        cmd = get_service_command(common.STOP)
+        print cmd
+        sudo(cmd)
 
 @task
 def restart():
@@ -156,3 +159,5 @@ def deploy_all(**kwargs):
 #common.service_configurators[CRON] = [configure]
 common.service_deployers[CRON] = [deploy_all]
 common.service_restarters[CRON] = [restart]
+common.service_pre_deployers[CRON] = [stop]
+common.service_post_deployers[CRON] = [start]

@@ -16,6 +16,7 @@ from fabric.api import (
 
 from fabric.contrib import files
 
+from burlap.dj import get_settings
 from burlap.common import run, put
 from burlap import common
 
@@ -144,10 +145,10 @@ def configure(site=None, full=0, dryrun=0):
     #render_paths()
     
     params = set() # [(user,vhost)]
-    for site, site_data in common.iter_sites(site=site, renderer=render_paths):
+    for site, site_data in common.iter_sites(site=site, renderer=render_paths, no_secure=True):
         print '!'*80
-        print site
-        _settings = common.get_settings(site=site)
+        print 'site:',site
+        _settings = get_settings(site=site)
         #print '_settings:',_settings
         if not _settings:
             continue
@@ -167,6 +168,7 @@ def configure(site=None, full=0, dryrun=0):
             if not dryrun:
                 sudo(cmd)
 
+@task
 def configure_all(**kwargs):
     kwargs['site'] = common.ALL
     return configure(**kwargs)
@@ -174,3 +176,5 @@ def configure_all(**kwargs):
 common.service_configurators[RABBITMQ] = [configure_all]
 #common.service_deployers[RABBITMQ] = [deploy]
 common.service_restarters[RABBITMQ] = [restart]
+common.service_pre_deployers[RABBITMQ] = [stop]
+common.service_post_deployers[RABBITMQ] = [start]

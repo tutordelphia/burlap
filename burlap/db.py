@@ -18,11 +18,11 @@ from fabric.api import (
 )
 from fabric.contrib import files
 
+from burlap.dj import get_settings
 from burlap import common
 from burlap.common import (
     run,
     put,
-    get_settings,
     set_site,
     render_remote_paths,
     SITE,
@@ -60,9 +60,11 @@ env.db_mysql_max_allowed_packet = 524288000 # 500M
 
 env.db_mysql_net_buffer_length = 1000000
 
-env.db_mysql_conf = '/etc/mysql/my.cnf'
+env.db_mysql_conf = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
 env.db_mysql_dump_command = 'mysqldump --opt --compress --max_allowed_packet=%(db_mysql_max_allowed_packet)s --force --single-transaction --quick --user %(db_user)s --password=%(db_password)s -h %(db_host)s %(db_name)s | gzip > %(db_dump_fn)s'
 env.db_mysql_preload_commands = []
+env.db_mysql_character_set = 'utf8'
+env.db_mysql_collate = 'utf8_general_ci'
 
 env.db_fixture_sets = {} # {name:[list of fixtures]}
 
@@ -103,6 +105,13 @@ def set_db(name=None, site=None, role=None):
     env.db_host = default_db['HOST']
     env.db_password = default_db['PASSWORD']
     env.db_engine = default_db['ENGINE']
+
+def set_collation_mysql(dryrun=0):
+    cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
+        "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
+    print cmd
+    if not int(dryrun):
+        run(cmd)
 
 @task
 def configure(name=None, site=None, _role=None, dryrun=0):
@@ -165,7 +174,7 @@ def configure(name=None, site=None, _role=None, dryrun=0):
 @task
 def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
     """
-    Creates the target database
+    Creates the target database.
     """
     assert env[ROLE]
     dryrun = int(dryrun)
@@ -206,7 +215,14 @@ def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
         print cmd
         if not int(dryrun):
             sudo(cmd)
-        
+            
+#        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
+#            "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
+#        print cmd
+#        if not int(dryrun):
+#            sudo(cmd)
+        set_collation_mysql(dryrun=dryrun)
+            
         # Create user.
         cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute=\"GRANT USAGE ON *.* TO %(db_user)s@'%%'; DROP USER %(db_user)s@'%%';\"" % env
         print cmd
@@ -233,6 +249,7 @@ def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
 def post_create(name=None, dryrun=0, site=None):
     assert env[ROLE]
     require('app_name')
+    site = site or env.SITE
     set_db(name=name, site=site)
     print 'site:',env[SITE]
     print 'role:',env[ROLE]
@@ -371,6 +388,7 @@ def load(db_dump_fn, dryrun=0, force_upload=0):
             print cmd
             if not dryrun:
                 run(cmd)
+                
         cmd = 'gunzip -c %(db_remote_dump_fn)s | pg_restore -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s' % env
         print cmd
         if not dryrun:
@@ -396,8 +414,13 @@ def load(db_dump_fn, dryrun=0, force_upload=0):
 #        GRANT ALL PRIVILEGES ON *.* TO '<username>'@'%' WITH GRANT OPTION;
 #        FLUSH PRIVILEGES;
         
-        #set collation to unicode?
-        #ALTER DATABASE <database> CHARACTER SET utf8 COLLATE utf8_general_ci;
+        # Set collation.
+#        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
+#            "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
+#        print cmd
+#        if not int(dryrun):
+#            sudo(cmd)
+        set_collation_mysql(dryrun=dryrun)
         
         # Raise max packet limitation.
         run(
@@ -417,6 +440,8 @@ def load(db_dump_fn, dryrun=0, force_upload=0):
             '--password=%(db_root_password)s --host=%(db_host)s '
             '-D %(db_name)s') % env
         run(cmd)
+        
+        set_collation_mysql(dryrun=dryrun)
         
     else:
         raise NotImplemented
@@ -463,12 +488,46 @@ def migrate(app_name='', site=None, fake=0):
         run(cmd)
 
 @task
+def database_files_dump(site=None):
+    """
+    Runs the Django management command to export files stored in the database to the filesystem.
+    Assumes the app django_database_files is installed.
+    """
+    set_site(site or env.SITE)
+    
+    render_remote_paths()
+    
+    cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s database_files_dump' % env
+    if env.is_local:
+        local(cmd)
+    else:
+        run(cmd)
+
+@task
 def drop_views(name=None, site=None):
     """
     Drops all views.
     """
     set_db(name=name, site=site)
     if 'postgres' in env.db_engine:
+#        SELECT 'DROP VIEW ' || table_name || ';'
+#        FROM information_schema.views
+#        WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+#        AND table_name !~ '^pg_';
+        # http://stackoverflow.com/questions/13643831/drop-all-views-postgresql
+#        DO$$
+#        BEGIN
+#        
+#        EXECUTE (
+#           SELECT string_agg('DROP VIEW ' || t.oid::regclass || ';', ' ')  -- CASCADE?
+#           FROM   pg_class t
+#           JOIN   pg_namespace n ON n.oid = t.relnamespace
+#           WHERE  t.relkind = 'v'
+#           AND    n.nspname = 'my_messed_up_schema'
+#           );
+#        
+#        END
+#        $$
         todo
     elif 'mysql' in env.db_engine:
         cmd = ("mysql --batch -v -h %(db_host)s " \
@@ -497,7 +556,6 @@ def install_sql(name=None, site=None):
     """
     Installs all custom SQL.
     """
-    #_settings = get_settings(site=site, role=env.ROLE)
     set_db(name=name, site=site)
     paths = glob.glob(env.db_install_sql_path_template % env)
     #paths = glob.glob('%(src_dir)s/%(app_name)s/*/sql/*' % env)
@@ -581,16 +639,32 @@ def install_fixtures(name, site=None):
 
 @task
 def restart(site=common.ALL):
-    for site, site_data in common.iter_sites(site=site, renderer=lambda: set_db(name='default')):
-        print site
-        #set_db(name=name, site=site)
-        if 'postgres' in env.db_engine:
-            sudo('service postgresql restart; sleep 3')
+    """
+    Restarts the database engine.
+    """
+#    for site, site_data in common.iter_sites(site=site, renderer=lambda: set_db(name='default')):
+#        print site
+#        #set_db(name=name, site=site)
+#        if 'postgres' in env.db_engine:
+#            sudo('service postgresql restart; sleep 3')
 #        elif 'mysql' in env.db_engine:
 #            sudo('service mysql restart')
+#        else:
+#            raise NotImplementedError
+    for service_name in env.services:
+        if service_name.upper() == MYSQL:
+            sudo('service mysqld restart')
+        elif service_name.upper() == POSTGRESQL:
+            sudo('service postgresql restart; sleep 3')
 
 @task
 def save_db_password(user, password):
+    """
+    Writes the database user's password to a file, allowing automatic login
+    from a secure location.
+    
+    Currently, only PostgreSQL is supported.
+    """
     set_db(name='default')
     if 'postgres' in env.db_engine:
         env.db_save_user = user
@@ -608,6 +682,40 @@ def save_db_password(user, password):
         sudo("sed -i '/%(db_save_user)s/d' ~/.pgpass" % env)
         sudo('echo "localhost:5432:*:%(db_save_user)s:%(db_save_password)s" >> ~/.pgpass' % env)
         sudo('chmod 600 ~/.pgpass')
+    else:
+        raise NotImplementedError
+
+@task
+def shell(name='default', user=None, password=None):
+    """
+    Opens a SQL shell to the given database, assuming the configured database
+    and user supports this feature.
+    """
+    
+    # Load database credentials.
+    set_db(name=name)
+    if user:
+        env.db_user = user
+    if password:
+        env.db_password = password
+        
+    if 'postgres' in env.db_engine:
+        # Note, psql does not support specifying password at the command line.
+        # If you don't want to manually type it at the command line, you must
+        # add the password to your local ~/.pgpass file.
+        # Each line in that file should be formatted as:
+        # host:port:username:password
+        cmd = '/bin/bash -i -c \"psql --username=%(db_user)s --host=%(db_host)s --dbname=%(db_name)s\"' % env
+        if env.is_local:
+            local(cmd)
+        else:
+            run(cmd)
+    elif 'mysql' in env.db_engine:
+        cmd = '/bin/bash -i -c \"mysql -u %(db_user)s -p\'%(db_password)s\' -h %(db_host)s %(db_name)s\"' % env
+        if env.is_local:
+            local(cmd)
+        else:
+            run(cmd)
     else:
         raise NotImplementedError
 

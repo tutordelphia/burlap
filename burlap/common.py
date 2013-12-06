@@ -24,6 +24,8 @@ PACKAGERS = APT, YUM = ('apt-get', 'yum')
 
 OS_TYPES = LINUX, WINDOWS = ('linux', 'windows')
 OS_DISTRO = FEDORA, UBUNTU = ('fedora', 'ubuntu')
+FEDORA_13 = 'fedora-13'
+FEDORA_16 = 'fedora-16'
 
 SYSTEM = 'system'
 RUBY = 'ruby'
@@ -58,14 +60,15 @@ OS = namedtuple('OS', ['type', 'distro', 'release'])
 
 ROLE_DIR = env.ROLES_DIR = 'roles'
 
+DJANGO = 'DJANGO'
+
 SITE = 'SITE'
 ROLE = 'ROLE'
 
+env.confirm_deployment = False
 env.is_local = None
 env.base_config_dir = '.'
 env.src_dir = 'src' # The path relative to fab where the code resides.
-
-env.django_settings_module_template = '%(app_name)s.settings.settings'
 
 env[SITE] = None
 env[ROLE] = None
@@ -80,8 +83,12 @@ required_system_packages = type(env)() # {service:{os:[packages]}
 required_python_packages = type(env)() # {service:{os:[packages]}
 required_ruby_packages = type(env)() # {service:{os:[packages]}
 service_configurators = type(env)() # {service:{[func]}
+service_pre_deployers = type(env)() # {service:{[func]}
 service_deployers = type(env)() # {service:{[func]}
+service_post_deployers = type(env)() # {service:{[func]}
 service_restarters = type(env)() # {service:{[func]}
+manifest_recorder = type(env)() #{component:[func]}
+manifest_comparer = type(env)() #{component:[func]}
 
 env.hosts_retriever = None
 env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,
@@ -107,14 +114,90 @@ env.remote_manage_dir_template = '%(remote_app_src_package_dir)s'
 # A list of all site names that should be available on the current host.
 env.available_sites = []
 
-# This is the name of the executable to call to access Django's management
-# features.
-env.django_manage = './manage'
-
 # The command run to determine the percent of disk usage.
 env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{ print $5 " " $1 }'"
 
 env.post_callbacks = []
+
+class QueuedCommand(object):
+    """
+    Represents a fabric command that is pending execution.
+    """
+    
+    def __init__(self, name, args=None, kwargs=None, pre=[], post=[]):
+        self.name = name
+        self.args = args or []
+        self.kwargs = kwargs or {}
+        
+        # Used for ordering commands.
+        self.pre = pre # commands that should come before this command
+        assert isinstance(self.pre, (tuple, list)), 'Pre must be a list type.'
+        self.post = post # commands that should come after this command
+        assert isinstance(self.post, (tuple, list)), 'Post must be a list type.'
+    
+    @property
+    def cn(self):
+        """
+        Returns the component name, if given in the name
+        as "<component_name>.method".
+        """
+        parts = self.name.split('.')
+        if len(parts) >= 2:
+            return parts[0]
+    
+    def __repr__(self):
+        kwargs = []
+        for k,v in self.kwargs.iteritems():
+            if not v or isinstance(v, bool):
+                kwargs.append('%s' % k)
+            elif isinstance(v, basestring) and '=' in v:
+                # Escape equals sign character in parameter values.
+                kwargs.append('%s="%s"' % (k, v.replace('=', '\=')))
+            else:
+                kwargs.append('%s=%s' % (k, v))
+        params = (self.name, ','.join(map(str, self.args)) + ','.join(kwargs))
+        if params[1]:
+            return ('%s:%s' % params).strip()
+        else:
+            return (params[0]).strip()
+    
+    def __cmp__(self, other):
+        """
+        Return negative if x<y, zero if x==y, positive if x>y.
+        """
+        if not isinstance(self, type(other)):
+            return NotImplemented
+        
+        x_cn = self.cn
+        x_name = self.name
+        x_pre = self.pre
+        x_post = self.post
+        
+        y_cn = other.cn
+        y_name = other.name
+        y_pre = other.pre
+        y_post = other.post
+        
+        if y_cn in x_pre or y_name in x_pre:
+            # Other should come first.
+            return +1
+        elif y_cn in x_post or y_name in x_post:
+            # Other should come last.
+            return -1
+        elif x_cn in y_pre or x_name in y_pre:
+            # We should come first.
+            return -1
+        elif x_cn in y_post or x_name in y_post:
+            # We should come last.
+            return -1
+        return 0
+        #return cmp(hash(self), hash(other))
+    
+    def __hash__(self):
+        return hash((self.name, tuple(self.args), tuple(self.kwargs.items())))
+    
+    def __call__(self):
+        raise NotImplementedError
 
 def render_remote_paths():
     env.remote_app_dir = env.remote_app_dir_template % env
@@ -324,38 +407,12 @@ def set_site(site):
     if site is None:
         return
     env[SITE] = os.environ[SITE] = site
-    
-def get_settings(site=None, role=None):
-    """
-    Retrieves the Django settings dictionary.
-    """
-    sys.path.insert(0, env.src_dir)
-    if site and site.endswith('_secure'):
-        site = site[:-7]
-    set_site(site)
-    tmp_role = env.ROLE
-    if role:
-        env.ROLE = os.environ[ROLE] = role
-    env.django_settings_module = env.django_settings_module_template % env
-    try:
-#        module = __import__(
-#            env.django_settings_module,
-#            fromlist='.'.join(env.django_settings_module.split('.')[:-1]))
-        module = importlib.import_module(env.django_settings_module)
-        sys.modules[module.__name__] = module # This isn't done automatically by import?!
-        
-        # Note, this reload is essential for projects that call commands across
-        # different roles.
-        # e.g. dump production database and load onto dev server
-        module = reload(module)
-        
-    except ImportError, e:
-        print 'Warning: Could not import settings for site "%s"' % (site,)
-        #raise # breaks *_secure pseudo sites
-        return
-    finally:
-        env.ROLE = os.environ[ROLE] = tmp_role
-    return module
+
+@task
+def info():
+    print 'ROLE:',env.ROLE
+    print 'SITE:',env.SITE
+    print 'default_site:',env.default_site
 
 @task
 def shell(gui=0, dryrun=0):
@@ -399,11 +456,13 @@ def djshell():
     #print cmd
     os.system(cmd)
 
-def iter_sites(sites=None, site=None, renderer=None, setter=None):
+def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=False):
     """
     Iterates over sites, safely setting environment variables for each site.
     """
-    assert sites or site, 'Either site or sites must be specified.'
+#    print 'site:',env.default_site
+#    print 'site:',env.SITE
+    #assert sites or site, 'Either site or sites must be specified.'
     if sites is None:
         site = site or env.SITE
         if site == ALL:
@@ -414,6 +473,8 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None):
     renderer = renderer or render_remote_paths
     env_default = save_env()
     for site, site_data in sites:
+        if no_secure and site.endswith('_secure'):
+            continue
         env.update(env_default)
         env.update(env.sites[site])
         env.SITE = site
@@ -438,5 +499,3 @@ def tunnel(local_port, remote_port):
     env.tunnel_local_port = local_port
     env.tunnel_remote_port = remote_port
     local(' ssh -i %(key_filename)s -L %(tunnel_local_port)s:localhost:%(tunnel_remote_port)s %(user)s@%(host_string)s -N' % env)
-    
-    

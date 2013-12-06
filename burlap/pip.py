@@ -26,6 +26,7 @@ from burlap.common import (
     ROLE,
     render_remote_paths,
     find_template,
+    QueuedCommand,
 )
 
 env.pip_build_directory = '/tmp/pip-build-root/pip'
@@ -45,7 +46,11 @@ env.pip_update_command = '%(pip_path_versioned)s install --use-mirrors --timeout
 env.pip_remote_cache_dir = '/tmp/pip_cache'
 env.pip_local_cache_dir_template = './.pip_cache/%(ROLE)s'
 env.pip_upgrade = ''
-env.pip_install_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install %(pip_upgrade_flag)s --build %(pip_build_dir)s --find-links file://%(pip_cache_dir)s --no-index %(pip_package)s; deactivate"
+env.pip_install_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install %(pip_no_deps)s %(pip_upgrade_flag)s --build %(pip_build_dir)s --find-links file://%(pip_cache_dir)s --no-index %(pip_package)s; deactivate"
+env.pip_uninstall_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s uninstall %(pip_package)s; deactivate"
+
+INSTALLED = 'installed'
+PENDING = 'pending'
 
 PIP = 'PIP'
 
@@ -109,7 +114,8 @@ def iter_pip_requirements():
             continue
         yield line
         
-def get_desired_package_versions():
+def get_desired_package_versions(preserve_order=False):
+    versions_lst = []
     versions = {}
     for line in open(find_template(env.pip_requirements_fn)).read().split('\n'):
         if not line.strip() or line.startswith('#'):
@@ -117,20 +123,29 @@ def get_desired_package_versions():
         #print line
         matches = re.findall('([a-zA-Z0-9\-_]+)[\=\<\>]{2}(.*)', line)
         if matches:
-            #print line,matches[0]
+            if matches[0][0] not in versions_lst:
+                versions_lst.append((matches[0][0], (matches[0][1], line)))
             versions[matches[0][0]] = (matches[0][1], line)
         else:
             matches = re.findall('([a-zA-Z\-]+)\-([0-9\.]+)(?:$|\.)', line)
             if matches:
+                if matches[0][0] not in versions_lst:
+                    versions_lst.append((matches[0][0], (matches[0][1], line)))
                 versions[matches[0][0]] = (matches[0][1], line)
             else:
+                if line not in versions_lst:
+                    versions_lst.append((line, ('current', line)))
                 versions[line] = ('current', line)
+    if preserve_order:
+        return versions_lst
     return versions
 
 @task
-def check():
+def check(return_type=PENDING):
     """
     Lists the packages that are missing or obsolete on the target.
+    
+    return_type := pending|installed
     """
     assert env[ROLE]
     
@@ -204,6 +219,9 @@ def check():
     else:
         print '-'*80
         print 'None are obsolete.'
+    
+    if return_type == INSTALLED:
+        return installed_package_versions
     return pending
 
 @task
@@ -255,7 +273,22 @@ def upgrade_pip():
     run(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade distribute" % env)
 
 @task
-def install(package='', clean=0, all=0, upgrade=1):
+def uninstall(package):
+    
+    render_remote_paths()
+    if env.pip_virtual_env_dir_template:
+        env.pip_virtual_env_dir = env.pip_virtual_env_dir_template % env
+    
+    env.pip_local_cache_dir = env.pip_local_cache_dir_template % env
+    
+    env.pip_package = package
+    if env.is_local:
+        run(env.pip_uninstall_command % env)
+    else:
+        sudo(env.pip_uninstall_command % env)
+    
+@task
+def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
     """
     Installs the local cache of pip packages.
     """
@@ -285,6 +318,10 @@ def install(package='', clean=0, all=0, upgrade=1):
     if int(upgrade):
         env.pip_upgrade_flag = ' -U '
     
+    env.pip_no_deps = ''
+    if int(no_deps):
+        env.pip_no_deps = '--no-deps'
+    
     if int(all):
         packages = list(iter_pip_requirements())
     elif package:
@@ -303,4 +340,60 @@ def install(package='', clean=0, all=0, upgrade=1):
     if not env.is_local:
         sudo('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
         sudo('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
-        
+
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    # Not really necessary, because pre-deployment, we'll just retrieve this
+    # list again, but it's nice to have a separate record to detect
+    # non-deployment changes to installed packages.
+    #data = check(return_type=INSTALLED)
+    
+    desired = get_desired_package_versions(preserve_order=True)
+    data = [[_n, _v, _raw] for _n, (_v, _raw) in desired]
+    
+    return data
+
+def compare_manifest(data=None):
+    """
+    Called before a deployment, given the data returned by record_manifest(),
+    for determining what, if any, tasks need to be run to make the target
+    server reflect the current settings within the current context.
+    """
+#    pending = check(return_type=PENDING)
+#    if pending:
+#        return [update, install]
+
+    pre = ['package']
+    update_methods = []
+    install_methods = []
+    uninstall_methods = []
+    old = data or []
+    
+    old_packages = set(tuple(_) for _ in old)
+    old_package_names = set(tuple(_[0]) for _ in old)
+    
+    new_packages_ordered = get_desired_package_versions(preserve_order=True)
+    new_packages = set((_n, _v, _raw) for _n, (_v, _raw) in new_packages_ordered)
+    new_package_names = set(_n for _n, (_v, _raw) in new_packages_ordered)
+    
+    #print 'new_package_names:',new_package_names
+    
+    added = [_ for _ in new_packages if _ not in old_packages]
+    #print 'added:',added
+    for _name, _version, _line in added:
+        update_methods.append(QueuedCommand('pip.update', kwargs=dict(package=_line), pre=pre))
+        install_methods.append(QueuedCommand('pip.install', kwargs=dict(package=_line), pre=pre))
+    
+    removed = [(_name, _version, _line) for _name, _version, _line in old_packages if _name not in new_package_names]
+    #print 'removed:',removed
+    for _name, _version, _line in removed:
+        uninstall_methods.append(QueuedCommand('pip.uninstall', kwargs=dict(package=_line), pre=pre))
+    
+    return update_methods + uninstall_methods + install_methods
+
+common.manifest_recorder[PIP] = record_manifest
+common.manifest_comparer[PIP] = compare_manifest

@@ -1,6 +1,7 @@
 import os
 import sys
 import datetime
+import hashlib
 
 from fabric.api import (
     env,
@@ -20,7 +21,9 @@ from burlap.common import (
     run,
     put,
     render_remote_paths,
+    QueuedCommand,
 )
+from burlap import common
 
 env.tarball_gzip = True
 env.tarball_exclusions = [
@@ -32,6 +35,8 @@ env.tarball_exclusions = [
 ]
 env.tarball_dir = '.tarball_cache'
 env.tarball_extra_dirs = []
+
+TARBALL = 'TARBALL'
 
 def get_tarball_path():
     env.tarball_gzip_flag = ''
@@ -103,4 +108,48 @@ def deploy(clean=0):
     sudo('chmod +x %(remote_app_src_package_dir)s/*' % env)
     sudo('chmod -R %(apache_chmod)s %(remote_app_src_package_dir)s' % env)
     sudo('chown -R %(apache_user)s:%(apache_group)s %(remote_app_dir)s' % env)
+
+@task
+def get_tarball_hash(fn=None, refresh=1, verbose=0):
+    """
+    Calculates the hash for the tarball.
+    """
+    get_tarball_path()
+    fn = fn or env.tarball_path
+    if int(refresh):
+        create()
+    # Note, gzip is almost deterministic, but it includes a timestamp in the
+    # first few bytes so we strip that off before taking the hash.
+    tarball_hash = hashlib.sha512(open(fn).read()[8:]).hexdigest()
+    if int(verbose):
+        print fn
+        print tarball_hash
+    return tarball_hash
+
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
     
+    # Record tarball hash.
+    data = {'tarball_hash': get_tarball_hash()}
+    
+    return data
+
+def compare_manifest(data=None):
+    """
+    Called before a deployment, given the data returned by record_manifest(),
+    for determining what, if any, tasks need to be run to make the target
+    server reflect the current settings within the current context.
+    """
+    data = data or {}
+    new_hash = get_tarball_hash()
+    print 'old:',data['tarball_hash']
+    print 'new:',new_hash
+    if data['tarball_hash'] != new_hash:
+        return [QueuedCommand('tarball.deploy', pre=['package', 'pip'])]
+
+common.manifest_recorder[TARBALL] = record_manifest
+common.manifest_comparer[TARBALL] = compare_manifest

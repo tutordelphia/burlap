@@ -16,6 +16,7 @@ from fabric.api import (
 )
 from fabric.contrib import files
 
+from burlap.dj import get_settings
 from burlap.common import (
     ALL,
     run,
@@ -248,7 +249,7 @@ def check_required():
 def set_apache_site_specifics(site):
     site_data = env.sites[site]
     
-    common.get_settings(site=site)
+    get_settings(site=site)
     
     # Set site specific values.
     env.apache_site = site
@@ -287,9 +288,8 @@ def configure(full=1, site=ALL, delete_old=0):
         sudo('rm -f %(apache_sites_enabled)s/*' % env)
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
-        #print '-'*80
-        print site
-        #continue
+        print '-'*80
+        print 'Site:',site
         
         print 'env.apache_ssl_domain:',env.apache_ssl_domain
         print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
@@ -306,7 +306,7 @@ def configure(full=1, site=ALL, delete_old=0):
         put(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True)
         
         sudo('a2ensite %(apache_site_conf)s' % env)
-    #return
+    
     if service.is_selected(APACHE2_MODEVASIVE):
         configure_modevasive()
         
@@ -384,12 +384,16 @@ def install_ssl(site=ALL, dryrun=0):
     apache_specifics = set_apache_specifics()
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
-        print site
+#        print 'site:',site
+#        continue
         
-        set_apache_site_specifics(site)
+        site_secure = site+'_secure'
+        if site_secure not in env.sites:
+            continue
+        set_apache_site_specifics(site_secure)
     
         sudo('mkdir -p %(apache_ssl_dir)s' % env)
-    
+        
         if env.apache_ssl:
             for cert_type, local_cert_file, remote_cert_file in iter_certificates():
                 print '='*80
@@ -494,3 +498,5 @@ common.service_configurators[APACHE2] = [
 
 # These tasks are run when the service.restart task is run.
 common.service_restarters[APACHE2] = [reload]
+#common.service_pre_deployers[APACHE2] = []
+common.service_post_deployers[APACHE2] = [reload]

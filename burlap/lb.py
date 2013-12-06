@@ -31,6 +31,8 @@ except ImportError:
 EC2 = 'ec2'
 
 env.lb_names = []
+env.lb_name = ''
+env.lb_type = '' # ec2
 
 @task
 def add():

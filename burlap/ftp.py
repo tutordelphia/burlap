@@ -118,7 +118,7 @@ def configure(site=None, full=0, dryrun=0):
 #    for site, site_data in common.iter_sites(site=site, renderer=render_paths):
 #        print '!'*80
 #        print site
-#        _settings = common.get_settings(site=site)
+#        _settings = get_settings(site=site)
 #        #print '_settings:',_settings
 #        if not _settings:
 #            continue

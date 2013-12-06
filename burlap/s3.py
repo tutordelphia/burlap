@@ -22,11 +22,11 @@ except ImportError:
 from fabric.contrib import files
 from fabric.tasks import Task
 
+from burlap.dj import get_settings
 from burlap import common
 from burlap.common import (
     #run,
     put,
-    get_settings,
     SITE,
     ROLE,
 )
@@ -125,7 +125,7 @@ def invalidate(*paths):
     if not paths:
         return
     # http://boto.readthedocs.org/en/latest/cloudfront_tut.html
-    _settings = common.get_settings()
+    _settings = get_settings()
     if not _settings.AWS_STATIC_BUCKET_NAME:
         print 'No static media bucket set.'
         return

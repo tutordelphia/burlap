@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+from collections import OrderedDict
 
 from fabric.api import (
     env,
@@ -15,10 +16,13 @@ from burlap import common
 from burlap.common import (
     get_packager, APT, YUM, ROLE, SITE, put,
     find_template,
+    QueuedCommand,
 )
 
 env.package_install_apt_extras = []
 env.package_install_yum_extras = []
+
+PACKAGER = 'PACKAGER'
 
 @task
 def prepare():
@@ -49,7 +53,7 @@ def install(*args, **kwargs):
 
 env.apt_fn = 'apt-requirements.txt'
 
-def install_apt(fn=None, update=0):
+def install_apt(fn=None, package_name=None, update=0, list_only=0):
     """
     Installs system packages listed in apt-requirements.txt.
     """
@@ -59,11 +63,14 @@ def install_apt(fn=None, update=0):
     if not env.apt_fqfn:
         return
     assert os.path.isfile(env.apt_fqfn)
-    fd, tmp_fn = tempfile.mkstemp()
     lines = [
-        _ for _ in open(env.apt_fqfn).readlines()
+        _.strip() for _ in open(env.apt_fqfn).readlines()
         if _.strip() and not _.strip().startswith('#')
+        and (not package_name or _.strip() == package_name)
     ]
+    if list_only:
+        return lines
+    fd, tmp_fn = tempfile.mkstemp()
     fout = open(tmp_fn, 'w')
     fout.write('\n'.join(lines))
     fout.close()
@@ -77,7 +84,7 @@ def install_apt(fn=None, update=0):
 
 env.yum_fn = 'yum-requirements.txt'
 
-def install_yum(fn=None, update=0):
+def install_yum(fn=None, package_name=None, update=0, list_only=0):
     """
     Installs system packages listed in yum-requirements.txt.
     """
@@ -86,15 +93,24 @@ def install_yum(fn=None, update=0):
     env.yum_fn = fn or find_template(env.yum_fn)
     assert os.path.isfile(env.yum_fn)
     update = int(update)
-    if env.is_local:
-        put(local_path=env.yum_fn)
-        env.yum_fn = env.put_remote_fn
+    if list_only:
+        return [
+            _.strip() for _ in open(env.yum_fn).readlines()
+            if _.strip() and not _.strip.startswith('#')
+            and (not package_name or _.strip() == package_name)
+        ]
     if update:
         sudo('yum update --assumeyes')
-    sudo('yum install --assumeyes $(cat %(yum_fn)s)' % env)
+    if package_name:
+        sudo('yum install --assumeyes %s' % package_name)
+    else:
+        if env.is_local:
+            put(local_path=env.yum_fn)
+            env.yum_fn = env.put_remote_fn
+        sudo('yum install --assumeyes $(cat %(yum_fn)s)' % env)
 
 @task
-def list_required(type=None, service=None):
+def list_required(type=None, service=None, verbose=True):
     """
     Displays all packages required by the current role
     based on the documented services provided.
@@ -103,7 +119,8 @@ def list_required(type=None, service=None):
     type = (type or '').lower().strip()
     assert not type or type in common.PACKAGE_TYPES, \
         'Unknown package type: %s' % (type,)
-    packages = set()
+    packages_set = set()
+    packages = []
     version = common.get_os_version()
     for _service in env.services:
         _service = _service.strip().upper()
@@ -119,12 +136,17 @@ def list_required(type=None, service=None):
         if not type or type == common.RUBY:
             _new.extend(common.required_ruby_packages.get(
                 _service, {}).get(version.distro, []))
-        if not _new:
+        if not _new and verbose:
             print>>sys.stderr, \
                 'Warning: no packages found for service "%s"' % (_service,)
-        packages.update(_new)
-    for package in sorted(packages):
-        print package
+        for _ in _new:
+            if _ in packages_set:
+                continue
+            packages_set.add(_)
+            packages.append(_)
+    if verbose:
+        for package in sorted(packages):
+            print package
     return packages
 
 @task
@@ -146,4 +168,61 @@ def install_required(type=None, service=None):
             install(fn=fn)
         else:
             raise NotImplementedError
-        
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = {}
+    data['system1'] = install(list_only=True)
+    data['system2'] = list_required(type=common.SYSTEM, verbose=False)
+    #TODO:link to the pip and ruby modules?
+#    data['python'] = list_required(type=common.PYTHON, verbose=False)
+#    data['ruby'] = list_required(type=common.RUBY, verbose=False)
+    return data
+
+def compare_manifest(data=None):
+    """
+    Called before a deployment, given the data returned by record_manifest(),
+    for determining what, if any, tasks need to be run to make the target
+    server reflect the current settings within the current context.
+    """
+    methods = []
+    old = data or {}
+    
+    old_system = old.get('system1', [])
+    new_system = install(list_only=True)
+    to_add_system1 = sorted(set(new_system).difference(old_system), key=lambda o: new_system.index(o))
+    print 'to_add_system1:',to_add_system1
+    
+    old_system = old.get('system2', [])
+    new_system = list_required(type=common.SYSTEM, verbose=False)
+    to_add_system2 = sorted(set(new_system).difference(old_system), key=lambda o: new_system.index(o))
+    print 'to_add_system2:',to_add_system2
+    
+    to_add_system = to_add_system1 + to_add_system2
+    for name in to_add_system:
+        methods.append(QueuedCommand('package.install', kwargs=dict(package_name=name)))
+    #print 'to_add_system:',to_add_system
+    
+    #TODO:link to the pip and ruby modules?
+#    old_python = old.get('python', [])
+#    new_python = list_required(type=common.PYTHON, verbose=False)
+#    to_add_python = sorted(set(new_python).difference(old_python), key=lambda o: new_python.index(o))
+#    for name in to_add_python:
+#        methods.append(QueuedCommand('pip.install', kwargs=dict(package=name)))
+    #print 'to_add_python:',to_add_python
+    
+#    old_ruby = old.get('ruby', [])
+#    new_ruby = list_required(type=common.RUBY, verbose=False)
+#    to_add_ruby = sorted(set(new_ruby).difference(old_ruby), key=lambda o: new_ruby.index(o))
+#    for name in to_add_ruby:
+#        raise NotImplementedError
+        #methods.append(QueuedCommand('ruby.install', (name,)))
+    #print 'to_add_ruby:',to_add_ruby
+    
+    return methods
+
+common.manifest_recorder[PACKAGER] = record_manifest
+common.manifest_comparer[PACKAGER] = compare_manifest
