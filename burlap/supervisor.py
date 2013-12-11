@@ -16,7 +16,7 @@ from fabric.api import (
 
 from fabric.contrib import files
 
-from burlap.common import run, put
+from burlap.common import run, put, QueuedCommand
 from burlap import common
 
 env.supervisor_config_path = '/etc/supervisord.conf'
@@ -178,8 +178,36 @@ def deploy_all_services(**kwargs):
     kwargs['site'] = common.ALL
     return deploy_services(**kwargs)
 
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = common.get_component_settings(SUPERVISOR)
+    return data
+
+def compare_manifest(old):
+    """
+    Compares the current settings to previous manifests and returns the methods
+    to be executed to make the target match current settings.
+    """
+    old = old or {}
+    methods = []
+    pre = ['user','packages','pip']
+    new = common.get_component_settings(SUPERVISOR)
+    has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
+    if has_diffs:
+        methods.append(QueuedCommand('supervisor.configure', pre=pre))
+        methods.append(QueuedCommand('supervisor.deploy_all_services', pre=pre))
+    return methods
+
 common.service_configurators[SUPERVISOR] = [configure]
 common.service_deployers[SUPERVISOR] = [deploy_all_services]
 common.service_restarters[SUPERVISOR] = [restart]
+common.service_stoppers[SUPERVISOR] = [stop]
 common.service_pre_deployers[SUPERVISOR] = [stop]
 common.service_post_deployers[SUPERVISOR] = [start]
+
+common.manifest_recorder[SUPERVISOR] = record_manifest
+common.manifest_comparer[SUPERVISOR] = compare_manifest

@@ -40,16 +40,30 @@ if __name__ == "__main__":
         type=str,
         dest='project_name',
         help='project name')
+    parser.add_argument(
+        '--pip-requirements',
+        type=str,
+        default='Django,Fabric',
+        dest='pip_requirements',
+        help='The default Python packages to install.')
+    parser.add_argument(
+        '--roles',
+        type=str,
+        default='dev,prod',
+        dest='roles',
+        help='The default roles to populate.')
     args = parser.parse_args()
 
     if args.action == SKEL:
         assert args.project_name, 'Specify project name.'
         site_name = args.project_name + '_site'
         
+        default_roles = [_ for _ in args.roles.split(',') if _.strip()]
+        
         print 'Creating folders...'
         md('roles/all')
-        md('roles/dev')
-        md('roles/prod')
+        for _role in default_roles:
+            md('roles/%s' % _role)
         md('src')
         md('media')
         md('static')
@@ -65,37 +79,85 @@ default_site: {site_name}
 # This the template used to retrieving your Django app settings.
 settings_module: '%(app_name)s.settings'
 '''.format(project_name=args.project_name, site_name=site_name))
-        open('roles/dev/settings.yaml', 'w')\
-            .write('''# Note, these settings will inherit everything in ../all/settings.yaml.
-# You can override by entering additional settings below.
+        for _role in default_roles:
+            open('roles/%s/settings.yaml' % _role, 'w')\
+                .write('''# Settings for {role}.
+inherits: all
 
-# Set this to the domain/IP of your dev server(s).
+# Set this to the domain/IP of your {role} server(s).
 # For now, let's assume we'll do most development locally...
 hosts: ['localhost']
 
 # This is the base directory where all files will be installed once deployed.
 # For development, we'll just make this the CWD.
 remote_app_dir_template: "."
-'''.format(project_name=args.project_name, site_name=site_name))
-        open('roles/prod/settings.yaml', 'w')\
-            .write('''# Note, these settings will inherit everything in ../all/settings.yaml.
-# You can override by entering additional settings below.
-
-# Set this to the domain/IP of your production server(s).
-hosts: ['?']
-'''.format(project_name=args.project_name, site_name=site_name))
-            
-        open('roles/all/pip-requirements.txt', 'w').write('Django')
+'''.format(project_name=args.project_name, site_name=site_name, role=_role))
         
-        if not os.path.isdir('src/%s' % site_name):
-            print 'Initializing base django project...'
-            os.system('django-admin.py startproject %s src' \
-                % (site_name,))
-        #sys.exit()
+        default_packages = args.pip_requirements.split(',')
+        
+        open('roles/all/pip-requirements.txt', 'w').write('\n'.join(default_packages))
+        
         content = open(fabfile_template, 'r').read()
         content = content.format(project_name=args.project_name)
+        open('fabfile.py', 'w').write(content)
         
-        print 'Creating helper scripts...'
+        print 'Initializing local development virtual environment...'
+        os.system('virtualenv --no-site-packages .env')
+        for package in default_packages:
+            os.system('. ./.env/bin/activate; pip install %s; deactivate' % package)
+        
+        print 'Initializing Django project...'
+        if not os.path.isdir('src/%s' % site_name):
+            print 'Initializing base django project...'
+            os.system('. ./.env/bin/activate; django-admin.py startproject %s src; deactivate' \
+                % (site_name,))
+            _settings_fn = 'src/%s_site/settings.py' % args.project_name
+            _content = open(_settings_fn, 'r').read()
+            _sites = '''SITE_{name_upper} = "{name_lower}"
+SITES = (
+    SITE_{name_upper},
+)
+'''.format(
+    name_upper=args.project_name.upper(),
+    name_lower=args.project_name.lower(),
+)
+            _top = []
+            for _role in default_roles:
+                _top.append("ROLE_%s = '%s'" % (_role.upper(), _role.lower()))
+            _top.append('ROLES = (')
+            for _role in default_roles:
+                _top.append("    ROLE_%s," % (_role.upper(),))
+            _top.append(')')
+            _index = _content.find('"""\n\n')+4
+            _bottom = '''
+PROJECT_DIR = os.path.abspath(os.path.join(os.path.split(__file__)[0], '..', '..'))
+
+STATIC_ROOT = os.path.join(PROJECT_DIR, 'static')
+
+MEDIA_ROOT = os.path.join(PROJECT_DIR, 'media')
+MEDIA_URL = '/media/'
+
+STATICFILES_FINDERS = (
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+)
+TEMPLATE_LOADERS = (
+    'django.template.loaders.filesystem.Loader',
+    'django.template.loaders.app_directories.Loader',
+)
+TEMPLATE_DIRS = (
+    '%s/src/{app_name}/templates' % PROJECT_DIR
+)
+ADMIN_TITLE = '{app_name_title}'
+ADMIN_TITLE_SIMPLE = '{app_name_simple}'
+
+'''.format(
+    app_name=args.project_name,
+    app_name_title=args.project_name.title() + ' Administration',
+    app_name_simple=args.project_name.title())
+            open(_settings_fn, 'w').write(_content[:_index]+_sites+('\n'.join(_top))+_content[_index:]+_bottom)
+
+        print 'Creating Django helper scripts...'
         open('src/manage', 'w').write('''#!/bin/bash
 # Helper script for ensuring we use the Python binary in our local
 # virtual environment when calling management commands.
@@ -123,19 +185,32 @@ fi
 # Creates a local PIP-aware shell.
 script_dir=`dirname $0`
 cd $script_dir
-/bin/bash -c ". ../.env/bin/activate; exec /bin/bash -i"''')
+. .env/bin/activate
+PS1="\u@\h:\W(fab)\$ "''')
+        open('shell', 'w').write('''#!/bin/bash
+# Creates a local PIP-aware shell.
+script_dir=`dirname $0`
+cd $script_dir
+. ../.env/bin/activate
+PS1="\u@\h:\W(virt)\$ "''')
+        open('.gitignore', 'w').write('''.env
+.project
+.pydevproject
+.settings
+.pip_cache
+.tarball_cache
+.manifests
+''')
+        os.system('chmod +x shell')
         os.system('chmod +x src/shell')
         os.system('chmod +x src/manage')
         os.system('chmod +x src/runserver')
-        
-        open('fabfile.py', 'w').write(content)
-        
-        print 'Initializing local development virtual environment...'
-        os.system('fab dev pip.update pip.install')
-        
+
         # Create the primary app for containing models/urls/views.
         if not os.path.isdir('src/%s' % args.project_name):
             os.system('cd src; ./manage startapp %s' % (args.project_name,))
+            
+        os.system('cd src; ./manage syncdb')
         
         print '='*80
         print

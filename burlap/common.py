@@ -5,6 +5,7 @@ import types
 import copy
 import tempfile
 import importlib
+import warnings
 from collections import namedtuple
 from StringIO import StringIO
 from fabric.api import (
@@ -82,11 +83,14 @@ env.services = []
 required_system_packages = type(env)() # {service:{os:[packages]}
 required_python_packages = type(env)() # {service:{os:[packages]}
 required_ruby_packages = type(env)() # {service:{os:[packages]}
-service_configurators = type(env)() # {service:{[func]}
-service_pre_deployers = type(env)() # {service:{[func]}
-service_deployers = type(env)() # {service:{[func]}
-service_post_deployers = type(env)() # {service:{[func]}
-service_restarters = type(env)() # {service:{[func]}
+
+service_configurators = type(env)() # {service:[func]}
+service_pre_deployers = type(env)() # {service:[func]}
+service_deployers = type(env)() # {service:[func]}
+service_post_deployers = type(env)() # {service:[func]}
+service_restarters = type(env)() # {service:[func]}
+service_stoppers = type(env)() # {service:[func]}
+
 manifest_recorder = type(env)() #{component:[func]}
 manifest_comparer = type(env)() #{component:[func]}
 
@@ -119,6 +123,45 @@ env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk 
 
 env.post_callbacks = []
 
+def get_component_settings(name):
+    """
+    Returns a subset of the env dictionary containing
+    only those keys with the name prefix.
+    """
+    name = name.lower().strip()
+    assert len(name), 'No name specified.'
+    data = {}
+    for k in env:
+        if k.startswith('%s_' % name):
+            data[k] = env[k]
+    return data
+
+def check_settings_for_differences(old, new, as_bool=False):
+    """
+    Returns a subset of the env dictionary keys that differ,
+    either being added, deleted or changed between old and new.
+    """
+    old = old or {}
+    new = new or {}
+    
+    changes = set(k for k in set(new.iterkeys()).intersection(old.iterkeys()) if new[k] != old[k])
+    if changes and as_bool:
+        return True
+    
+    added_keys = set(new.iterkeys()).difference(old.iterkeys())
+    if added_keys and as_bool:
+        return True
+    changes.update(added_keys)
+    
+    deled_keys = set(old.iterkeys()).difference(new.iterkeys())
+    if deled_keys and as_bool:
+        return True
+    if as_bool:
+        return False
+    changes.update(deled_keys)
+    
+    return changes
+
 class QueuedCommand(object):
     """
     Represents a fabric command that is pending execution.
@@ -146,16 +189,16 @@ class QueuedCommand(object):
             return parts[0]
     
     def __repr__(self):
-        kwargs = []
+        kwargs = list(map(str, self.args))
         for k,v in self.kwargs.iteritems():
-            if not v or isinstance(v, bool):
-                kwargs.append('%s' % k)
+            if isinstance(v, bool):
+                kwargs.append('%s=%i' % (k,int(v)))
             elif isinstance(v, basestring) and '=' in v:
                 # Escape equals sign character in parameter values.
                 kwargs.append('%s="%s"' % (k, v.replace('=', '\=')))
             else:
                 kwargs.append('%s=%s' % (k, v))
-        params = (self.name, ','.join(map(str, self.args)) + ','.join(kwargs))
+        params = (self.name, ','.join(kwargs))
         if params[1]:
             return ('%s:%s' % params).strip()
         else:
@@ -235,8 +278,11 @@ def save_env():
         env_default[k] = copy.deepcopy(v)
     return env_default
 
-from django.conf import settings as _settings
-_settings.configure(TEMPLATE_DIRS=env.template_dirs)
+try:
+    from django.conf import settings as _settings
+    _settings.configure(TEMPLATE_DIRS=env.template_dirs)
+except ImportError:
+    warnings.warn('Unable to import Django settings.', ImportWarning)
 
 def run(*args, **kwargs):
 #    if env.is_local:
@@ -338,26 +384,28 @@ def get_os_version():
     set_rc('common_os_version', common_os_version)
     return common_os_version
 
-def find_template(template):
+def find_template(template, verbose=True):
     final_fqfn = None
     for path in get_template_dirs():
         fqfn = os.path.abspath(os.path.join(path, template))
         if os.path.isfile(fqfn):
-            print>>sys.stderr, 'Using template: %s' % (fqfn,)
+            if verbose:
+                print>>sys.stderr, 'Using template: %s' % (fqfn,)
             final_fqfn = fqfn
             break
         else:
-            print>>sys.stderr, 'Template not found: %s' % (fqfn,)
+            if verbose:
+                print>>sys.stderr, 'Template not found: %s' % (fqfn,)
     return final_fqfn
 
-def render_to_string(template):
+def render_to_string(template, verbose=True):
     """
     Renders the given template to a string.
     """
     from django.template import Context, Template
     from django.template.loader import render_to_string
     
-    final_fqfn = find_template(template)
+    final_fqfn = find_template(template, verbose=verbose)
 #    for path in get_template_dirs():
 #        fqfn = os.path.abspath(os.path.join(path, template))
 #        if os.path.isfile(fqfn):
@@ -376,13 +424,13 @@ def render_to_string(template):
     rendered_content = rendered_content.replace('&quot;', '"')
     return rendered_content
 
-def render_to_file(template, fn=None):
+def render_to_file(template, fn=None, verbose=True):
     """
     Returns a template to a file.
     If no filename given, a temporary filename will be generated and returned.
     """
     import tempfile
-    content = render_to_string(template)
+    content = render_to_string(template, verbose=verbose)
     if fn:
         fout = open(fn, 'w')
     else:

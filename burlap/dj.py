@@ -30,7 +30,8 @@ env.django_manage = './manage'
 DJANGO = 'DJANGO'
 
 def iter_app_directories(ignore_import_error=False):
-    from django.utils.importlib import import_module
+    #from django.utils.importlib import import_module
+    from importlib import import_module
     settings = get_settings()
     for app in settings.INSTALLED_APPS:
         try:
@@ -175,7 +176,7 @@ def compare_manifest(data=None):
     current_south_apps = set(
         _n for _n, _ in iter_south_directories(ignore_import_error=True)
     )
-    old_apps = set(old['installed_apps'])
+    old_apps = set(old.get('installed_apps', []))
     syncdb = False
     for app_name in settings.INSTALLED_APPS:
         if app_name in current_south_apps:

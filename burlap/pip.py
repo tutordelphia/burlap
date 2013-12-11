@@ -367,7 +367,7 @@ def compare_manifest(data=None):
 #    if pending:
 #        return [update, install]
 
-    pre = ['package']
+    pre = ['package', 'user']
     update_methods = []
     install_methods = []
     uninstall_methods = []

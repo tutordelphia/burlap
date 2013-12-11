@@ -1,3 +1,10 @@
+"""
+Celery component.
+
+Note, we manage Celery through Supervisor, since it's extremely difficult to
+run several instances of Celery for multiple Apache sites.
+
+"""
 import os
 import re
 

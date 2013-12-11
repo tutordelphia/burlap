@@ -188,3 +188,15 @@ def create(name, config):
         _create_ec2_instance(name=name, group=env.vm_group)
     else:
         raise NotImplementedError
+
+@task
+def shutdown(force=False):
+    #virsh shutdown <name>
+    #virsh destroy <name> #to force
+    todo
+
+@task
+def reboot():
+    #virsh reboot <name>
+    todo
+    

@@ -16,7 +16,8 @@ from fabric.api import (
 
 from fabric.contrib import files
 from fabric.tasks import Task
-
+ 
+from burlap import common
 from burlap.common import (
     run,
     put,
@@ -25,6 +26,7 @@ from burlap.common import (
     render_remote_paths,
     render_to_file,
     find_template,
+    QueuedCommand,
 )
 
 env.ip_type = 'static' # |dynamic
@@ -38,6 +40,8 @@ env.ip_dns_nameservers = None
 env.ip_interfaces_fn = '/etc/network/interfaces'
 env.ip_network_restart_command = '/etc/init.d/networking restart'
 
+IP = 'IP'
+
 @task
 def static():
     """
@@ -49,3 +53,29 @@ def static():
     #sudo('ifdown %(ip_interface)s' % env)
     #sudo('ifup %(ip_interface)s' % env)
     sudo(env.ip_network_restart_command % env)
+
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = common.get_component_settings(IP)
+    return data
+
+def compare_manifest(old):
+    """
+    Compares the current settings to previous manifests and returns the methods
+    to be executed to make the target match current settings.
+    """
+    old = old or {}
+    methods = []
+    pre = ['user']
+    new = common.get_component_settings(IP)
+    has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
+    if has_diffs:
+        methods.append(QueuedCommand('ip.static', pre=pre))
+    return methods
+
+common.manifest_recorder[IP] = record_manifest
+common.manifest_comparer[IP] = compare_manifest

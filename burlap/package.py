@@ -175,8 +175,8 @@ def record_manifest():
     for a future deployment.
     """
     data = {}
-    data['system1'] = install(list_only=True)
-    data['system2'] = list_required(type=common.SYSTEM, verbose=False)
+    data['system1'] = install(list_only=True) or []
+    data['system2'] = list_required(type=common.SYSTEM, verbose=False) or []
     #TODO:link to the pip and ruby modules?
 #    data['python'] = list_required(type=common.PYTHON, verbose=False)
 #    data['ruby'] = list_required(type=common.RUBY, verbose=False)
@@ -189,21 +189,24 @@ def compare_manifest(data=None):
     server reflect the current settings within the current context.
     """
     methods = []
+    pre = ['user']
     old = data or {}
     
-    old_system = old.get('system1', [])
-    new_system = install(list_only=True)
+    old_system = old.get('system1', []) or []
+    #print 'old_system:',old_system
+    new_system = install(list_only=True) or []
+    #print 'new_system:',new_system
     to_add_system1 = sorted(set(new_system).difference(old_system), key=lambda o: new_system.index(o))
-    print 'to_add_system1:',to_add_system1
+    #print 'to_add_system1:',to_add_system1
     
     old_system = old.get('system2', [])
     new_system = list_required(type=common.SYSTEM, verbose=False)
     to_add_system2 = sorted(set(new_system).difference(old_system), key=lambda o: new_system.index(o))
-    print 'to_add_system2:',to_add_system2
+    #print 'to_add_system2:',to_add_system2
     
     to_add_system = to_add_system1 + to_add_system2
     for name in to_add_system:
-        methods.append(QueuedCommand('package.install', kwargs=dict(package_name=name)))
+        methods.append(QueuedCommand('package.install', kwargs=dict(package_name=name), pre=pre))
     #print 'to_add_system:',to_add_system
     
     #TODO:link to the pip and ruby modules?

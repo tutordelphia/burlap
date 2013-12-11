@@ -66,6 +66,6 @@ def compare_manifest(data=None):
     server reflect the current settings within the current context.
     """
 
-common.manifest_recorder[ALL.upper()] = record_manifest
-common.manifest_comparer[ALL.upper()] = compare_manifest
-
+#TODO:unnecessary?
+#common.manifest_recorder[ALL.upper()] = record_manifest
+#common.manifest_comparer[ALL.upper()] = compare_manifest

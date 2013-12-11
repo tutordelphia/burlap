@@ -17,7 +17,7 @@ from fabric.api import (
 
 from fabric.contrib import files
 
-from burlap.common import run, put
+from burlap.common import run, put, QueuedCommand
 from burlap import common
 
 #env.proftpd
@@ -141,6 +141,33 @@ def configure(site=None, full=0, dryrun=0):
 def configure_all(**kwargs):
     kwargs['site'] = common.ALL
     return configure(**kwargs)
+
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = common.get_component_settings(PROFTPD)
+    #data['iptables_rules_template_content'] = common.render_to_string(env.iptables_rules_template, verbose=False)
+    return data
+
+def compare_manifest(old):
+    """
+    Compares the current settings to previous manifests and returns the methods
+    to be executed to make the target match current settings.
+    """
+    old = old or {}
+    methods = []
+    pre = ['package']
+    new = record_manifest()
+    has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
+    if has_diffs:
+        methods.append(QueuedCommand('ftp.configure_all', pre=pre))
+    return methods
+
+common.manifest_recorder[PROFTPD] = record_manifest
+common.manifest_comparer[PROFTPD] = compare_manifest
 
 common.service_configurators[PROFTPD] = [configure_all]
 common.service_restarters[PROFTPD] = [restart]

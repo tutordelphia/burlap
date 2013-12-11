@@ -86,13 +86,16 @@ def compare(component=None):
     pending_methods = []
     component = (component or '').strip().upper()
     report = []
+    services = set(_.upper() for _ in env.services)
     print 'Checking components for changes:'
     for component_name, func in common.manifest_comparer.iteritems():
         component_name = component_name.upper()
         if component and component != component_name:
             continue
+        if component_name not in services:
+            continue
         #print 'component_name:',component_name
-        methods = func(data=manifest_data.get(component_name))
+        methods = func(manifest_data.get(component_name))
         if methods:
             msg = '%s %s' % (component_name.ljust(20), 'YES')
             pending_methods.extend(methods)

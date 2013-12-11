@@ -90,6 +90,16 @@ def restart():
             for func in funcs:
                 func()
 
+@task
+def stop():
+    for service in env.services:
+        service = service.strip().upper()
+        funcs = common.service_stoppers.get(service)
+        if funcs:
+            print 'Restarting service %s...' % (service,)
+            for func in funcs:
+                func()
+                
 def is_selected(name):
     name = name.strip().upper()
     for service in env.services:

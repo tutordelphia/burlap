@@ -17,6 +17,7 @@ from fabric.api import (
 from fabric.contrib import files
 from fabric.tasks import Task
 
+from burlap import common
 from burlap.common import (
     run,
     put,
@@ -25,6 +26,7 @@ from burlap.common import (
     render_remote_paths,
     render_to_file,
     find_template,
+    QueuedCommand,
 )
 
 env.user_tmp_sudoers_fn = '/tmp/sudoers'
@@ -33,6 +35,9 @@ env.user_key_type = 'rsa' # e.g. rsa|dsa
 env.user_key_bits = 2048 # e.g. 1024, 2048, or 4096
 env.user_key_filename = None
 env.user_home_template = '/home/%(user_username)s'
+env.user_passwordless = True
+
+USER = 'USER'
 
 @task
 def create(username):
@@ -100,4 +105,48 @@ def passwordless(username=None, pubkey=None):
     
     print 'You should now be able to login with:'
     print '\tssh -i %(user_pemkey)s %(user_username)s@%(host_string)s' % env
+
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = common.get_component_settings(USER)
+    data['user'] = env.user
+    return data
+
+def compare_manifest(old):
+    old = old or {}
+    methods = []
+    pre = []
     
+    # Handle SSH key specification change.
+    old_key = (old.get('user_key_type'), old.get('user_key_bits'), old.get('user_key_filename'))
+    new_key = (env.get('user_key_type'), env.get('user_key_bits'), env.get('user_key_filename'))
+    if old_key != new_key:
+        methods.append(QueuedCommand('user.generate_keys', pre=pre))
+    
+    # Handle username change.
+    force_togroups = False
+    force_passwordless = env.user_passwordless and old.get('user_passwordless') != env.user_passwordless
+    if old.get('user') != env.user:
+        force_togroups = True
+        force_passwordless = env.user_passwordless
+        methods.append(QueuedCommand('user.create', kwargs=dict(username=env.user), pre=pre))
+    
+    # Handle user group change.
+    if force_togroups or old.get('user_groups') != env.user_groups:
+        methods.append(QueuedCommand('user.togroups', kwargs=dict(user=env.user, groups=env.user_groups), pre=pre))
+    
+    # Handle switch to passwordless access.
+    #TODO:support different username used for creating passworless user?
+    if force_passwordless:
+        methods.append(QueuedCommand('user.passwordless', kwargs=dict(username=env.user, pubkey=env.key_filename), pre=pre))
+        
+    #TODO: Handle switch from passwordless access? Remove old SSH key from remote and local caches?
+    
+    return methods
+    
+common.manifest_recorder[USER] = record_manifest
+common.manifest_comparer[USER] = compare_manifest

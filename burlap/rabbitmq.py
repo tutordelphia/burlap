@@ -17,7 +17,7 @@ from fabric.api import (
 from fabric.contrib import files
 
 from burlap.dj import get_settings
-from burlap.common import run, put
+from burlap.common import run, put, QueuedCommand
 from burlap import common
 
 env.rabbitmq_host = "localhost"
@@ -173,8 +173,35 @@ def configure_all(**kwargs):
     kwargs['site'] = common.ALL
     return configure(**kwargs)
 
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = common.get_component_settings(RABBITMQ)
+    return data
+
+def compare_manifest(old):
+    """
+    Compares the current settings to previous manifests and returns the methods
+    to be executed to make the target match current settings.
+    """
+    old = old or {}
+    methods = []
+    pre = ['user','packages']
+    new = common.get_component_settings(RABBITMQ)
+    has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
+    if has_diffs:
+        methods.append(QueuedCommand('rabbitmq.configure_all', pre=pre))
+    return methods
+
 common.service_configurators[RABBITMQ] = [configure_all]
 #common.service_deployers[RABBITMQ] = [deploy]
 common.service_restarters[RABBITMQ] = [restart]
+common.service_stoppers[RABBITMQ] = [stop]
 common.service_pre_deployers[RABBITMQ] = [stop]
 common.service_post_deployers[RABBITMQ] = [start]
+
+common.manifest_recorder[RABBITMQ] = record_manifest
+common.manifest_comparer[RABBITMQ] = compare_manifest

@@ -33,6 +33,7 @@ from burlap.common import (
     WINDOWS,
     FEDORA,
     UBUNTU,
+    QueuedCommand,
 )
 from burlap import common
 
@@ -241,6 +242,13 @@ def restart():
     cmd = get_service_command(common.RESTART)
     print cmd
     sudo(cmd)
+
+@task
+def visitors():
+    """
+    Generates an Apache access report using the Visitors command line tool.
+    """
+    run('visitors -o text /var/log/apache2/%(apache_application_name)s-access.log* | less' % env)
 
 def check_required():
     for name in ['apache_application_name', 'apache_server_name']:
@@ -485,9 +493,41 @@ def sync_media(sync_set=None, dryrun=0):
                 local(cmd)
             sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
 
+@task
+def configure_all():
+    return configure(full=1, site=ALL, delete_old=1)
+
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = common.get_component_settings(APACHE2)
+    #TODO:hash media names and content
+    return data
+
+def compare_manifest(old):
+    """
+    Compares the current settings to previous manifests and returns the methods
+    to be executed to make the target match current settings.
+    """
+    old = old or {}
+    methods = []
+    pre = ['user','packages']
+    #TODO:sites and server conf
+    #TODO:basic auth
+    #TODO:ssl certs
+    #TODO:sync_media
+#    new = common.get_component_settings(CRON)
+#    has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
+#    if has_diffs:
+#        methods.append(QueuedCommand('cron.deploy_all'))
+    return methods
+
 # These tasks are run when the service.configure task is run.
 common.service_configurators[APACHE2] = [
-    lambda: configure(full=1, site=ALL, delete_old=1),
+    configure_all,
     lambda: install_auth_basic_user_file(site=ALL),
     lambda: install_ssl(site=ALL),
     sync_media,
@@ -498,5 +538,22 @@ common.service_configurators[APACHE2] = [
 
 # These tasks are run when the service.restart task is run.
 common.service_restarters[APACHE2] = [reload]
-#common.service_pre_deployers[APACHE2] = []
+common.service_stoppers[APACHE2] = [stop]
+
+# Apache doesn't strictly need to be stopped, as reload can cleanly reload all
+# configs without much noticable downtime.
+# A more legitmate concern is how allowing users to browse the site during
+# a deployment will effect other components, and how we want to avoid any
+# negative effects system-wide.
+# e.g. If Django ORM models have been changed but the migrations have not yet
+# run, we don't want any part of site accessible, since the user might
+# encounter errors due to a mismatch between the code and database schema or
+# submit bad data to the database. However, that case is a system-wide concern
+# so we'd want to ideally switch all Apache instances to maintenance mode,
+# showing a clean static "site is down for maintenance" message.
+common.service_pre_deployers[APACHE2] = []
+
 common.service_post_deployers[APACHE2] = [reload]
+
+common.manifest_recorder[APACHE2] = record_manifest
+common.manifest_comparer[APACHE2] = compare_manifest

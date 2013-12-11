@@ -27,6 +27,7 @@ from burlap.common import (
     render_remote_paths,
     SITE,
     ROLE,
+    QueuedCommand,
 )
 
 env.db_dump_fn = None
@@ -69,6 +70,7 @@ env.db_mysql_collate = 'utf8_general_ci'
 env.db_fixture_sets = {} # {name:[list of fixtures]}
 
 # Service names.
+DB = 'DB'
 MYSQL = 'MYSQL'
 MYSQLCLIENT = 'MYSQLCLIENT'
 POSTGRESQL = 'POSTGRESQL'
@@ -724,3 +726,33 @@ common.service_configurators[POSTGRESQL] = [configure]
 common.service_deployers[MYSQL] = [update]
 common.service_restarters[POSTGRESQL] = [restart]
 common.service_restarters[MYSQL] = [restart]
+
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = common.get_component_settings(DB)
+    #TODO:ignore all but the specific engine used
+    return data
+
+def compare_manifest(old):
+    """
+    Compares the current settings to previous manifests and returns the methods
+    to be executed to make the target match current settings.
+    """
+    old = old or {}
+    methods = []
+    pre = ['user', 'ip', 'package']
+    new = record_manifest()
+    has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
+    if has_diffs:
+        methods.append(QueuedCommand('db.configure', pre=pre))
+    return methods
+
+common.manifest_recorder[MYSQL] = record_manifest
+common.manifest_recorder[POSTGRESQL] = record_manifest
+
+common.manifest_comparer[MYSQL] = compare_manifest
+common.manifest_comparer[POSTGRESQL] = compare_manifest

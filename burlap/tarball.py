@@ -145,11 +145,12 @@ def compare_manifest(data=None):
     server reflect the current settings within the current context.
     """
     data = data or {}
+    pre = ['user', 'package', 'pip']
     new_hash = get_tarball_hash()
-    print 'old:',data['tarball_hash']
-    print 'new:',new_hash
-    if data['tarball_hash'] != new_hash:
-        return [QueuedCommand('tarball.deploy', pre=['package', 'pip'])]
+#    print 'old:',data.get('tarball_hash')
+#    print 'new:',new_hash
+    if data.get('tarball_hash') != new_hash:
+        return [QueuedCommand('tarball.deploy', pre=pre)]
 
 common.manifest_recorder[TARBALL] = record_manifest
 common.manifest_comparer[TARBALL] = compare_manifest

@@ -16,11 +16,12 @@ from fabric.api import (
 )
 from fabric.contrib import files
 
-from burlap.common import run, put, render_to_string
+from burlap.common import run, put, render_to_string, QueuedCommand
 from burlap import common
 
 env.iptables_enabled = True
 env.iptables_ssh_port = 22
+env.iptables_rules_template = 'iptables.template.rules'
 
 env.iptables_service_commands = {
     common.START:{
@@ -92,7 +93,7 @@ def configure():
     Configures rules for IPTables.
     """
     if env.iptables_enabled:
-        fn = common.render_to_file('iptables.template.rules')
+        fn = common.render_to_file(env.iptables_rules_template)
         put(local_path=fn)
         
         cmd = 'iptables-restore < %(put_remote_path)s; iptables-save > /etc/iptables.up.rules' % env
@@ -103,3 +104,30 @@ def configure():
     else:
         disable()
         stop()
+
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = common.get_component_settings(IPTABLES)
+    data['iptables_rules_template_content'] = common.render_to_string(env.iptables_rules_template, verbose=False)
+    return data
+
+def compare_manifest(old):
+    """
+    Compares the current settings to previous manifests and returns the methods
+    to be executed to make the target match current settings.
+    """
+    old = old or {}
+    methods = []
+    pre = ['ip']
+    new = record_manifest()
+    has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
+    if has_diffs:
+        methods.append(QueuedCommand('iptables.configure', pre=pre))
+    return methods
+
+common.manifest_recorder[IPTABLES] = record_manifest
+common.manifest_comparer[IPTABLES] = compare_manifest

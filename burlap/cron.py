@@ -18,6 +18,7 @@ from fabric.contrib import files
 
 from burlap.common import run, put
 from burlap import common
+from burlap.common import QueuedCommand
 
 env.cron_crontabs_available = type(env)() # {name:[cron lines]}
 
@@ -156,8 +157,35 @@ def deploy_all(**kwargs):
     kwargs['site'] = common.ALL
     return deploy(**kwargs)
 
+@task
+def record_manifest():
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = common.get_component_settings(CRON)
+    return data
+
+def compare_manifest(old):
+    """
+    Compares the current settings to previous manifests and returns the methods
+    to be executed to make the target match current settings.
+    """
+    old = old or {}
+    methods = []
+    pre = ['user','packages']
+    new = common.get_component_settings(CRON)
+    has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
+    if has_diffs:
+        methods.append(QueuedCommand('cron.deploy_all', pre=pre))
+    return methods
+
 #common.service_configurators[CRON] = [configure]
 common.service_deployers[CRON] = [deploy_all]
 common.service_restarters[CRON] = [restart]
+common.service_stoppers[CRON] = [stop]
 common.service_pre_deployers[CRON] = [stop]
 common.service_post_deployers[CRON] = [start]
+
+common.manifest_recorder[CRON] = record_manifest
+common.manifest_comparer[CRON] = compare_manifest
