@@ -240,10 +240,10 @@ def check_for_updates():
             max_lengths['package'] = max(max_lengths['package'], len(dep_name))
             max_lengths['most_recent_version'] = max(max_lengths['most_recent_version'], len(str(dep_current_version)))
             max_lengths['installed_version'] = max(max_lengths['installed_version'], len(str(dep_installed_version)))
-            spaced_lines.append((dep_name, dep_current_version, dep_installed_version))
+            spaced_lines.append((dep_name, dep_installed_version, dep_current_version))
         
         delimiter = ', '
-        columns = ['package', 'most_recent_version','installed_version']
+        columns = ['package', 'installed_version', 'most_recent_version']
         for column in columns:
             max_lengths[column] = max(max_lengths[column], len(column))
         print ''.join((_+('' if i+1==len(columns) else delimiter)).ljust(max_lengths[_]+2) for i,_ in enumerate(columns))

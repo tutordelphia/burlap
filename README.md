@@ -121,7 +121,9 @@ List all your Python packages in pip-requirements.txt and then run:
     
 This will download, but not install, all your packages into a local cache.
 We do this to prevent network latency or timeouts from interferring with our
-deployment.
+deployment. Few things are more frustrating then waiting for 50 packages to
+install, only for the 50th to fail and torpedo our entire deployment.
+
 Note, if you have multiple roles you're deploying to, you can update them all
 in parallel by running this command for each role in separate terminals.
 This can save quite a bit of time if you have many packages.
@@ -132,3 +134,28 @@ This can save quite a bit of time if you have many packages.
     
 This will rsync all your cached packages up to the host, create a virtual
 environment and install the packages.
+
+7. Check for package updates.
+
+Detecting updated packages is easy:
+
+    fab prod pip.check_for_updates
+
+example output:
+
+    Checking requirement 83 of 83... 
+    ===========================================================================
+    The following packages have updated versions available:
+    package,       installed_version, most_recent_version  
+    Django,        1.5.5,             1.6.2                
+    FeinCMS,       1.7.4,             1.9.3                
+    billiard,      3.3.0.13,          3.3.0.16             
+    celery,        3.1.1,             3.1.9                
+    django-celery, 3.1.1,             3.1.9                
+    kombu,         3.0.8,             3.0.12               
+    reportlab,     2.2,               3.0                  
+    ---------------------------------------------------------------------------
+    7 packages have updates
+
+Using this, you can review each package, determine which should be
+updated in your pip-requirements.txt and installed via pip.install.
