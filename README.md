@@ -1,4 +1,4 @@
-Burlap - Fabric commands for simplifying Django deployment
+Burlap - Fabric commands for simplifying Django deployments
 =============================================================================
 
 Overview
@@ -33,9 +33,9 @@ Although many modules in this package can be used for non-Django applications,
 it largely assumes a basic Django setup, and expects to find a Django settings
 module containing database credentials and static media lists.
 
-I designed this tool to manage server configurations involving multiple sites and roles.
-A single server can belong to only one of several roles (development, staging, production, etc.)
-hosting one or more sites (websites).
+I designed this tool to manage server configurations involving multiple sites
+and roles. A single server can belong to only one of several roles
+(development, staging, production, etc.) hosting one or more sites (websites).
 
 
 Installation
@@ -43,7 +43,7 @@ Installation
 
 Install the package via pip with:
 
-    pip install https://github.com/chrisspen/burlap/archive/master.zip
+    pip install burlap
 
 Usage
 -----
@@ -80,9 +80,11 @@ This will create a structure like:
 
 3. Prepare remote host for deployment.
 
-Allocate your production environment by setting up the physical server or creating a VPS.
+Allocate your production environment by setting up the physical server
+or creating a VPS.
 
-Populate your settings.yaml. At minimum it would have hosts, key_filename, and user.
+Populate your settings.yaml. At minimum it would have hosts, key_filename,
+and user.
 
     hosts: [myserver.mydomain.com]
     user: sys-user
@@ -92,9 +94,11 @@ If you need to generate pub/pem files for passwordless SSH access, run:
 
     fab prod user.generate_keys
     
-Ensure the filename of the *.pem file matches the key_filename in your settings.yaml.
+Ensure the filename of the *.pem file matches the key_filename in your
+settings.yaml.
 
-If you just created a fresh server and have password SSH access and need to configure passwordless access, run:
+If you just created a fresh server and have password SSH access and need
+to configure passwordless access, run:
 
     fab prod user.passwordless:username=<username>,pubkey=<path/to/yourdomain.pub>
 
@@ -102,7 +106,8 @@ Confirm you have passwordless access by running:
 
     fab prod shell
 
-If you have an active shell prompt on the remote host and weren't prompted for a password, you're ready to deploy.
+If you have an active shell prompt on the remote host and weren't prompted for
+a password, you're ready to deploy.
 
 4. Deploy your code.
 
@@ -114,12 +119,16 @@ List all your Python packages in pip-requirements.txt and then run:
 
     fab prod pip.update
     
-This will download, but not install, all your packages into a local cache. We do this to prevent network latency or timeouts from interferring with our deployment.
-Note, if you have multiple roles you're deploying to, you can update them all in parallel by running this command for each role in separate terminals.
+This will download, but not install, all your packages into a local cache.
+We do this to prevent network latency or timeouts from interferring with our
+deployment.
+Note, if you have multiple roles you're deploying to, you can update them all
+in parallel by running this command for each role in separate terminals.
 This can save quite a bit of time if you have many packages.
 
 6. Install packages.
 
     fab prod pip.install
     
-This will rsync all your cached packages up to the host, create a virtual environment and install the packages.
+This will rsync all your cached packages up to the host, create a virtual
+environment and install the packages.
