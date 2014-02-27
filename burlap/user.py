@@ -23,7 +23,6 @@ from burlap.common import (
     put,
     SITE,
     ROLE,
-    render_remote_paths,
     render_to_file,
     find_template,
     QueuedCommand,
@@ -67,7 +66,7 @@ def generate_keys():
     """
     env.user_key_filename = env.user_key_filename or env.key_filename
     assert env.user_key_filename, 'env.user_key_filename or env.key_filename must be set. e.g. roles/role/app_name-role.pem'
-    local('ssh-keygen -t %(user_key_type)s -b %(user_key_bits)s -f %(user_key_filename)s' % env)
+    local("ssh-keygen -t %(user_key_type)s -b %(user_key_bits)s -f %(user_key_filename)s -N ''" % env)
     if env.user_key_filename.endswith('.pem'):
         src = env.user_key_filename+'.pub'
         dst = (env.user_key_filename+'.pub').replace('.pem', '')

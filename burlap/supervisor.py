@@ -119,7 +119,6 @@ def status():
 
 def render_paths():
     from pip import render_paths as pip_render_paths
-    #common.render_remote_paths()
     pip_render_paths()
     env.supervisor_daemon_bin_path = env.supervisor_daemon_bin_path_template % env
     env.supervisor_bin_path = env.supervisor_bin_path_template % env

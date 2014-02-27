@@ -78,8 +78,8 @@ def install_apt(fn=None, package_name=None, update=0, list_only=0):
     if not env.is_local:
         put(local_path=tmp_fn)
         env.apt_fqfn = env.put_remote_path
-    if int(update):
-        sudo('apt-get update -y')
+#    if int(update):
+    sudo('apt-get update -y --fix-missing')
     sudo('apt-get install -y `cat "%(apt_fqfn)s" | tr "\\n" " "`' % env)
 
 env.yum_fn = 'yum-requirements.txt'
@@ -151,6 +151,9 @@ def list_required(type=None, service=None, verbose=True):
 
 @task
 def install_required(type=None, service=None):
+    """
+    Installs system packages listed as required by services this host uses.
+    """
     type = (type or '').lower().strip()
     assert not type or type in common.PACKAGE_TYPES, \
         'Unknown package type: %s' % (type,)

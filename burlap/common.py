@@ -6,8 +6,10 @@ import copy
 import tempfile
 import importlib
 import warnings
+import glob
 from collections import namedtuple
 from StringIO import StringIO
+from pprint import pprint
 from fabric.api import (
     env,
     local,
@@ -106,14 +108,6 @@ env.default_site = None
 #env.shell_default_dir_template = '/usr/local/%(app_name)s'
 env.shell_default_dir_template = '%(remote_app_src_package_dir)s'
 env.shell_interactive_shell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(shell_default_dir)s; /bin/bash -i'
-env.shell_interactive_djshell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(shell_default_dir)s; /bin/bash -i -c \"./manage shell;\"'
-
-# This is where your application's custom code will reside on the remote
-# server.
-env.remote_app_dir_template = '/usr/local/%(app_name)s'
-env.remote_app_src_dir_template = '%(remote_app_dir)s/%(src_dir)s'
-env.remote_app_src_package_dir_template = '%(remote_app_src_dir)s/%(app_name)s'
-env.remote_manage_dir_template = '%(remote_app_src_package_dir)s'
 
 # A list of all site names that should be available on the current host.
 env.available_sites = []
@@ -122,6 +116,22 @@ env.available_sites = []
 env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{ print $5 " " $1 }'"
 
 env.post_callbacks = []
+
+def pretty_bytes(bytes):
+    """
+    Scales a byte count to the largest scale with a small whole number
+    that's easier to read.
+    Returns a tuple of the format (scaled_float, unit_string).
+    """
+    if not bytes:
+        return bytes, 'bytes'
+    sign = bytes/float(bytes)
+    bytes = abs(bytes)
+    for x in ['bytes','KB','MB','GB','TB']:
+        if bytes < 1024.0:
+            #return "%3.1f %s" % (bytes, x)
+            return sign*bytes, x
+        bytes /= 1024.0
 
 def get_component_settings(name):
     """
@@ -136,11 +146,14 @@ def get_component_settings(name):
             data[k] = env[k]
     return data
 
-def check_settings_for_differences(old, new, as_bool=False):
+def check_settings_for_differences(old, new, as_bool=False, as_tri=False):
     """
     Returns a subset of the env dictionary keys that differ,
     either being added, deleted or changed between old and new.
     """
+    
+    assert not as_bool or not as_tri
+    
     old = old or {}
     new = new or {}
     
@@ -151,16 +164,218 @@ def check_settings_for_differences(old, new, as_bool=False):
     added_keys = set(new.iterkeys()).difference(old.iterkeys())
     if added_keys and as_bool:
         return True
-    changes.update(added_keys)
+    if not as_tri:
+        changes.update(added_keys)
     
     deled_keys = set(old.iterkeys()).difference(new.iterkeys())
     if deled_keys and as_bool:
         return True
     if as_bool:
         return False
-    changes.update(deled_keys)
+    if not as_tri:
+        changes.update(deled_keys)
+    
+    if as_tri:
+        return added_keys, changes, deled_keys
     
     return changes
+
+def get_subpackages(module):
+    dir = os.path.dirname(module.__file__)
+    def is_package(d):
+        d = os.path.join(dir, d)
+        return os.path.isdir(d) and glob.glob(os.path.join(d, '__init__.py*'))
+    return filter(is_package, os.listdir(dir))
+
+def get_submodules(module):
+    dir = os.path.dirname(module.__file__)
+    def is_module(d):
+        d = os.path.join(dir, d)
+        return os.path.isfile(d) and glob.glob(os.path.join(d, '*.py*'))
+    #print os.listdir(dir)
+    return filter(is_module, os.listdir(dir))
+
+def iter_apps():
+    sys.path.insert(0, os.getcwd())
+    arch = importlib.import_module('arch')
+    settings = importlib.import_module('arch.settings')
+    INSTALLED_APPS = set(settings.INSTALLED_APPS)
+    for sub_name in get_subpackages(arch):
+        if sub_name in INSTALLED_APPS:
+            yield sub_name
+
+def get_app_package(name):
+    sys.path.insert(0, os.getcwd())
+    arch = importlib.import_module('arch')
+    settings = importlib.import_module('arch.settings')
+    INSTALLED_APPS = set(settings.INSTALLED_APPS)
+    assert name in INSTALLED_APPS, 'Unknown or uninstalled app: %s' % (name,)
+    return importlib.import_module('arch.%s' % name)
+
+class Role(object):
+    
+    def __init__(self):
+        pass
+
+    @classmethod
+    def to_dict(cls):
+        return (cls.__name__,) #TODO:add vars
+
+class Meta(object):
+    
+    def __init__(self, **kwargs):
+        self.abstract = False
+        self.__dict__.update(kwargs)
+
+class MigratableMetaclass(type):
+    
+    def __new__(cls, clsname, bases, dct):
+#        print '-'*80
+#        print 'MigratableMetaclass:',cls, clsname, bases, dct
+        local_meta = dct.get('Meta')
+#        print 'local meta:',local_meta and local_meta.abstract
+        if local_meta:
+            dct['_meta'] = Meta(**local_meta.__dict__)
+        else:
+            dct['_meta'] = Meta(abstract=False)
+#        print '_meta:',dct['_meta'].abstract
+        return type.__new__(cls, clsname, bases, dct)
+
+class Migratable(object):
+    
+    __metaclass__ = MigratableMetaclass
+    
+    class Meta:
+        abstract = False
+    
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def to_dict(cls):
+        return {}
+    
+class BaseMigration(object):
+    
+    components = {}
+    
+    def __init__(self):
+        pass
+    
+    def forwards(self):
+        pass
+    
+    def backwards(self):
+        pass
+
+def to_dict(obj):
+    if isinstance(obj, (tuple, list)):
+        return [to_dict(_) for _ in obj]
+    elif isinstance(obj, dict):
+        return dict((to_dict(k), to_dict(v)) for k,v in obj.iteritems())
+    elif isinstance(obj, (int, bool, float, basestring)):
+        return obj
+    elif hasattr(obj, 'to_dict'):
+        return obj.to_dict()
+    else:
+        raise Exception, 'Unknown type: %s %s' % (obj, type(obj))
+
+class AppHandler(object):
+    
+    def __init__(self, name):
+        self.name = name
+        self.package = get_app_package(name)
+
+    @property
+    def base_dir(self):
+        return os.path.split(self.package.__file__)[0]
+
+    @property
+    def migrations_dir(self):
+        return os.path.join(self.base_dir, 'migrations')
+
+    def init_migrations(self):
+        migrations_dir = self.migrations_dir
+        if not os.path.isdir(migrations_dir):
+            os.makedirs(migrations_dir)
+        f = os.path.join(migrations_dir, '__init__.py')
+        if not os.path.isfile(f):
+            open(f, 'w').write('')
+
+    def get_migrations(self):
+        migrations = importlib.import_module('arch.%s.migrations' % (self.name,))
+        return get_submodules(migrations)
+
+    def to_dict(self, migratable):
+        d = {}
+        d['Meta'] = {} #TODO:load ._meta
+        for _name in dir(migratable):
+            if _name.startswith('__') or _name == 'Meta' or _name == '_meta':
+                continue
+            value = getattr(migratable, _name)
+            if callable(value):
+                continue
+            d[_name] = to_dict(value)
+        return d
+
+    def create_initial_migration(self):
+        template = [
+            '# -*- coding: utf-8 -*-',
+            'from burlap.common import BaseMigration',
+            '',
+            'class Migration(BaseMigration):',
+            '',
+            '    def forwards(self):',
+            '        pass',
+            '',
+            '    def backwards(self):',
+            '        pass',
+            '',
+        ]
+    
+#        print 'initial'
+#        print dir(self.package)
+        components = importlib.import_module('arch.%s.components' % self.name)
+        components_dict = {}
+        for _name in dir(components):
+            cls = getattr(components, _name)
+            try:
+                if issubclass(cls, Migratable):
+                    if cls._meta.abstract:
+                        continue
+#                    print cls
+#                    print dir(cls)
+#                    print 'dict:',self.to_dict(cls)
+                    components_dict[cls.__name__] = self.to_dict(cls)
+            except TypeError:
+                pass
+            
+        fout = StringIO()
+        pprint(components_dict, stream=fout, indent=4)
+            
+        template.extend([
+            '    components = {',
+            '\n'.join((' '*8)+_ for _ in fout.getvalue().split('\n')),
+            '    }',
+        ])
+        template_str = '\n'.join(template)
+        print template_str
+
+    def create_migration(self, initial=False):
+        self.init_migrations()
+        migrations = self.get_migrations()
+        if initial:
+            if migrations:
+                raise Exception, 'Unable to create initial migration because migrations already exist.'
+            self.create_initial_migration()
+        elif migrations:
+            # Compare last migration state to current state.
+            todo
+        else:
+            raise Exception, 'No existing migrations. Run with --initial to create first migration.'
+        
+    def migrate(self):
+        todo
 
 class QueuedCommand(object):
     """
@@ -242,19 +457,6 @@ class QueuedCommand(object):
     def __call__(self):
         raise NotImplementedError
 
-def render_remote_paths():
-    env.remote_app_dir = env.remote_app_dir_template % env
-    env.remote_app_src_dir = env.remote_app_src_dir_template % env
-    env.remote_app_src_package_dir = env.remote_app_src_package_dir_template % env
-    if env.is_local:
-        if env.remote_app_dir.startswith('./'):
-            env.remote_app_dir = os.path.abspath(env.remote_app_dir)
-        if env.remote_app_src_dir.startswith('./'):
-            env.remote_app_src_dir = os.path.abspath(env.remote_app_src_dir)
-        if env.remote_app_src_package_dir.startswith('./'):
-            env.remote_app_src_package_dir = os.path.abspath(env.remote_app_src_package_dir)
-    env.remote_manage_dir = env.remote_manage_dir_template % env
-
 def get_template_dirs():
     yield os.path.join(env.ROLES_DIR, env[ROLE], 'templates')
     yield os.path.join(env.ROLES_DIR, env[ROLE])
@@ -273,8 +475,9 @@ def save_env():
     for k, v in env.iteritems():
         if k.startswith('_'):
             continue
-        elif isinstance(v, (types.GeneratorType,)):
+        elif isinstance(v, (types.GeneratorType, types.ModuleType)):
             continue
+        #print type(k),type(v)
         env_default[k] = copy.deepcopy(v)
     return env_default
 
@@ -384,7 +587,7 @@ def get_os_version():
     set_rc('common_os_version', common_os_version)
     return common_os_version
 
-def find_template(template, verbose=True):
+def find_template(template, verbose=False):
     final_fqfn = None
     for path in get_template_dirs():
         fqfn = os.path.abspath(os.path.join(path, template))
@@ -467,6 +670,7 @@ def shell(gui=0, dryrun=0):
     """
     Opens a UNIX shell.
     """
+    from dj import render_remote_paths
     render_remote_paths()
     print 'env.remote_app_dir:',env.remote_app_dir
     env.SITE = env.SITE or env.default_site
@@ -486,28 +690,11 @@ def shell(gui=0, dryrun=0):
         return
     os.system(cmd)
 
-@task
-def djshell():
-    """
-    Opens a Django shell.
-    """
-    if '@' in env.host_string:
-        env.shell_host_string = env.host_string
-    else:
-        env.shell_host_string = '%(user)s@%(host_string)s' % env
-    env.shell_default_dir = env.shell_default_dir_template % env
-    env.shell_interactive_djshell_str = env.shell_interactive_djshell % env
-    if env.is_local:
-        cmd = '%(shell_interactive_djshell_str)s' % env
-    else:
-        cmd = 'ssh -t -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_djshell_str)s"' % env
-    #print cmd
-    os.system(cmd)
-
 def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=False):
     """
     Iterates over sites, safely setting environment variables for each site.
     """
+    from dj import render_remote_paths
 #    print 'site:',env.default_site
 #    print 'site:',env.SITE
     #assert sites or site, 'Either site or sites must be specified.'

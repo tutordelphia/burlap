@@ -18,9 +18,45 @@ from fabric.api import (
     cd,
     task,
 )
+from fabric.tasks import Task
 
 from burlap import common
 from burlap.common import DJANGO, ALL
+
+#class MyTask(Task):
+#    name = "testtask"
+#    def run(self, environment, domain="whatever.com"):
+##        run("git clone foo")
+##        sudo("service apache2 restart")
+#        pass
+#
+#class Component(object):
+#    
+#    def __init__(self):
+#        import inspect
+#        
+#        self.tasks = []
+#        self.tasks.append(MyTask())
+#        
+#        stack = inspect.stack()
+#        fab_frame = None
+#        for frame_obj, script_fn, line, _, _, _ in stack:
+#            print 'settings.fab_frame.script:',script_fn,__file__,__file__ in script_fn
+#            if script_fn in __file__:
+#                fab_frame = frame_obj
+#                break
+#        print 'settings.fab_frame:',fab_frame
+#        if not fab_frame:
+#            return
+#        locals_ = fab_frame.f_locals
+#        for task in self.tasks:
+#            locals_[task.name] = task
+#    
+#    @task
+#    def anothertask(self):
+#        todo
+#
+#Component()
 
 @task
 def list(keyword=''):

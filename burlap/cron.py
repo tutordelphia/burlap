@@ -102,9 +102,10 @@ def disable():
 
 @task
 def start():
-    cmd = get_service_command(common.START)
-    print cmd
-    sudo(cmd)
+    with settings(warn_only=True):
+        cmd = get_service_command(common.START)
+        print cmd
+        sudo(cmd)
 
 @task
 def stop():

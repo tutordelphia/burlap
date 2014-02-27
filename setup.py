@@ -5,7 +5,7 @@ import os
 
 setup(
     name = "burlap",
-    version = '0.1.1',
+    version = '0.1.2',
     packages = find_packages(),
     scripts = ['bin/burlap'],
     package_data = {
@@ -26,5 +26,5 @@ setup(
         'Programming Language :: Python',
         'Framework :: Django',
     ],
-    install_requires = ['fabric'],
+    install_requires = ['fabric', 'pyyaml'],
 )

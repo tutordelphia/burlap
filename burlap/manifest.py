@@ -68,6 +68,7 @@ def record():
         manifest_data[component_name] = func()
     if not common.manifest_recorder:
         print 'No manifest recorders.'
+    manifest_data['manifest_creation_timestamp'] = datetime.now()
     yaml.dump(manifest_data, open(manifest_fqfn, 'w'))
     print 'Wrote %s.' % (manifest_fqfn,)
 
@@ -87,12 +88,20 @@ def compare(component=None):
     component = (component or '').strip().upper()
     report = []
     services = set(_.upper() for _ in env.services)
+    
+    valid_component_names = set(component_name.strip().upper() for component_name in common.manifest_comparer.iterkeys())
+    if component and component not in valid_component_names:
+        raise Exception, 'Invalid component "%s". Must be one of %s.' % (component, ', '.join(sorted(valid_component_names)))
+    
     print 'Checking components for changes:'
     for component_name, func in common.manifest_comparer.iteritems():
         component_name = component_name.upper()
+        #print 'component_name:',component_name
         if component and component != component_name:
+            #print 'skipping 1'
             continue
         if component_name not in services:
+            #print 'skipping 2'
             continue
         #print 'component_name:',component_name
         methods = func(manifest_data.get(component_name))
@@ -119,6 +128,14 @@ def compare(component=None):
     else:
         print '-'*80
         print 'No changes detected.'
+
+@task
+def extract(component=None, dryrun=1):
+    """
+    Attempts to read or deduce the settings of the host.
+    """
+    todo
+
 @task
 def deploy():
     """

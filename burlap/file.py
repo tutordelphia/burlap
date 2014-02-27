@@ -22,7 +22,6 @@ except ImportError:
 from fabric.contrib import files
 from fabric.tasks import Task
 
-from burlap.dj import get_settings
 from burlap import common
 from burlap.common import (
     #run,

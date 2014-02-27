@@ -1,6 +1,8 @@
 import os
+import sys
 import re
 import tempfile
+from collections import defaultdict
 
 from fabric.api import (
     env,
@@ -13,6 +15,8 @@ from fabric.api import (
     sudo,
     cd,
     task,
+    runs_once,
+    execute,
 )
 
 from fabric.contrib import files
@@ -24,10 +28,10 @@ from burlap.common import (
     put,
     SITE,
     ROLE,
-    render_remote_paths,
     find_template,
     QueuedCommand,
 )
+from burlap import versioner
 
 env.pip_build_directory = '/tmp/pip-build-root/pip'
 env.pip_user = 'www-data'
@@ -60,6 +64,7 @@ common.required_system_packages[PIP] = {
 }
 
 def render_paths():
+    from burlap.dj import render_remote_paths
     env.pip_path_versioned = env.pip_path % env
     render_remote_paths()
     if env.pip_virtual_env_dir_template:
@@ -112,12 +117,15 @@ def iter_pip_requirements():
         line = line.strip()
         if not line or line.startswith('#'):
             continue
-        yield line
-        
+        yield line.split('#')[0]
+
 def get_desired_package_versions(preserve_order=False):
     versions_lst = []
     versions = {}
     for line in open(find_template(env.pip_requirements_fn)).read().split('\n'):
+        line = line or ''
+        if '#' in line:
+            line = line.split('#')[0].strip()
         if not line.strip() or line.startswith('#'):
             continue
         #print line
@@ -127,7 +135,7 @@ def get_desired_package_versions(preserve_order=False):
                 versions_lst.append((matches[0][0], (matches[0][1], line)))
             versions[matches[0][0]] = (matches[0][1], line)
         else:
-            matches = re.findall('([a-zA-Z\-]+)\-([0-9\.]+)(?:$|\.)', line)
+            matches = re.findall('([a-zA-Z0-9\-]+)\-([0-9\.]+)(?:$|\.)', line)
             if matches:
                 if matches[0][0] not in versions_lst:
                     versions_lst.append((matches[0][0], (matches[0][1], line)))
@@ -139,6 +147,120 @@ def get_desired_package_versions(preserve_order=False):
     if preserve_order:
         return versions_lst
     return versions
+
+@task
+@runs_once
+def check_report():
+    """
+    Runs check() on all hosts and reports the results.
+    """
+    execute(check)
+
+    #report here
+    todo
+    pass
+
+GITHUB_TO_PIP_NAME_PATTERN = re.compile('^.*github.com/[^/]+/(?P<name>[^/]+)/[^/]+/(?P<tag>[^/]+)/?')
+
+@task
+def check_for_updates():
+    """
+    Determines which packages have a newer version available.
+    """
+    stale_lines = []
+    lines = list(iter_pip_requirements())
+    total = len(lines)
+    i = 0
+    for line in lines:
+        i += 1
+        print '\rChecking requirement %i of %i...' % (i, total),
+        sys.stdout.flush()
+        #if i > 5:break#TODO:remove
+        
+        # Extract the dependency data from the pip-requirements.txt line.
+        # e.g.
+        #type,name,uri,version,rss_field,rss_regex
+        #pip,Django,Django,1.4,,
+        parts = line.split('==')
+        if len(parts) == 2:
+            dep_type = versioner.PIP
+            name = uri = parts[0]
+            version = parts[1]
+#            continue#TODO:remove
+        elif 'github' in line.lower():
+            dep_type = versioner.GITHUB_TAG
+            matches = GITHUB_TO_PIP_NAME_PATTERN.findall(line)
+            assert matches, 'No github tag matches for line: %s' % line
+            name = matches[0][0]
+            uri = line
+            tag_name = matches[0][1]
+            version = tag_name.replace(name, '')[1:]
+            if version.endswith('.zip'):
+                version = version.replace('.zip', '')
+            if version.endswith('.tar.gz'):
+                version = version.replace('.tar.gz', '')
+#            print
+#            print 'name:',name
+#            print 'uri:',uri
+#            print 'tag_name:',tag_name
+#            print 'version:',version
+        else:
+            raise NotImplementedError, 'Unhandled line: %s' % line
+        
+        # Create the dependency.
+        dep = versioner.Dependency(
+            type=dep_type,
+            name=name,
+            uri=uri,
+            version=version,
+            rss_field=None,
+            rss_regex=None,
+        )
+#        if dep_type == versioner.GITHUB_TAG:
+#            print 'current version:',dep.get_current_version()
+#            raw_input('enter')
+        try:
+            if dep.is_stale():
+                stale_lines.append(dep)
+        except Exception, e:
+            print
+            print 'Error checking line %s: %s' % (line, e)
+            raise
+            
+    print
+    print '='*80
+    if stale_lines:
+        print 'The following packages have updated versions available:'
+        spaced_lines = []
+        max_lengths = defaultdict(int)
+        for dep in sorted(stale_lines, key=lambda _:_.name):
+            dep_name = dep.name
+            dep_current_version = dep.get_current_version()
+            dep_installed_version = dep.version
+            max_lengths['package'] = max(max_lengths['package'], len(dep_name))
+            max_lengths['most_recent_version'] = max(max_lengths['most_recent_version'], len(str(dep_current_version)))
+            max_lengths['installed_version'] = max(max_lengths['installed_version'], len(str(dep_installed_version)))
+            spaced_lines.append((dep_name, dep_current_version, dep_installed_version))
+        
+        delimiter = ', '
+        columns = ['package', 'most_recent_version','installed_version']
+        for column in columns:
+            max_lengths[column] = max(max_lengths[column], len(column))
+        print ''.join((_+('' if i+1==len(columns) else delimiter)).ljust(max_lengths[_]+2) for i,_ in enumerate(columns))
+        for dep in sorted(spaced_lines):
+            last = i+1 == len(columns)
+            line_data = dict(zip(columns, dep))
+            print ''.join((line_data[_]+('' if i+1==len(columns) else delimiter)).ljust(max_lengths[_]+2) for i,_ in enumerate(columns))
+    print '-'*80
+    print '%i packages have updates' % (len(stale_lines),)
+
+@task
+def validate_requirements():
+    """
+    Ensures all package dependencies are included in our pip-requirements.txt
+    file and that they're in the appropriate order.
+    """
+    todo
 
 @task
 def check(return_type=PENDING):
@@ -166,9 +288,13 @@ def check(return_type=PENDING):
     installed_package_versions = {}
     for line in result.split('\n'):
         line = line.strip()
+        if '#' in line:
+            line = line.split('#')[0].strip()
         if not line:
             continue
-        if ' ' in line:
+        elif line.startswith('#'):
+            continue
+        elif ' ' in line:
             continue
         k, v = line.split('==')
         if not k.strip() or not v.strip():
@@ -266,6 +392,7 @@ def update(package='', ignore_errors=0, no_deps=0, all=0):
 
 @task
 def upgrade_pip():
+    from burlap.dj import render_remote_paths
     render_remote_paths()
     if env.pip_virtual_env_dir_template:
         env.pip_virtual_env_dir = env.pip_virtual_env_dir_template % env
@@ -274,6 +401,7 @@ def upgrade_pip():
 
 @task
 def uninstall(package):
+    from burlap.dj import render_remote_paths
     
     render_remote_paths()
     if env.pip_virtual_env_dir_template:
@@ -292,6 +420,7 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
     """
     Installs the local cache of pip packages.
     """
+    from burlap.dj import render_remote_paths
     print 'Installing pip requirements...'
     assert env[ROLE]
     require('is_local')

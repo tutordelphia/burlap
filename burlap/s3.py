@@ -22,7 +22,6 @@ except ImportError:
 from fabric.contrib import files
 from fabric.tasks import Task
 
-from burlap.dj import get_settings
 from burlap import common
 from burlap.common import (
     #run,
@@ -55,6 +54,7 @@ def sync(sync_set, dryrun=0, auto_invalidate=True):
     
     Requires the s3sync gem: sudo gem install s3sync
     """
+    from burlap.dj import get_settings, render_remote_paths
     env.dryrun = int(dryrun)
     _settings = get_settings()
     for k in _settings.__dict__.iterkeys():
@@ -64,7 +64,7 @@ def sync(sync_set, dryrun=0, auto_invalidate=True):
     #local('which s3sync')
     #print 'AWS_STATIC_BUCKET_NAME:',_settings.AWS_STATIC_BUCKET_NAME
     
-    common.render_remote_paths()
+    render_remote_paths()
     
     site_data = env.sites[env.SITE]
     env.update(site_data)
@@ -122,6 +122,7 @@ def invalidate(*paths):
     
     Note, only 1000 paths can be issued in a request at any one time.
     """
+    from burlap.dj import get_settings
     if not paths:
         return
     # http://boto.readthedocs.org/en/latest/cloudfront_tut.html

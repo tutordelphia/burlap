@@ -20,7 +20,6 @@ from fabric.contrib import files
 from burlap.common import (
     run,
     put,
-    render_remote_paths,
     QueuedCommand,
 )
 from burlap import common
@@ -150,7 +149,10 @@ def compare_manifest(data=None):
 #    print 'old:',data.get('tarball_hash')
 #    print 'new:',new_hash
     if data.get('tarball_hash') != new_hash:
-        return [QueuedCommand('tarball.deploy', pre=pre)]
+        return [
+            QueuedCommand('tarball.create', pre=pre),
+            QueuedCommand('tarball.deploy', pre=pre),
+        ]
 
 common.manifest_recorder[TARBALL] = record_manifest
 common.manifest_comparer[TARBALL] = compare_manifest

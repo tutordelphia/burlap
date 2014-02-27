@@ -23,7 +23,6 @@ from burlap.common import (
     put,
     SITE,
     ROLE,
-    render_remote_paths,
     render_to_file,
     find_template,
     QueuedCommand,

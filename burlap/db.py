@@ -11,6 +11,7 @@ from fabric.api import (
     put as _put,
     require,
     run,
+    execute,
     settings,
     sudo,
     cd,
@@ -18,22 +19,25 @@ from fabric.api import (
 )
 from fabric.contrib import files
 
-from burlap.dj import get_settings
 from burlap import common
 from burlap.common import (
     run,
     put,
     set_site,
-    render_remote_paths,
     SITE,
     ROLE,
+    ALL,
     QueuedCommand,
+    Migratable,
 )
 
 env.db_dump_fn = None
 
 # This overrides the built-in load command.
 env.db_dump_command = None
+
+env.db_engine = None # postgres|mysql
+env.db_engine_subtype = None # amazon_rds
 
 # This overrides the built-in dump command.
 env.db_load_command = None
@@ -50,9 +54,11 @@ env.db_root_user = 'root'
 # share the same server.
 env.db_allow_remote_connections = False
 
-env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s | gzip -c > %(db_dump_fn)s'
+#env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s | gzip -c > %(db_dump_fn)s'
+env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s > %(db_dump_fn)s'
 env.db_postgresql_createlangs = ['plpgsql'] # plpythonu
 env.db_postgresql_postgres_user = 'postgres'
+env.db_postgresql_encoding = 'UTF8'
 
 # You want this to be large, and set in both the client and server.
 # Otherwise, MySQL may silently truncate database dumps, leading to much
@@ -72,8 +78,10 @@ env.db_fixture_sets = {} # {name:[list of fixtures]}
 # Service names.
 DB = 'DB'
 MYSQL = 'MYSQL'
+MYSQL = 'MYSQLGIS'
 MYSQLCLIENT = 'MYSQLCLIENT'
 POSTGRESQL = 'POSTGRESQL'
+POSTGIS = 'POSTGIS'
 POSTGRESQLCLIENT = 'POSTGRESQLCLIENT'
 
 common.required_system_packages[MYSQL] = {
@@ -90,43 +98,106 @@ common.required_system_packages[MYSQLCLIENT] = {
 }
 common.required_system_packages[POSTGRESQLCLIENT] = {
     common.FEDORA: ['postgresql-client'],
-    common.UBUNTU: ['postgresql-client-9.1', 'python-psycopg2', 'postgresql-server-dev-9.1'],
+    common.UBUNTU: [
+        'postgresql-client-9.1',
+        #'python-psycopg2',#install from pip instead
+        'postgresql-server-dev-9.1',
+    ],
 }
 
-def set_db(name=None, site=None, role=None):
-    name = name or 'default'
-#    print '!'*80
-#    print 'set_db.site:',site
-#    print 'set_db.role:',role
-    settings = get_settings(site=site, role=role)
-#    print 'settings:',settings
-#    print 'databases:',settings.DATABASES
-    default_db = settings.DATABASES[name]
-    env.db_name = default_db['NAME']
-    env.db_user = default_db['USER']
-    env.db_host = default_db['HOST']
-    env.db_password = default_db['PASSWORD']
-    env.db_engine = default_db['ENGINE']
+UTF8 = 'UTF8'
 
-def set_collation_mysql(dryrun=0):
+class Database(Migratable):
+    
+    # True means we're responsible for created and deleting it.
+    # False means it exists outside of our realm and we're just tenants.
+    managed = True
+    
+    users = []
+    
+    owner = None
+    
+    encoding = UTF8
+    
+    # postgresql/mysql
+    engine = None
+    
+    class Meta:
+        abstract = True
+    
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def create(self):
+        args = dict(
+            name=self.name,
+            owner=self.owner,
+            encoding=self.encoding,
+        )
+        if self.engine in (POSTGRESQL, POSTGIS):
+            cmd = "CREATE DATABASE {name} WITH {owner} ENCODING {encoding};".format(**args)
+        elif self.engine in (MYSQL,):
+            raise NotImplementedError
+        else:
+            raise NotImplementedError
+            
+class User(Migratable):
+    
+    username = None
+    
+    password = None
+    
+    class Meta:
+        abstract = True
+        
+    def __init__(self, *args, **kwargs):
+        pass
+    
+    def create(self, db):
+        args = dict(
+            username=self.username,
+            password=self.password,
+        )
+        if db.engine in (POSTGRESQL,):
+            cmd = "CREATE USER {username} PASSWORD '{password}';".format(**args)
+        elif db.engine in (MYSQL,):
+            raise NotImplementedError
+        else:
+            raise NotImplementedError
+
+def set_collation_mysql(name=None, site=None, dryrun=0):
+    from burlap.dj import set_db
+    set_db(name=name, site=site)
     cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
         "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
     print cmd
     if not int(dryrun):
         run(cmd)
 
+def set_collation_mysql_all(name=None, site=None, dryrun=0):
+    for site in env.available_sites:
+        set_collation_mysql(name=name, site=site, dryrun=dryrun)
+
 @task
 def configure(name=None, site=None, _role=None, dryrun=0):
     """
     Configures a fresh install of the database
     """
+    from burlap.dj import set_db
     assert env[ROLE]
     require('app_name')
     set_db(name=name, site=site, role=_role)
 #    print 'site:',env[SITE]
 #    print 'role:',env[ROLE]
     env.dryrun = int(dryrun)
-    if 'postgres' in env.db_engine:
+    if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
+        #TODO:set postgres user password?
+        #https://help.ubuntu.com/community/PostgreSQL
+        #set postgres ident in pg_hba.conf
+        #sudo -u postgres psql postgres
+        #sudo service postgresql restart
+        #sudo -u postgres psql
+        #\password postgres
 
         env.pg_ver = run('psql --version | grep -o -E "[0-9]+.[0-9]+"')
         print 'PostgreSQL version %(pg_ver)s detected.' % env
@@ -150,14 +221,15 @@ def configure(name=None, site=None, _role=None, dryrun=0):
         sudo('sed -i "s/#track_counts = on/track_counts = on/g" /etc/postgresql/%(pg_ver)s/main/postgresql.conf' % env)
         
         # Set UTF-8 as the default database encoding.
-        sudo('psql --user=postgres --no-password --command="'
-            'UPDATE pg_database SET datistemplate = FALSE WHERE datname = \'template1\';'
-            'DROP DATABASE template1;'
-            'CREATE DATABASE template1 WITH TEMPLATE = template0 ENCODING = \'UNICODE\';'
-            'UPDATE pg_database SET datistemplate = TRUE WHERE datname = \'template1\';'
-            '\c template1\n'
-            'VACUUM FREEZE;'
-            'UPDATE pg_database SET datallowconn = FALSE WHERE datname = \'template1\';"')
+        #TODO:fix? throws error code?
+#        sudo('psql --user=postgres --no-password --command="'
+#            'UPDATE pg_database SET datistemplate = FALSE WHERE datname = \'template1\';'
+#            'DROP DATABASE template1;'
+#            'CREATE DATABASE template1 WITH TEMPLATE = template0 ENCODING = \'UNICODE\';'
+#            'UPDATE pg_database SET datistemplate = TRUE WHERE datname = \'template1\';'
+#            '\c template1\n'
+#            'VACUUM FREEZE;'
+#            'UPDATE pg_database SET datallowconn = FALSE WHERE datname = \'template1\';"')
 
     elif 'mysql' in env.db_engine:
         if env.db_allow_remote_connections:
@@ -174,20 +246,31 @@ def configure(name=None, site=None, _role=None, dryrun=0):
         print 'No database parameters found.'
 
 @task
-def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
+def create(drop=0, name='default', dryrun=0, site=None, post_process=0, db_engine=None, db_user=None, db_host=None, db_password=None, db_name=None):
     """
     Creates the target database.
     """
+    from burlap.dj import set_db, render_remote_paths
     assert env[ROLE]
     dryrun = int(dryrun)
-    render_remote_paths()
     require('app_name')
     env.db_drop_flag = '--drop' if int(drop) else ''
-    set_db(name=name, site=site)
+    if name:
+        set_db(name=name, site=site)
+    if db_engine:
+        env.db_engine = db_engine
+    if db_user:
+        env.db_user = db_user
+    if db_host:
+        env.db_host = db_host
+    if db_password:
+        env.db_password = db_password
+    if db_name:
+        env.db_name = db_name
     print 'site:',env[SITE]
     print 'role:',env[ROLE]
     env.dryrun = int(dryrun)
-    if 'postgres' in env.db_engine:
+    if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         env.src_dir = os.path.abspath(env.src_dir)
         # This assumes the django-extensions app is installed, which
         # provides the convenient sqlcreate command.
@@ -195,7 +278,8 @@ def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
             env.db_src_dir = env.src_dir
         else:
             env.db_src_dir = env.remote_app_src_dir
-        cmd = 'cd %(db_src_dir)s; export SITE=%(SITE)s; export ROLE=%(ROLE)s; %(django_manage)s sqlcreate --router=default %(db_drop_flag)s | psql --user=%(db_postgresql_postgres_user)s --no-password' % env
+        #cmd = 'cd %(db_src_dir)s; export SITE=%(SITE)s; export ROLE=%(ROLE)s; %(django_manage)s sqlcreate --router=default %(db_drop_flag)s | psql --user=%(db_postgresql_postgres_user)s --no-password' % env
+        cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --command="CREATE DATABASE %(db_name)s WITH OWNER=%(db_user)s ENCODING=%(db_postgresql_encoding)s"' % env
         print cmd
         if not dryrun:
             sudo(cmd)
@@ -249,6 +333,7 @@ def create(drop=0, name=None, dryrun=0, site=None, post_process=0):
 
 @task
 def post_create(name=None, dryrun=0, site=None):
+    from burlap.dj import set_db
     assert env[ROLE]
     require('app_name')
     site = site or env.SITE
@@ -263,23 +348,25 @@ def post_create(name=None, dryrun=0, site=None):
     createsuperuser()
 
 @task
-def update(name=None, site=None):
+def update(name=None, site=None, skip_databases=None):
     """
     Updates schema and custom SQL.
     """
+    from burlap.dj import set_db
     set_db(name=name, site=site)
-    syncdb(site=site)
-    migrate(site=site)
+    syncdb(site=site) # Note, this loads initial_data fixtures.
+    migrate(site=site, skip_databases=skip_databases)
     install_sql(name=name, site=site)
+    #TODO:run syncdb --all to force population of new content types?
 
 @task
-def update_all():
+def update_all(skip_databases=None):
     """
     Runs the Django migrate command for all unique databases
     for all available sites.
     """
     for site in env.available_sites:
-        update(site=site)
+        update(site=site, skip_databases=skip_databases)
 
 @task
 def dump(dryrun=0, dest_dir=None, to_local=None):
@@ -287,6 +374,7 @@ def dump(dryrun=0, dest_dir=None, to_local=None):
     Exports the target database to a single transportable file on the localhost,
     appropriate for loading using load().
     """
+    from burlap.dj import set_db
     set_db()
     if dest_dir:
         env.db_dump_dest_dir = dest_dir
@@ -296,7 +384,7 @@ def dump(dryrun=0, dest_dir=None, to_local=None):
         to_local = 1
     if env.db_dump_command:
         run(env.db_dump_command % env)
-    elif 'postgres' in env.db_engine:
+    elif 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         assert env.db_schemas, \
             'Please specify the list of schemas to dump in db_schemas.'
         env.db_schemas_str = ' '.join('-n %s' % _ for _ in env.db_schemas)
@@ -326,10 +414,91 @@ def dump(dryrun=0, dest_dir=None, to_local=None):
     return env.db_dump_fn
 
 @task
+def get_free_space(verbose=0):
+    """
+    Return free space in bytes.
+    """
+    cmd = "df -k | grep -vE '^Filesystem|tmpfs|cdrom|none|udev|cgroup' | awk '{ print $1 \" \" $4 }'"
+    lines = [_ for _ in run(cmd).strip().split('\n') if _.startswith('/')]
+    assert len(lines) == 1, 'Ambiguous devices: %s' % str(lines)
+    device, kb = lines[0].split(' ')
+    free_space = int(kb) * 1024
+    if int(verbose):
+        print 'free_space (bytes):',free_space
+    return free_space
+
+@task
+def get_size(verbose=0):
+    """
+    Retrieves the size of the database in bytes.
+    """
+    from burlap.dj import set_db
+    set_db(site=env.SITE, role=env.ROLE)
+    if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
+        #cmd = 'psql --user=%(db_postgresql_postgres_user)s --tuples-only -c "SELECT pg_size_pretty(pg_database_size(\'%(db_name)s\'));"' % env
+        cmd = 'psql --user=%(db_postgresql_postgres_user)s --tuples-only -c "SELECT pg_database_size(\'%(db_name)s\');"' % env
+        #print cmd
+        output = run(cmd)
+        output = int(output.strip().split('\n')[-1].strip())
+        if int(verbose):
+            print 'database size (bytes):',output
+        return output
+    else:
+        raise NotImplementedError
+
+@task
+def loadable(src, dst, verbose=0):
+    """
+    Determines if there's enough space to load the target database.
+    """
+    from fabric import state
+    from fabric.task_utils import crawl
+    
+    src_task = crawl(src, state.commands)
+    assert src_task, 'Unknown source role: %s' % src
+    
+    dst_task = crawl(dst, state.commands)
+    assert dst_task, 'Unknown destination role: %s' % src
+    
+    # Get source database size.
+    src_task()
+    env.host_string = env.hosts[0]
+    src_size_bytes = get_size()
+    
+    # Get target database size, if any.
+    dst_task()
+    env.host_string = env.hosts[0]
+    try:
+        dst_size_bytes = get_size()
+    except:
+        dst_size_bytes = 0
+    
+    # Get target host disk size.
+    free_space_bytes = get_free_space()
+    
+    # Deduct existing database size, because we'll be deleting it.
+    balance_bytes = free_space_bytes + dst_size_bytes - src_size_bytes
+    balance_bytes_scaled, units = common.pretty_bytes(balance_bytes)
+    
+    viable = balance_bytes >= 0
+    if int(verbose):
+        print 'src_db_size:',common.pretty_bytes(src_size_bytes)
+        print 'dst_db_size:',common.pretty_bytes(dst_size_bytes)
+        print 'dst_free_space:',common.pretty_bytes(free_space_bytes)
+        print
+        if viable:
+            print 'Viable! There will be %.02f %s of disk space left.' % (balance_bytes_scaled, units)
+        else:
+            print 'Not viable! We would be %.02f %s short.' % (balance_bytes_scaled, units)
+    
+    return viable
+
+@task
 def load(db_dump_fn, dryrun=0, force_upload=0):
     """
     Restores a database snapshot onto the target database server.
     """
+    from burlap.dj import set_db
     print '!'*80
     print 'db.load.site:',env.SITE
     print 'db.load.role:',env.ROLE
@@ -359,7 +528,7 @@ def load(db_dump_fn, dryrun=0, force_upload=0):
     
     if env.db_load_command:
         run(env.db_load_command % env)
-    elif 'postgres' in env.db_engine:
+    elif 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         
         with settings(warn_only=True):
             cmd = 'dropdb --user=%(db_postgresql_postgres_user)s %(db_name)s' % env
@@ -391,7 +560,8 @@ def load(db_dump_fn, dryrun=0, force_upload=0):
             if not dryrun:
                 run(cmd)
                 
-        cmd = 'gunzip -c %(db_remote_dump_fn)s | pg_restore -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s' % env
+        #cmd = 'gunzip -c %(db_remote_dump_fn)s | pg_restore --jobs=8 -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s' % env
+        cmd = 'pg_restore --jobs=8 -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s %(db_remote_dump_fn)s' % env
         print cmd
         if not dryrun:
             run(cmd)
@@ -453,6 +623,14 @@ def syncdb(site=None, all=0, dryrun=0):
     """
     Wrapper around Django's syncdb command.
     """
+#    
+    #print 'remote_app_src_package_dir_template:',env.remote_app_src_package_dir_template
+    from burlap.dj import render_remote_paths
+    
+#    print 'remote_app_src_package_dir_template:',env.remote_app_src_package_dir_template
+#    print 'remote_app_src_package_dir:',env.remote_app_src_package_dir
+#    print 'remote_manage_dir:',env.remote_manage_dir
+#    return
     set_site(site)
     
     render_remote_paths()
@@ -464,14 +642,37 @@ def syncdb(site=None, all=0, dryrun=0):
         run(cmd)
 
 @task
-def migrate(app_name='', site=None, fake=0):
+def migrate(app_name='', site=None, fake=0, skip_databases=None):
     """
     Wrapper around Django's migrate command.
     """
+    from burlap.dj import render_remote_paths, has_database
+    
     print 'Migrating...'
     set_site(site or env.SITE)
     
     render_remote_paths()
+    
+    skip_databases = (skip_databases or '')
+    if isinstance(skip_databases, basestring):
+        skip_databases = [_.strip() for _ in skip_databases.split(',') if _.strip()]
+    
+    # Since South doesn't properly support multi-database applications, we have
+    # to fake app migrations on every database except the one where they exist.
+    #TODO:remove this when South fixes this or gets merged into Django core.
+    if env.django_migrate_fakeouts:
+        for fakeout in env.django_migrate_fakeouts:
+            env.db_app_name = fakeout['app']
+            env.db_database_name = fakeout['database']
+            if env.db_database_name in skip_databases:
+                continue
+            cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations --fake -v 3 --traceback' % env
+            run(cmd)
+            if has_database(name=env.db_database_name, site=site):
+                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --database=%(db_database_name)s --traceback' % env
+                run(cmd)
+                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --database=%(db_database_name)s --noinput --delete-ghost-migrations -v 3 --traceback' % env
+                run(cmd)
     
     env.db_migrate_fake = '--fake' if int(fake) else ''
     if app_name:
@@ -495,6 +696,7 @@ def database_files_dump(site=None):
     Runs the Django management command to export files stored in the database to the filesystem.
     Assumes the app django_database_files is installed.
     """
+    from burlap.dj import render_remote_paths
     set_site(site or env.SITE)
     
     render_remote_paths()
@@ -510,8 +712,9 @@ def drop_views(name=None, site=None):
     """
     Drops all views.
     """
+    from burlap.dj import set_db
     set_db(name=name, site=site)
-    if 'postgres' in env.db_engine:
+    if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
 #        SELECT 'DROP VIEW ' || table_name || ';'
 #        FROM information_schema.views
 #        WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
@@ -558,6 +761,7 @@ def install_sql(name=None, site=None):
     """
     Installs all custom SQL.
     """
+    from burlap.dj import set_db
     set_db(name=name, site=site)
     paths = glob.glob(env.db_install_sql_path_template % env)
     #paths = glob.glob('%(src_dir)s/%(app_name)s/*/sql/*' % env)
@@ -589,7 +793,7 @@ def install_sql(name=None, site=None):
         for d in sorted(data, cmp=cmp_paths):
             yield d[0]
     
-    if 'postgres' in env.db_engine:
+    if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         #print 'postgres'
         for path in get_paths('postgresql'):
             put(local_path=path)
@@ -611,6 +815,8 @@ def createsuperuser(username='admin', email=None, password=None, site=None):
     """
     Runs the Django createsuperuser management command.
     """
+    from burlap.dj import render_remote_paths
+    
     set_site(site)
     
     render_remote_paths()
@@ -624,6 +830,7 @@ def install_fixtures(name, site=None):
     """
     Installs a set of Django fixtures.
     """
+    from burlap.dj import render_remote_paths
     set_site(site)
     
     render_remote_paths()
@@ -644,15 +851,6 @@ def restart(site=common.ALL):
     """
     Restarts the database engine.
     """
-#    for site, site_data in common.iter_sites(site=site, renderer=lambda: set_db(name='default')):
-#        print site
-#        #set_db(name=name, site=site)
-#        if 'postgres' in env.db_engine:
-#            sudo('service postgresql restart; sleep 3')
-#        elif 'mysql' in env.db_engine:
-#            sudo('service mysql restart')
-#        else:
-#            raise NotImplementedError
     for service_name in env.services:
         if service_name.upper() == MYSQL:
             sudo('service mysqld restart')
@@ -667,8 +865,9 @@ def save_db_password(user, password):
     
     Currently, only PostgreSQL is supported.
     """
+    from burlap.dj import set_db
     set_db(name='default')
-    if 'postgres' in env.db_engine:
+    if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         env.db_save_user = user
         env.db_save_password = password
         # Note, this requires pg_hba.conf needs the line:
@@ -693,6 +892,7 @@ def shell(name='default', user=None, password=None):
     Opens a SQL shell to the given database, assuming the configured database
     and user supports this feature.
     """
+    from burlap.dj import set_db
     
     # Load database credentials.
     set_db(name=name)
@@ -701,7 +901,7 @@ def shell(name='default', user=None, password=None):
     if password:
         env.db_password = password
         
-    if 'postgres' in env.db_engine:
+    if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         # Note, psql does not support specifying password at the command line.
         # If you don't want to manually type it at the command line, you must
         # add the password to your local ~/.pgpass file.
@@ -733,8 +933,21 @@ def record_manifest():
     Called after a deployment to record any data necessary to detect changes
     for a future deployment.
     """
+    from burlap.dj import get_settings
+        
     data = common.get_component_settings(DB)
-    #TODO:ignore all but the specific engine used
+    
+    #data['databases'] = {} # {site:django DATABASES}
+    data['databases'] = []#{} # {site:django DATABASES}
+    data['database_users'] = {} # {user:(host,password)}
+    for site, site_data in common.iter_sites(site=ALL, no_secure=True):
+        settings = get_settings(site=site)
+        for _, db_data in settings.DATABASES.iteritems():
+            #data['databases'][site] = settings.DATABASES
+            data['databases'].append(dict(engine=db_data['ENGINE'], name=db_data['NAME'], host=db_data['HOST'], port=db_data.get('PORT')))
+            data['database_users'].setdefault(db_data['USER'], [])
+            data['database_users'][db_data['USER']].append(dict(password=db_data['PASSWORD'], engine=db_data['ENGINE'], name=db_data['NAME'], host=db_data['HOST'], port=db_data.get('PORT')))
+    
     return data
 
 def compare_manifest(old):
@@ -746,6 +959,31 @@ def compare_manifest(old):
     methods = []
     pre = ['user', 'ip', 'package']
     new = record_manifest()
+    
+    old_databases = old.get('databases', {})
+    del old['databases']
+    new_databases = new.get('databases', {})
+    del new['databases']
+    
+    old_databases = [tuple(sorted(_.items())) for _ in old_databases]
+    old_databases = dict(zip(old_databases, old_databases))
+    new_databases = [tuple(sorted(_.items())) for _ in new_databases]
+    new_databases = dict(zip(new_databases, new_databases))
+    added, updated, deleted = common.check_settings_for_differences(old_databases, new_databases, as_tri=True)
+    for added_db in added:
+        methods.append(QueuedCommand('db.create', pre=pre))
+
+    old_database_users = old.get('database_users', {})
+    del old['database_users']
+    new_database_users = new.get('database_users', {})
+    del new['database_users']
+
+#    created_dbs = []
+#    deleted_dbs = []
+#    updated_dbs = []
+#    for site_name in set(old_databases.keys()).union(new_databases.keys()):
+#        print site_name
+    
     has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
     if has_diffs:
         methods.append(QueuedCommand('db.configure', pre=pre))
@@ -753,6 +991,8 @@ def compare_manifest(old):
 
 common.manifest_recorder[MYSQL] = record_manifest
 common.manifest_recorder[POSTGRESQL] = record_manifest
+common.manifest_recorder[DB] = record_manifest
 
 common.manifest_comparer[MYSQL] = compare_manifest
 common.manifest_comparer[POSTGRESQL] = compare_manifest
+common.manifest_comparer[DB] = compare_manifest

@@ -1,4 +1,4 @@
-VERSION = (0, 2, 0)
+VERSION = (0, 2, 1)
 __version__ = '.'.join(map(str, VERSION))
 
 import copy
@@ -244,7 +244,7 @@ def populate_fabfile():
         locals_['common'] = common
         locals_['shell'] = common.shell
         locals_['info'] = common.info
-        locals_['djshell'] = common.djshell
+        #locals_['djshell'] = common.djshell
         locals_['tunnel'] = common.tunnel
     finally:
         del stack

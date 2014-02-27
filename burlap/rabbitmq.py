@@ -16,7 +16,6 @@ from fabric.api import (
 
 from fabric.contrib import files
 
-from burlap.dj import get_settings
 from burlap.common import run, put, QueuedCommand
 from burlap import common
 
@@ -111,7 +110,8 @@ def status():
     sudo(cmd)
 
 def render_paths():
-    common.render_remote_paths()
+    from burlap.dj import render_remote_paths
+    render_remote_paths()
     if env.rabbitmq_erlang_cookie_template:
         env.rabbitmq_erlang_cookie = env.rabbitmq_erlang_cookie_template % env
 
@@ -134,10 +134,12 @@ def configure(site=None, full=0, dryrun=0):
     """
     Installs and configures RabbitMQ.
     """
+    from burlap.dj import get_settings
+    from burlap import package
+    
     full = int(full)
     dryrun = int(dryrun)
     
-    from burlap import package
 #    assert env.rabbitmq_erlang_cookie
     if full:
         package.install_required(type=package.common.SYSTEM, service=RABBITMQ)

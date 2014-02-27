@@ -75,7 +75,7 @@ def generate_self_signed_certificate(domain='', r=None):
     local(cmd)
 
 @task
-def generate_csr(domain='', r=None):
+def generate_csr(domain='', r=None, dryrun=0):
     """
     Creates a certificate signing request to be submitted to a formal
     certificate authority to generate a certificate.
@@ -92,7 +92,6 @@ def generate_csr(domain='', r=None):
     
     for site, site_data in common.iter_sites(setter=set_apache_site_specifics):
         print 'site:',site
-        #continue
 #        
         assert env.ssl_domain, 'No SSL domain defined.'
     
@@ -100,5 +99,6 @@ def generate_csr(domain='', r=None):
         env.ssl_base_dst = '%s/%s' % (ssl_dst, env.ssl_domain)
         cmd = 'openssl req -nodes -newkey rsa:%(ssl_length)s -subj "/C=%(ssl_country)s/ST=%(ssl_state)s/L=%(ssl_city)s/O=%(ssl_organization)s/CN=%(ssl_domain)s" -keyout %(ssl_base_dst)s.key -out %(ssl_base_dst)s.csr' % env
         print cmd
-        local(cmd)
+        if not int(dryrun):
+            local(cmd)
     

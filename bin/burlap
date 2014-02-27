@@ -14,13 +14,22 @@ import sys
 #sys.path.insert(0, os.path.normpath(os.path.join(os.path.realpath(__file__), '../..')))
 
 import burlap
+import burlap.common
 
 fabfile_template = os.path.join(
     os.path.dirname(burlap.__file__),
     'templates',
     'burlap_fabfile.template.py')
 
-ACTIONS = (SKEL,) = ('skel',)
+ACTIONS = (
+    SKEL,
+    CREATE_MIGRATION,
+    MIGRATE,
+) = (
+    'skel',
+    'create_migration',
+    'migrate',
+)
 
 def md(d):
     if os.path.isdir(d):
@@ -29,12 +38,31 @@ def md(d):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description=('Initialize a Burlap structured Django project'),
+        description=('Initialize a Burlap structured project.'),
     )
     parser.add_argument(
         'action',
         type=str,
+        nargs='*',
         help='skel=creates project skeleton')
+    parser.add_argument(
+        '--initial',
+        action='store_true',
+        default=False,
+        dest='initial',
+        help='Generate the initial migration.')
+    parser.add_argument(
+        '--auto',
+        action='store_true',
+        default=False,
+        dest='auto',
+        help='Attempt to automatically generate a migration.')
+    parser.add_argument(
+        '--empty',
+        action='store_true',
+        default=False,
+        dest='empty',
+        help='Make a blank migration.')
     parser.add_argument(
         '--name',
         type=str,
@@ -54,7 +82,13 @@ if __name__ == "__main__":
         help='The default roles to populate.')
     args = parser.parse_args()
 
-    if args.action == SKEL:
+    print 'args.action:',args.action
+
+    if args.action[0] == CREATE_MIGRATION:
+        burlap.common.AppHandler(args.action[1]).create_migration(initial=args.initial)
+    elif args.action[0] == MIGRATE:
+        burlap.common.AppHandler(args.action[1]).migrate()
+    elif args.action[0] == SKEL:
         assert args.project_name, 'Specify project name.'
         site_name = args.project_name + '_site'
         
@@ -171,8 +205,9 @@ cd $DIR;
         open('src/runserver', 'w').write('''#!/bin/bash
 # Helper script for running the local dev server, ensuring
 # our virtual environment is used.
-script_dir=`dirname $0`
-cd $script_dir
+#set -e
+#script_dir=`dirname $0`
+#cd $script_dir
 if [ -z "$PORT" ]; then
     export PORT=8111
 fi
@@ -183,14 +218,26 @@ fi
 ./manage runserver localhost:$PORT''')
         open('src/shell', 'w').write('''#!/bin/bash
 # Creates a local PIP-aware shell.
-script_dir=`dirname $0`
-cd $script_dir
+#set -e
+if [ $_ == $0 ]
+then
+    echo "Please source this script. Do not execute."
+    exit 1
+fi
+#script_dir=`dirname $0`
+#cd $script_dir
 . .env/bin/activate
 PS1="\u@\h:\W(fab)\$ "''')
         open('shell', 'w').write('''#!/bin/bash
 # Creates a local PIP-aware shell.
-script_dir=`dirname $0`
-cd $script_dir
+#set -e
+if [ $_ == $0 ]
+then
+    echo "Please source this script. Do not execute."
+    exit 1
+fi
+#script_dir=`dirname $0`
+#cd $script_dir
 . ../.env/bin/activate
 PS1="\u@\h:\W(virt)\$ "''')
         open('.gitignore', 'w').write('''.env
@@ -228,4 +275,5 @@ PS1="\u@\h:\W(virt)\$ "''')
     * Initialize your new project's local development database by running `fab dev db.create:post_process=1`.
     * Run the script `src/runserver` to start the local Django dev server.
         '''.format(project_name=args.project_name, site_name=site_name)
-        
+    else:
+        raise NotImplementedError, 'Unknown action: %s' % (action[0])

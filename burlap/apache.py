@@ -16,7 +16,6 @@ from fabric.api import (
 )
 from fabric.contrib import files
 
-from burlap.dj import get_settings
 from burlap.common import (
     ALL,
     run,
@@ -34,6 +33,7 @@ from burlap.common import (
     FEDORA,
     UBUNTU,
     QueuedCommand,
+    Migratable,
 )
 from burlap import common
 
@@ -138,6 +138,11 @@ env.apache_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_
 # This will be appended to the custom Apache configuration file.
 env.apache_httpd_conf_append = []
 
+class Apache2(Migratable):
+    
+    class Meta:
+        abstract = True
+
 def set_apache_specifics():
     os_version = common.get_os_version()
     apache_specifics = env.apache_specifics[os_version.type][os_version.distro]
@@ -190,6 +195,7 @@ env.apache_service_commands = {
 APACHE2 = 'APACHE2'
 APACHE2_MODEVASIVE = 'APACHE2_MODEVASIVE'
 APACHE2_MODSECURITY = 'APACHE2_MODSECURITY'
+APACHE2_VISITORS = 'APACHE2_VISITORS'
 
 common.required_system_packages[APACHE2] = {
     common.FEDORA: ['httpd'],
@@ -201,6 +207,9 @@ common.required_system_packages[APACHE2_MODEVASIVE] = {
 }
 common.required_system_packages[APACHE2_MODEVASIVE] = {
     common.UBUNTU: ['libapache2-modsecurity'],
+}
+common.required_system_packages[APACHE2_VISITORS] = {
+    common.UBUNTU: ['visitors'],
 }
 
 def get_service_command(action):
@@ -244,10 +253,14 @@ def restart():
     sudo(cmd)
 
 @task
-def visitors():
+def visitors(force=0):
     """
     Generates an Apache access report using the Visitors command line tool.
+    Requires the APACHE2_VISITORS service to be enabled for the current host.
     """
+    if not int(force):
+        assert APACHE2_VISITORS.upper() in env.services or APACHE2_VISITORS.lower() in env.services, \
+            'Visitors has not been configured for this host.'
     run('visitors -o text /var/log/apache2/%(apache_application_name)s-access.log* | less' % env)
 
 def check_required():
@@ -255,6 +268,8 @@ def check_required():
         assert env[name], 'Missing %s.' % (name,)
 
 def set_apache_site_specifics(site):
+    from burlap.dj2 import get_settings
+    
     site_data = env.sites[site]
     
     get_settings(site=site)
@@ -410,7 +425,8 @@ def install_ssl(site=ALL, dryrun=0):
                     put(
                         local_path=local_cert_file,
                         remote_path=remote_cert_file, use_sudo=True)
-                
+    
+    sudo('mkdir -p %(apache_ssl_dir)s' % env)
     sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_ssl_dir)s' % env)
     sudo('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s' % env)
     
@@ -460,10 +476,10 @@ def sync_media(sync_set=None, dryrun=0):
     """
     Uploads select media to an Apache accessible directory.
     """
-    
+    from burlap.dj import render_remote_paths
     apache_specifics = set_apache_specifics()
     
-    common.render_remote_paths()
+    render_remote_paths()
     
     site_data = env.sites[env.SITE]
     env.update(site_data)

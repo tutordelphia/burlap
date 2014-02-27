@@ -97,7 +97,8 @@ def status():
     sudo(cmd)
 
 def render_paths():
-    common.render_remote_paths()
+    from burlap.dj import render_remote_paths
+    render_remote_paths()
 
 @task
 def configure(site=None, full=0, dryrun=0):

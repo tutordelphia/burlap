@@ -21,7 +21,6 @@ from burlap.common import (
     put,
     SITE,
     ROLE,
-    render_remote_paths,
     render_to_file,
     find_template,
 )
@@ -55,11 +54,6 @@ def mount(dryrun=0):
     """
     #TODO:these are temporary commands, change to auto-mount in /etc/fstab?
     dryrun = int(dryrun)
-#    env.user = 'root'
-#    env.host_string = 'devweb01'
-#    env.key_filename = "%s.pem" % config.local_key
-#    run("mount -t nfs alphafs:/data/media/development/i /data/media/i")
-#    run("mount -t nfs alphafs:/data/media/development/medialibrary /data/media/medialibrary")
     for data in env.media_mount_dirs:
         if isinstance(data, (list, tuple)):
             from_path, to_path, owner, group, perms = data

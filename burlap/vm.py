@@ -98,6 +98,9 @@ def list(show=1):
         if int(show):
             pprint.pprint(data, indent=4)
         return data
+    elif env.vm_type == KVM:
+        #virsh list
+        pass
     else:
         raise NotImplementedError
 
