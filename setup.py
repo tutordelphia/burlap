@@ -18,7 +18,9 @@ setup(
     description = "Fabric commands for simplifying Django deployment",
     license = "LGPL",
     url = "https://github.com/chrisspen/burlap",
+    #https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers = [
+        'Development Status :: 3 - Alpha',
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: LGPL License',
