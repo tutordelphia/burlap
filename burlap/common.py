@@ -88,8 +88,10 @@ required_ruby_packages = type(env)() # {service:{os:[packages]}
 
 service_configurators = type(env)() # {service:[func]}
 service_pre_deployers = type(env)() # {service:[func]}
+service_pre_db_dumpers = type(env)() # {service:[func]}
 service_deployers = type(env)() # {service:[func]}
 service_post_deployers = type(env)() # {service:[func]}
+service_post_db_loaders = type(env)() # {service:[func]}
 service_restarters = type(env)() # {service:[func]}
 service_stoppers = type(env)() # {service:[func]}
 

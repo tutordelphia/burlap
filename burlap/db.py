@@ -59,6 +59,7 @@ env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --forma
 env.db_postgresql_createlangs = ['plpgsql'] # plpythonu
 env.db_postgresql_postgres_user = 'postgres'
 env.db_postgresql_encoding = 'UTF8'
+env.db_postgresql_custom_load_cmd = ''
 
 # You want this to be large, and set in both the client and server.
 # Otherwise, MySQL may silently truncate database dumps, leading to much
@@ -382,6 +383,7 @@ def dump(dryrun=0, dest_dir=None, to_local=None):
     env.db_dump_fn = '%(db_dump_dest_dir)s/%(db_name)s_%(db_date)s.sql.gz' % env
     if to_local is None and not env.is_local:
         to_local = 1
+        
     if env.db_dump_command:
         run(env.db_dump_command % env)
     elif 'postgres' in env.db_engine or 'postgis' in env.db_engine:
@@ -542,6 +544,17 @@ def load(db_dump_fn, dryrun=0, force_upload=0):
             run(cmd)
             
         with settings(warn_only=True):
+            
+            if 'postgis' in env.db_engine:
+                cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --dbname=%(db_name)s --command="CREATE EXTENSION postgis;"'
+                print cmd
+                if not dryrun:
+                    run(cmd)
+                cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --dbname=%(db_name)s --command="CREATE EXTENSION postgis_topology;"'
+                print cmd
+                if not dryrun:
+                    run(cmd)
+            
             cmd = 'psql --user=%(db_postgresql_postgres_user)s -c "DROP OWNED BY %(db_user)s CASCADE;"' % env
             print cmd
             if not dryrun:
@@ -559,9 +572,13 @@ def load(db_dump_fn, dryrun=0, force_upload=0):
             print cmd
             if not dryrun:
                 run(cmd)
-                
-        #cmd = 'gunzip -c %(db_remote_dump_fn)s | pg_restore --jobs=8 -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s' % env
-        cmd = 'pg_restore --jobs=8 -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s %(db_remote_dump_fn)s' % env
+        
+        #cmd = 'gunzip -c %(db_remote_dump_fn)s | pg_restore --jobs=8 -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s' % env #TODO:deprecated
+        #cmd = 'gunzip -c %(db_remote_dump_fn)s | pg_restore -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s' % env #TODO:deprecated
+        if env.db_postgresql_custom_load_cmd:
+            cmd = env.db_postgresql_custom_load_cmd % env
+        else:
+            cmd = 'pg_restore --jobs=8 -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s %(db_remote_dump_fn)s' % env
         print cmd
         if not dryrun:
             run(cmd)
@@ -673,6 +690,7 @@ def migrate(app_name='', site=None, fake=0, skip_databases=None):
                 run(cmd)
                 cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --database=%(db_database_name)s --noinput --delete-ghost-migrations -v 3 --traceback' % env
                 run(cmd)
+                pass
     
     env.db_migrate_fake = '--fake' if int(fake) else ''
     if app_name:
@@ -783,6 +801,8 @@ def install_sql(name=None, site=None):
             parts = path.split('.')
             if len(parts) == 3 and parts[1] != t:
                 continue
+            if not path.lower().endswith('.sql'):
+                continue
             content = open(path, 'r').read()
             matches = re.findall('[\s\t]+VIEW[\s\t]+([a-zA-Z0-9_]+)', content, flags=re.IGNORECASE)
             #assert matches, 'Unable to find view name: %s' % (p,)
@@ -796,6 +816,7 @@ def install_sql(name=None, site=None):
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         #print 'postgres'
         for path in get_paths('postgresql'):
+            print 'Installing PostgreSQL script %s.' % path
             put(local_path=path)
             #cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s") % env
             cmd = ("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s") % env
@@ -803,6 +824,7 @@ def install_sql(name=None, site=None):
             sudo(cmd)
     elif 'mysql' in env.db_engine:
         for path in get_paths('mysql'):
+            print 'Installing MySQL script %s.' % path
             put(local_path=path)
             cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s") % env
             #print cmd

@@ -184,17 +184,18 @@ def check_for_updates():
         parts = line.split('==')
         if len(parts) == 2:
             dep_type = versioner.PIP
-            name = uri = parts[0]
-            version = parts[1]
-#            continue#TODO:remove
+            name = uri = parts[0].strip()
+            version = parts[1].strip()
+#            print 'name:',name
+#            print 'version: "%s"' % version
         elif 'github' in line.lower():
             dep_type = versioner.GITHUB_TAG
             matches = GITHUB_TO_PIP_NAME_PATTERN.findall(line)
             assert matches, 'No github tag matches for line: %s' % line
             name = matches[0][0]
             uri = line
-            tag_name = matches[0][1]
-            version = tag_name.replace(name, '')[1:]
+            tag_name = matches[0][1].strip()
+            version = tag_name.replace(name, '')[1:].strip()
             if version.endswith('.zip'):
                 version = version.replace('.zip', '')
             if version.endswith('.tar.gz'):
@@ -203,7 +204,7 @@ def check_for_updates():
 #            print 'name:',name
 #            print 'uri:',uri
 #            print 'tag_name:',tag_name
-#            print 'version:',version
+#            print 'version: "%s"' % version
         else:
             raise NotImplementedError, 'Unhandled line: %s' % line
         
@@ -351,7 +352,7 @@ def check(return_type=PENDING):
     return pending
 
 @task
-def update(package='', ignore_errors=0, no_deps=0, all=0):
+def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1):
     """
     Updates the local cache of pip packages.
     
@@ -374,7 +375,10 @@ def update(package='', ignore_errors=0, no_deps=0, all=0):
     with settings(warn_only=ignore_errors):
         if package:
             # Download a single specific package.
-            local(env.pip_update_command % env)
+            cmd = env.pip_update_command % env
+            if not int(mirrors):
+                cmd = cmd.replace('--use-mirrors', '')
+            local(cmd)
         else:
             # Download each package in a requirements file.
             # Note, specifying the requirements file in the command isn't properly
@@ -388,7 +392,12 @@ def update(package='', ignore_errors=0, no_deps=0, all=0):
             
             for package in packages:
                 env.pip_package = package.strip()
-                local(env.pip_update_command % env)
+                
+                cmd = env.pip_update_command % env
+                if not int(mirrors):
+                    cmd = cmd.replace('--use-mirrors', '')
+                    
+                local(cmd)
 
 @task
 def upgrade_pip():

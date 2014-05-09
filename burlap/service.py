@@ -106,3 +106,31 @@ def is_selected(name):
         if service.strip().upper() == name:
             return True
     return False
+
+@task
+def pre_db_dump():
+    """
+    Runs methods services that have requested to be run before each
+    database dump.
+    """
+    for service in env.services:
+        service = service.strip().upper()
+        funcs = common.service_pre_db_dumpers.get(service)
+        if funcs:
+            print 'Running pre-database dump for service %s...' % (service,)
+            for func in funcs:
+                func()
+
+@task
+def post_db_dump():
+    """
+    Runs methods services that have requested to be run before each
+    database dump.
+    """
+    for service in env.services:
+        service = service.strip().upper()
+        funcs = common.service_post_db_dumpers.get(service)
+        if funcs:
+            print 'Running post-database dump for service %s...' % (service,)
+            for func in funcs:
+                func()

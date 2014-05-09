@@ -25,10 +25,11 @@ from burlap.common import (
     find_template,
 )
 
+env.host_hostname = None
 env.media_mount_dirs = []
 
 @task
-def set_hostname(name):
+def set_hostname(name=None):
     """
     Assigns a name to the server accessible from user space.
     
@@ -36,7 +37,7 @@ def set_hostname(name):
     /etc/hostname to reliably identify the server hostname.
     """
     assert not env.hosts or len(env.hosts) == 1, 'Too many hosts.'
-    env.host_hostname = name
+    env.host_hostname = name or env.host_hostname or env.host_string or env.hosts[0]
     sudo('echo "%(host_hostname)s" > /etc/hostname' % env)
     sudo('echo "127.0.0.1 %(host_hostname)s" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts' % env)
     sudo('service hostname restart; sleep 3')

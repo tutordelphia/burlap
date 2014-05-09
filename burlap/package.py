@@ -51,6 +51,24 @@ def install(*args, **kwargs):
     else:
         raise Exception, 'Unknown packager: %s' % (packager,)
 
+@task
+def upgrade(*args, **kwargs):
+    """
+    Updates/upgrades all system packages.
+    """
+    packager = get_packager()
+    if packager == APT:
+        return upgrade_apt(*args, **kwargs)
+    elif package == YUM:
+        raise NotImplementedError
+        #return upgrade_yum(*args, **kwargs)
+    else:
+        raise Exception, 'Unknown packager: %s' % (packager,)
+
+def upgrade_apt():
+    sudo('apt-get update -y --fix-missing')
+    sudo('apt-get upgrade -y')
+
 env.apt_fn = 'apt-requirements.txt'
 
 def install_apt(fn=None, package_name=None, update=0, list_only=0):
