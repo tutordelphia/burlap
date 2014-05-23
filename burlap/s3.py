@@ -48,15 +48,18 @@ common.required_ruby_packages[S3SYNC] = {
 }
 
 @task
-def sync(sync_set, dryrun=0, auto_invalidate=True):
+def sync(sync_set, dryrun=0, auto_invalidate=1):
     """
     Uploads media to an Amazon S3 bucket using s3sync.
     
     Requires the s3sync gem: sudo gem install s3sync
     """
     from burlap.dj import get_settings, render_remote_paths
+    auto_invalidate = int(auto_invalidate)
     env.dryrun = int(dryrun)
-    _settings = get_settings()
+#    print'env.SITE:',env.SITE
+    _settings = get_settings(verbose=1)
+    assert _settings, 'Unable to import settings.'
     for k in _settings.__dict__.iterkeys():
         if k.startswith('AWS_'):
             env[k] = _settings.__dict__[k]

@@ -4,6 +4,7 @@ Django-specific helper utilities.
 import os
 import sys
 import importlib
+import traceback
 from StringIO import StringIO
 
 from fabric.api import (
@@ -196,6 +197,8 @@ def get_settings(site=None, role=None, verbose=True):
         sys.path.insert(0, env.src_dir)
         if site and site.endswith('_secure'):
             site = site[:-7]
+        site = site or env.SITE
+        #print 'site:',site
         common.set_site(site)
         tmp_role = env.ROLE
         if role:
@@ -254,6 +257,7 @@ def get_settings(site=None, role=None, verbose=True):
             
         except ImportError, e:
             print 'Warning: Could not import settings for site "%s": %s' % (site, e)
+            traceback.print_exc(file=sys.stdout)
             #raise # breaks *_secure pseudo sites
             return
         finally:
