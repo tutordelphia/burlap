@@ -3,44 +3,46 @@ import os
 import re
 import sys
 import types
-import yaml
 import importlib
 import pkgutil
 import inspect
 import warnings
 
-VERSION = (0, 2, 3)
+VERSION = (0, 2, 4)
 __version__ = '.'.join(map(str, VERSION))
 
-from fabric.api import env
-from fabric.tasks import WrappedCallableTask
-from fabric.utils import _AliasDict
-
-burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
-
-import common
-
-def _represent_dictorder(self, data):
-#    if isinstance(data, type(env)):
-#        return self.represent_mapping('tag:yaml.org,2002:map', data.items())
-#    else:
-    return self.represent_mapping(u'tag:yaml.org,2002:map', data.items())
-
-def _represent_tuple(self, data):
-    return self.represent_sequence(u'tag:yaml.org,2002:seq', data)
-
-def _construct_tuple(self, node):
-    return tuple(self.construct_sequence(node))
-
-def _represent_function(self, data):
-    return self.represent_scalar(u'tag:yaml.org,2002:null', u'null')
-
-yaml.add_representer(type(env), _represent_dictorder)
-yaml.add_representer(_AliasDict, _represent_dictorder)
-#yaml.add_representer(tuple, _represent_tuple) # we need tuples for hash keys
-yaml.add_constructor(u'tag:yaml.org,2002:python/tuple', _construct_tuple)
-yaml.add_representer(types.FunctionType, _represent_function)
+try:
+    from fabric.api import env
+    from fabric.tasks import WrappedCallableTask
+    from fabric.utils import _AliasDict
     
+    burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
+
+    import common
+
+    import yaml
+    
+    def _represent_dictorder(self, data):
+        return self.represent_mapping(u'tag:yaml.org,2002:map', data.items())
+    
+    def _represent_tuple(self, data):
+        return self.represent_sequence(u'tag:yaml.org,2002:seq', data)
+    
+    def _construct_tuple(self, node):
+        return tuple(self.construct_sequence(node))
+    
+    def _represent_function(self, data):
+        return self.represent_scalar(u'tag:yaml.org,2002:null', u'null')
+    
+    yaml.add_representer(type(env), _represent_dictorder)
+    yaml.add_representer(_AliasDict, _represent_dictorder)
+    #yaml.add_representer(tuple, _represent_tuple) # we need tuples for hash keys
+    yaml.add_constructor(u'tag:yaml.org,2002:python/tuple', _construct_tuple)
+    yaml.add_representer(types.FunctionType, _represent_function)
+
+except ImportError:
+    pass
+
 env_default = common.save_env()
 
 # Variables cached per-role. Must be after deepcopy.
