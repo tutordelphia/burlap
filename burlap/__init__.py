@@ -8,10 +8,11 @@ import pkgutil
 import inspect
 import warnings
 
-VERSION = (0, 2, 6)
+VERSION = (0, 2, 7)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
+no_load = int(os.environ.get('BURLAP_NO_LOAD', 0))
 
 env = None
 common = None
@@ -219,7 +220,7 @@ def populate_fabfile():
 
 # Dynamically create a Fabric task for each role.
 role_commands = {}
-if common:
+if common and not no_load:
     #_common = type(env)()
     #_common_fn = os.path.join(common.ROLE_DIR, 'all', 'settings.yaml')
     #if os.path.isfile(_common_fn):
