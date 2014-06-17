@@ -8,7 +8,7 @@ import pkgutil
 import inspect
 import warnings
 
-VERSION = (0, 2, 9)
+VERSION = (0, 2, 10)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))

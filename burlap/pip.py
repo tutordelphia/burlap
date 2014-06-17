@@ -370,7 +370,11 @@ def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1):
     env.pip_build_dir = tempfile.mkdtemp()
     
     # Clear build directory in case it wasn't properly cleaned up previously.
-    sudo('rm -Rf %(pip_build_directory)s' % env)
+    cmd = 'rm -Rf %(pip_build_directory)s' % env
+    if env.is_local:
+        run(cmd)
+    else:
+        sudo(cmd)
     
     with settings(warn_only=ignore_errors):
         if package:
