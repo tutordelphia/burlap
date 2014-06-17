@@ -8,17 +8,18 @@ import pkgutil
 import inspect
 import warnings
 
-VERSION = (0, 2, 4)
+VERSION = (0, 2, 5)
 __version__ = '.'.join(map(str, VERSION))
+
+burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
+
+common = None
+env_default = {}
 
 try:
     from fabric.api import env
     from fabric.tasks import WrappedCallableTask
     from fabric.utils import _AliasDict
-    
-    burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
-
-    import common
 
     import yaml
     
@@ -40,10 +41,12 @@ try:
     yaml.add_constructor(u'tag:yaml.org,2002:python/tuple', _construct_tuple)
     yaml.add_representer(types.FunctionType, _represent_function)
 
+    import common
+    
+    env_default = common.save_env()
+
 except ImportError:
     pass
-
-env_default = common.save_env()
 
 # Variables cached per-role. Must be after deepcopy.
 env._rc = type(env)()
@@ -169,44 +172,6 @@ def load_yaml_settings(name, priors=None):
     
     return config
 
-# Dynamically create a Fabric task for each role.
-role_commands = {}
-#_common = type(env)()
-#_common_fn = os.path.join(common.ROLE_DIR, 'all', 'settings.yaml')
-#if os.path.isfile(_common_fn):
-#    _common = yaml.safe_load(open(_common_fn))
-if os.path.isdir(common.ROLE_DIR):
-    for _name in os.listdir(common.ROLE_DIR):
-        _settings_fn = os.path.join(common.ROLE_DIR, _name, 'settings.yaml')
-        if _name.startswith('.') or not os.path.isfile(_settings_fn):
-            continue
-        #print 'Checking %s...' % (_name,)
-#        if _name == 'all' or not :
-#            continue
-#        _config = copy.deepcopy(_common)
-#        _config.update(yaml.safe_load(open(_settings_fn)) or type(env)())
-#        _settings_local_fn = os.path.join(common.ROLE_DIR, _name, 'settings_local.yaml')
-#        if os.path.isfile(_settings_local_fn):
-#            _config.update(yaml.safe_load(open(_settings_local_fn)) or type(env)())
-        _config = load_yaml_settings(_name)
-        _f = _get_environ_handler(_name, _config)
-        _var_name = 'role_'+_name
-        _f = WrappedCallableTask(_f, name=_name)
-        exec "%s = _f" % (_var_name,)
-        role_commands[_var_name] = _f
-
-# Auto-import all sub-modules.
-sub_modules = {}
-sub_modules['common'] = common
-__all__ = []
-for loader, module_name, is_pkg in  pkgutil.walk_packages(__path__):
-    if module_name in locals():
-        continue
-    __all__.append(module_name)
-    module = loader.find_module(module_name).load_module(module_name)
-    sub_modules[module_name] = module
-    #print module
-
 def populate_fabfile():
     """
     Automatically includes all submodules and role selectors
@@ -251,12 +216,51 @@ def populate_fabfile():
     finally:
         del stack
 
-if burlap_populate_stack:
-    populate_fabfile()
+# Dynamically create a Fabric task for each role.
+role_commands = {}
+if common:
+    #_common = type(env)()
+    #_common_fn = os.path.join(common.ROLE_DIR, 'all', 'settings.yaml')
+    #if os.path.isfile(_common_fn):
+    #    _common = yaml.safe_load(open(_common_fn))
+    if os.path.isdir(common.ROLE_DIR):
+        for _name in os.listdir(common.ROLE_DIR):
+            _settings_fn = os.path.join(common.ROLE_DIR, _name, 'settings.yaml')
+            if _name.startswith('.') or not os.path.isfile(_settings_fn):
+                continue
+            #print 'Checking %s...' % (_name,)
+    #        if _name == 'all' or not :
+    #            continue
+    #        _config = copy.deepcopy(_common)
+    #        _config.update(yaml.safe_load(open(_settings_fn)) or type(env)())
+    #        _settings_local_fn = os.path.join(common.ROLE_DIR, _name, 'settings_local.yaml')
+    #        if os.path.isfile(_settings_local_fn):
+    #            _config.update(yaml.safe_load(open(_settings_local_fn)) or type(env)())
+            _config = load_yaml_settings(_name)
+            _f = _get_environ_handler(_name, _config)
+            _var_name = 'role_'+_name
+            _f = WrappedCallableTask(_f, name=_name)
+            exec "%s = _f" % (_var_name,)
+            role_commands[_var_name] = _f
 
-# Execute any callbacks registered by sub-modules.
-# These are useful for calling inter-sub-module functions
-# after the modules tasks are registered so task names don't get
-# mistakenly registered under the wrong module.
-for cb in env.post_callbacks:
-    cb()
+    # Auto-import all sub-modules.
+    sub_modules = {}
+    sub_modules['common'] = common
+    __all__ = []
+    for loader, module_name, is_pkg in  pkgutil.walk_packages(__path__):
+        if module_name in locals():
+            continue
+        __all__.append(module_name)
+        module = loader.find_module(module_name).load_module(module_name)
+        sub_modules[module_name] = module
+        #print module
+
+    if burlap_populate_stack:
+        populate_fabfile()
+    
+    # Execute any callbacks registered by sub-modules.
+    # These are useful for calling inter-sub-module functions
+    # after the modules tasks are registered so task names don't get
+    # mistakenly registered under the wrong module.
+    for cb in env.post_callbacks:
+        cb()
