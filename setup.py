@@ -3,7 +3,7 @@ from setuptools import setup, find_packages, Command
 
 import os
 
-os.environ['BURLAP_NO_LOAD'] = 1
+os.environ['BURLAP_NO_LOAD'] = '1'
 
 import burlap
 
