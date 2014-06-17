@@ -8,11 +8,12 @@ import pkgutil
 import inspect
 import warnings
 
-VERSION = (0, 2, 5)
+VERSION = (0, 2, 6)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
 
+env = None
 common = None
 env_default = {}
 
@@ -23,6 +24,9 @@ try:
 
     import yaml
     
+    # Variables cached per-role. Must be after deepcopy.
+    env._rc = type(env)()
+
     def _represent_dictorder(self, data):
         return self.represent_mapping(u'tag:yaml.org,2002:map', data.items())
     
@@ -47,9 +51,6 @@ try:
 
 except ImportError:
     pass
-
-# Variables cached per-role. Must be after deepcopy.
-env._rc = type(env)()
 
 def _get_environ_handler(name, d):
     """
