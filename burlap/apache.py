@@ -318,6 +318,8 @@ def configure(full=1, site=ALL, delete_old=0):
         print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
         
         fn = common.render_to_file('django.template.wsgi')
+        remote_dir = os.path.split(env.apache_django_wsgi)[0]
+        sudo('mkdir -p %s' % remote_dir)
         put(local_path=fn, remote_path=env.apache_django_wsgi, use_sudo=True)
         
         if env.apache_ssl:

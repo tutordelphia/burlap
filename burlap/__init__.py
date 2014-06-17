@@ -1,6 +1,3 @@
-VERSION = (0, 2, 2)
-__version__ = '.'.join(map(str, VERSION))
-
 import copy
 import os
 import re
@@ -11,6 +8,9 @@ import importlib
 import pkgutil
 import inspect
 import warnings
+
+VERSION = (0, 2, 3)
+__version__ = '.'.join(map(str, VERSION))
 
 from fabric.api import env
 from fabric.tasks import WrappedCallableTask

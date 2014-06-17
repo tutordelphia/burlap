@@ -3,9 +3,11 @@ from setuptools import setup, find_packages, Command
 
 import os
 
+import burlap
+
 setup(
     name = "burlap",
-    version = '0.1.2',
+    version = burlap.__version__,
     packages = find_packages(),
     scripts = ['bin/burlap'],
     package_data = {
@@ -15,7 +17,7 @@ setup(
     },
     author = "Chris Spencer",
     author_email = "chrisspen@gmail.com",
-    description = "Fabric commands for simplifying Django deployment",
+    description = "Fabric commands for simplifying server deployments",
     license = "LGPL",
     url = "https://github.com/chrisspen/burlap",
     #https://pypi.python.org/pypi?%3Aaction=list_classifiers
@@ -26,7 +28,10 @@ setup(
         'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
-        'Framework :: Django',
     ],
-    install_requires = ['fabric', 'pyyaml'],
+    install_requires = [
+        'Fabric>=1.9.0',
+        'PyYAML>=3.11',
+        'feedparser>=5.1.3',
+    ],
 )
