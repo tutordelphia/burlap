@@ -32,9 +32,10 @@ setup(
         'Programming Language :: Python',
     ],
     install_requires = [
-        'Fabric>=1.9.0',
+        'Fabric>=1.8.2',
         'PyYAML>=3.11',
         'feedparser>=5.1.3',
         'pytz>=2014.4',
+        'python-dateutil>=2.2',
     ],
 )
