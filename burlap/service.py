@@ -26,10 +26,11 @@ from burlap.common import (
 )
 
 @task
-def configure():
+def configure(dryrun=0):
     """
     Applies one-time settings changes to the host, usually to initialize the service.
     """
+    dryrun = int(dryrun)
     print 'env.services:',env.services
     for service in list(env.services):
         service = service.strip().upper()
@@ -39,7 +40,8 @@ def configure():
             print 'Configuring service %s...' % (service,)
             for func in funcs:
                 print 'Function:',func
-                func()
+                if not dryrun:
+                    func()
 
 @task
 def pre_deploy():
@@ -55,17 +57,19 @@ def pre_deploy():
                 func()
                 
 @task
-def deploy():
+def deploy(dryrun=0):
     """
     Applies routine, typically application-level changes to the service.
     """
+    dryrun = int(dryrun)
     for service in env.services:
         service = service.strip().upper()
         funcs = common.service_deployers.get(service)
         if funcs:
             print 'Deploying service %s...' % (service,)
             for func in funcs:
-                func()
+                if not dryrun:
+                    func()
 
 @task
 def post_deploy():
@@ -81,14 +85,16 @@ def post_deploy():
                 func()
 
 @task
-def restart():
+def restart(dryrun=0):
+    dryrun = int(dryrun)
     for service in env.services:
         service = service.strip().upper()
         funcs = common.service_restarters.get(service)
         if funcs:
             print 'Restarting service %s...' % (service,)
             for func in funcs:
-                func()
+                if not dryrun:
+                    func()
 
 @task
 def stop():

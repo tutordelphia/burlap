@@ -74,6 +74,16 @@ env.db_mysql_preload_commands = []
 env.db_mysql_character_set = 'utf8'
 env.db_mysql_collate = 'utf8_general_ci'
 
+# If true, means we're responsible for installing and configuring
+# the database server.
+# If false, means we can assume the server is not our responsibility.
+env.db_server_managed = True
+
+# If true, means we're responsible for creating the logical database on
+# the database server.
+# If false, means creation of the database is not our responsibility.
+env.db_database_managed = True
+
 env.db_fixture_sets = {} # {name:[list of fixtures]}
 
 # Service names.
@@ -180,17 +190,26 @@ def set_collation_mysql_all(name=None, site=None, dryrun=0):
         set_collation_mysql(name=name, site=site, dryrun=dryrun)
 
 @task
-def configure(name=None, site=None, _role=None, dryrun=0):
+def configure(name='default', site=None, _role=None, dryrun=0):
     """
     Configures a fresh install of the database
     """
     from burlap.dj import set_db
     assert env[ROLE]
+#    print 'role:',env[ROLE]
+#    print 'site:',env[SITE]
     require('app_name')
-    set_db(name=name, site=site, role=_role)
+    #set_db(name=name, site=site, role=_role)
+    if name:
+        set_db(name=name, site=site or env[SITE], role=_role or env[ROLE], verbose=1)
 #    print 'site:',env[SITE]
 #    print 'role:',env[ROLE]
     env.dryrun = int(dryrun)
+    
+    if not env.db_server_managed:
+        print 'Aborting database server configuration because it is marked as unmanaged.'
+        return
+        
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         #TODO:set postgres user password?
         #https://help.ubuntu.com/community/PostgreSQL
@@ -247,6 +266,48 @@ def configure(name=None, site=None, _role=None, dryrun=0):
         print 'No database parameters found.'
 
 @task
+def exists(name='default', site=None):
+    """
+    Returns true if the database exists. False otherwise.
+    """
+    from burlap.dj import set_db, render_remote_paths
+    if name:
+        set_db(name=name, site=site)
+    
+#    print 'env.db_engine:',env.db_engine
+    if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
+        cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password -l | grep %(db_name)s | wc -l' % env
+        #cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password -l | grep %(db_name)s' % env
+        print cmd
+        if env.is_local:
+            ret = run(cmd)
+        else:
+            ret = sudo(cmd)
+        #return ret.return_code
+#        print 'ret:',ret
+#        print 'code:',ret.return_code
+#        print ret.__dict__
+        ret = '1' in ret
+#        print 'ret:',ret
+        return ret
+            
+    elif 'mysql' in env.db_engine:
+        #cmd = 'mysql -v -h %(db_host)s -u %(db_root_user)s -p"%(db_root_password)s" -e "SHOW DATABASES LIKE \'%(db_name)s\'"' % env
+        cmd = 'mysql -h %(db_host)s -u %(db_root_user)s -p"%(db_root_password)s" -N -B -e "SELECT IF(\'%(db_name)s\' IN(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA), \'exists\', \'notexists\') AS found;"' % env
+        print cmd
+        if env.is_local:
+            ret = run(cmd)
+        else:
+            ret = sudo(cmd)
+        #print 'ret:',ret
+        ret = 'notexists' not in ret
+        #print 'ret:',ret
+        return ret
+
+    else:
+        raise NotImplementedError
+
+@task
 def create(drop=0, name='default', dryrun=0, site=None, post_process=0, db_engine=None, db_user=None, db_host=None, db_password=None, db_name=None):
     """
     Creates the target database.
@@ -255,7 +316,14 @@ def create(drop=0, name='default', dryrun=0, site=None, post_process=0, db_engin
     assert env[ROLE]
     dryrun = int(dryrun)
     require('app_name')
-    env.db_drop_flag = '--drop' if int(drop) else ''
+    drop = int(drop)
+    
+    # Do nothing if we're not dropping and the database already exists.
+    if exists(name=name, site=site) and not drop:
+        print 'Database already exists.'
+        return
+    
+    env.db_drop_flag = '--drop' if drop else ''
     if name:
         set_db(name=name, site=site)
     if db_engine:
@@ -268,19 +336,19 @@ def create(drop=0, name='default', dryrun=0, site=None, post_process=0, db_engin
         env.db_password = db_password
     if db_name:
         env.db_name = db_name
-    print 'site:',env[SITE]
-    print 'role:',env[ROLE]
+#    print 'site:',env[SITE]
+#    print 'role:',env[ROLE]
     env.dryrun = int(dryrun)
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-        env.src_dir = os.path.abspath(env.src_dir)
-        # This assumes the django-extensions app is installed, which
-        # provides the convenient sqlcreate command.
-        if env.is_local:
-            env.db_src_dir = env.src_dir
-        else:
-            env.db_src_dir = env.remote_app_src_dir
-        #cmd = 'cd %(db_src_dir)s; export SITE=%(SITE)s; export ROLE=%(ROLE)s; %(django_manage)s sqlcreate --router=default %(db_drop_flag)s | psql --user=%(db_postgresql_postgres_user)s --no-password' % env
-        cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --command="CREATE DATABASE %(db_name)s WITH OWNER=%(db_user)s ENCODING=%(db_postgresql_encoding)s"' % env
+            
+        # Create role/user.
+        with settings(warn_only=True):
+            cmd = 'psql --user={db_postgresql_postgres_user} --no-password --command="CREATE USER {db_user} WITH PASSWORD \'{db_password}\';"'.format(**env)
+            print cmd
+            if not dryrun:
+                sudo(cmd)
+            
+        cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --command="CREATE DATABASE %(db_name)s WITH OWNER=%(db_user)s ENCODING=\'%(db_postgresql_encoding)s\'"' % env
         print cmd
         if not dryrun:
             sudo(cmd)
@@ -339,8 +407,8 @@ def post_create(name=None, dryrun=0, site=None):
     require('app_name')
     site = site or env.SITE
     set_db(name=name, site=site)
-    print 'site:',env[SITE]
-    print 'role:',env[ROLE]
+#    print 'site:',env[SITE]
+#    print 'role:',env[ROLE]
     env.dryrun = int(dryrun)
     
     syncdb(all=True, site=site)

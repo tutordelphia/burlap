@@ -52,18 +52,22 @@ if not env.dj_settings_loaded:
 
 DJANGO = 'DJANGO'
 
+@task
 def render_remote_paths():
     env.remote_app_dir = env.remote_app_dir_template % env
     env.remote_app_src_dir = env.remote_app_src_dir_template % env
     env.remote_app_src_package_dir = env.remote_app_src_package_dir_template % env
     if env.is_local:
-        if env.remote_app_dir.startswith('./'):
+        if env.remote_app_dir.startswith('./') or env.remote_app_dir == '.':
             env.remote_app_dir = os.path.abspath(env.remote_app_dir)
-        if env.remote_app_src_dir.startswith('./'):
+        if env.remote_app_src_dir.startswith('./') or env.remote_app_src_dir == '.':
             env.remote_app_src_dir = os.path.abspath(env.remote_app_src_dir)
-        if env.remote_app_src_package_dir.startswith('./'):
+        if env.remote_app_src_package_dir.startswith('./') or env.remote_app_src_package_dir == '.':
             env.remote_app_src_package_dir = os.path.abspath(env.remote_app_src_package_dir)
     env.remote_manage_dir = env.remote_manage_dir_template % env
+    print 'src_dir:',env.src_dir
+    print 'remote_app_dir:',env.remote_app_dir
+    print 'remote_app_src_dir:',env.remote_app_src_dir
     print 'remote_app_src_package_dir_template:',env.remote_app_src_package_dir_template
     print 'remote_app_src_package_dir:',env.remote_app_src_package_dir
     print 'remote_manage_dir:',env.remote_manage_dir
@@ -163,12 +167,12 @@ def migrate(app='', migration='', site=None, dryrun=0, fake=0):
         else:
             run(cmd)
 
-def set_db(name=None, site=None, role=None):
+def set_db(name=None, site=None, role=None, verbose=0):
     name = name or 'default'
 #    print '!'*80
 #    print 'set_db.site:',site
 #    print 'set_db.role:',role
-    settings = get_settings(site=site, role=role, verbose=0)
+    settings = get_settings(site=site, role=role, verbose=verbose)
     assert settings, 'Unable to load Django settings for site %s.' % (site,)
     env.django_settings = settings
     #print 'settings:',settings
