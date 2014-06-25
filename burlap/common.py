@@ -620,6 +620,10 @@ def render_to_string(template, verbose=True):
 #        else:
 #            print>>sys.stderr, 'Template not found: %s' % (fqfn,)
     assert final_fqfn, 'Template not found: %s' % template
+    #assert env.django_settings_module, 'No Django settings module defined.'
+    #os.environ['DJANGO_SETTINGS_MODULE'] = env.django_settings_module
+    from django.conf import settings
+    settings.configure()
     
     #content = render_to_string('template.txt', dict(env=env))
     template_content = open(final_fqfn, 'r').read()
