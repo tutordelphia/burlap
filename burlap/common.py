@@ -619,7 +619,7 @@ def render_to_string(template, verbose=True):
 #            break
 #        else:
 #            print>>sys.stderr, 'Template not found: %s' % (fqfn,)
-    assert final_fqfn, 'Template not found in any of:\n%s' % ('\n'.join(paths),)
+    assert final_fqfn, 'Template not found: %s' % template
     
     #content = render_to_string('template.txt', dict(env=env))
     template_content = open(final_fqfn, 'r').read()
