@@ -44,7 +44,7 @@ env.pip_virtual_env_exe = sudo
 env.pip_requirements_fn = 'pip-requirements.txt'
 env.pip_use_virt = True
 env.pip_build_dir = '/tmp/pip-build'
-env.pip_path = 'pip-%(pip_python_version)s'
+env.pip_path = 'pip%(pip_python_version)s'
 env.pip_update_command = '%(pip_path_versioned)s install --use-mirrors --timeout=120 --no-install %(pip_no_deps)s --build %(pip_build_dir)s --download %(pip_cache_dir)s --exists-action w %(pip_package)s'
 #env.pip_install_command = 'cd %(pip_virtual_env_dir)s; . %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade --timeout=60 "%(pip_package)s"; deactivate'
 env.pip_remote_cache_dir = '/tmp/pip_cache'
