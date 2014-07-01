@@ -23,7 +23,7 @@ BIND = 'BIND'
 
 common.required_system_packages[BIND] = {
     common.FEDORA: ['bind','bind-utils '],
-    common.UBUNTU: ['bind9'],
+    (common.UBUNTU, '12.04'): ['bind9'],
 }
 
 env.dns_service_commands = {

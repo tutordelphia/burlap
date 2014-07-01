@@ -5,7 +5,7 @@ from burlap import common
 MEMCACHED = 'MEMCACHED'
 
 common.required_system_packages[MEMCACHED] = {
-    common.UBUNTU: ['memcached'],
+    (common.UBUNTU, '12.04'): ['memcached'],
 }
 
 env.memcached_service_commands = {

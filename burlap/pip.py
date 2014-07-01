@@ -59,8 +59,19 @@ PENDING = 'pending'
 PIP = 'PIP'
 
 common.required_system_packages[PIP] = {
-    common.FEDORA: ['python-pip'],
-    common.UBUNTU: ['python-pip', 'python-virtualenv', 'gcc', 'python-dev'],
+    common.FEDORA: [
+        #'python-pip'#obsolete?
+    ],
+    (common.UBUNTU, '12.04'): [
+        #'python-pip',#obsolete in 14.04?
+        #'python-virtualenv',#obsolete in 14.04?
+        'gcc', 'python-dev', 'build-essential'
+    ],
+    (common.UBUNTU, '14.04'): [
+        #'python-pip',#obsolete in 14.04?
+        #'python-virtualenv',#obsolete in 14.04?
+        'gcc', 'python-dev', 'build-essential'
+    ],
 }
 
 def render_paths():

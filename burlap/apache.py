@@ -200,16 +200,16 @@ APACHE2_VISITORS = 'APACHE2_VISITORS'
 common.required_system_packages[APACHE2] = {
     common.FEDORA: ['httpd'],
     #common.UBUNTU: ['apache2', 'mod_ssl', 'mod_wsgi'],
-    common.UBUNTU: ['apache2', 'libapache2-mod-wsgi'],
+    (common.UBUNTU, '12.04'): ['apache2', 'libapache2-mod-wsgi'],
 }
 common.required_system_packages[APACHE2_MODEVASIVE] = {
-    common.UBUNTU: ['libapache2-mod-evasive'],
+    (common.UBUNTU, '12.04'): ['libapache2-mod-evasive'],
 }
 common.required_system_packages[APACHE2_MODEVASIVE] = {
-    common.UBUNTU: ['libapache2-modsecurity'],
+    (common.UBUNTU, '12.04'): ['libapache2-modsecurity'],
 }
 common.required_system_packages[APACHE2_VISITORS] = {
-    common.UBUNTU: ['visitors'],
+    (common.UBUNTU, '12.04'): ['visitors'],
 }
 
 def get_service_command(action):

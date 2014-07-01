@@ -147,13 +147,13 @@ def list_required(type=None, service=None, verbose=True):
         _new = []
         if not type or type == common.SYSTEM:
             _new.extend(common.required_system_packages.get(
-                _service, {}).get(version.distro, []))
+                _service, {}).get((version.distro, version.release), []))
         if not type or type == common.PYTHON:
             _new.extend(common.required_python_packages.get(
-                _service, {}).get(version.distro, []))
+                _service, {}).get((version.distro, version.release), []))
         if not type or type == common.RUBY:
             _new.extend(common.required_ruby_packages.get(
-                _service, {}).get(version.distro, []))
+                _service, {}).get((version.distro, version.release), []))
         if not _new and verbose:
             print>>sys.stderr, \
                 'Warning: no packages found for service "%s"' % (_service,)

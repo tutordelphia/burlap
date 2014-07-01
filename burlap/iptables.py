@@ -50,7 +50,7 @@ IPTABLES = 'IPTABLES'
 
 common.required_system_packages[IPTABLES] = {
     common.FEDORA: ['iptables'],
-    common.UBUNTU: ['iptables'],
+    (common.UBUNTU, '12.04'): ['iptables'],
 }
 
 def get_service_command(action):

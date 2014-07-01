@@ -623,7 +623,10 @@ def render_to_string(template, verbose=True):
     #assert env.django_settings_module, 'No Django settings module defined.'
     #os.environ['DJANGO_SETTINGS_MODULE'] = env.django_settings_module
     from django.conf import settings
-    settings.configure()
+    try:
+        settings.configure()
+    except RuntimeError:
+        pass
     
     #content = render_to_string('template.txt', dict(env=env))
     template_content = open(final_fqfn, 'r').read()
@@ -689,9 +692,12 @@ def shell(gui=0, dryrun=0):
     env.shell_interactive_shell_str = env.shell_interactive_shell % env
     if env.is_local:
         cmd = '%(shell_interactive_shell_str)s' % env
-    else:
+    elif env.key_filename:
         cmd = 'ssh -t %(shell_x_opt)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
-    print cmd
+    elif env.password:
+        cmd = 'ssh -t %(shell_x_opt)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
+#    print 'shell:',cmd
+#    return
     if int(dryrun):
         return
     os.system(cmd)

@@ -53,7 +53,7 @@ PROFTPD = 'PROFTPD'
 
 common.required_system_packages[PROFTPD] = {
     common.FEDORA: ['proftpd'],
-    common.UBUNTU: ['proftpd'],
+    (common.UBUNTU, '12.04'): ['proftpd'],
 }
 
 def get_service_command(action):

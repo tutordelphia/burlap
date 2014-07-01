@@ -66,7 +66,7 @@ CRON = 'CRON'
 
 common.required_system_packages[CRON] = {
     common.FEDORA: ['crontabs'],
-    common.UBUNTU: ['cron'],
+    (common.UBUNTU, '12.04'): ['cron'],
 }
 
 common.required_python_packages[CRON] = {

@@ -77,7 +77,7 @@ CELERY = 'CELERY'
 
 common.required_system_packages[CELERY] = {
 #    common.FEDORA: ['rabbitmq-server'],
-#    common.UBUNTU: ['rabbitmq-server'],
+#    (common.UBUNTU, '12.04'): ['rabbitmq-server'],
 }
 
 common.required_python_packages[CELERY] = {

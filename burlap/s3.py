@@ -40,7 +40,7 @@ S3SYNC = 'S3SYNC'
 
 common.required_system_packages[S3SYNC] = {
     common.FEDORA: ['ruby', 'rubygems'],
-    common.UBUNTU: ['ruby', 'rubygems', 'libxml2-dev', 'libxslt-dev'],
+    (common.UBUNTU, '12.04'): ['ruby', 'rubygems', 'libxml2-dev', 'libxslt-dev'],
 }
 common.required_ruby_packages[S3SYNC] = {
     common.FEDORA: ['s3sync==1.2.5'],

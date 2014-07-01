@@ -66,7 +66,7 @@ RABBITMQ = 'RABBITMQ'
 
 common.required_system_packages[RABBITMQ] = {
     common.FEDORA: ['rabbitmq-server'],
-    common.UBUNTU: ['rabbitmq-server'],
+    (common.UBUNTU, '12.04'): ['rabbitmq-server'],
 }
 
 def get_service_command(action):

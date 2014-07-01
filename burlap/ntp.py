@@ -12,5 +12,6 @@ NTPCLIENT = 'NTPCLIENT'
 
 common.required_system_packages[NTPCLIENT] = {
     common.FEDORA: ['ntpdate','ntp'],
-    common.UBUNTU: ['ntpdate','ntp'],
+    (common.UBUNTU, '12.04'): ['ntpdate','ntp'],
+    (common.UBUNTU, '14.04'): ['ntpdate','ntp'],
 }

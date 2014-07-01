@@ -100,19 +100,26 @@ common.required_system_packages[MYSQL] = {
 }
 common.required_system_packages[POSTGRESQL] = {
     common.FEDORA: ['postgresql-server'],
-    common.UBUNTU: ['postgresql-9.1'],
+    (common.UBUNTU, '12.04'): ['postgresql-9.1'],
+    (common.UBUNTU, '14.04'): ['postgresql-9.3'],
 }
 
 common.required_system_packages[MYSQLCLIENT] = {
     common.FEDORA: ['mysql-client'],
-    common.UBUNTU: ['mysql-client', 'libmysqlclient-dev'],
+    (common.UBUNTU, '12.04'): ['mysql-client', 'libmysqlclient-dev'],
+    (common.UBUNTU, '14.04'): ['mysql-client', 'libmysqlclient-dev'],
 }
 common.required_system_packages[POSTGRESQLCLIENT] = {
     common.FEDORA: ['postgresql-client'],
-    common.UBUNTU: [
+    (common.UBUNTU, '12.04'): [
         'postgresql-client-9.1',
         #'python-psycopg2',#install from pip instead
         'postgresql-server-dev-9.1',
+    ],
+    (common.UBUNTU, '14.04'): [
+        'postgresql-client-9.3',
+        #'python-psycopg2',#install from pip instead
+        'postgresql-server-dev-9.3',
     ],
 }
 
