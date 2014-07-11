@@ -1,3 +1,6 @@
+"""
+Various tools for manipulating files.
+"""
 import os
 import re
 
@@ -65,4 +68,24 @@ def sync(dryrun=0):
             print env.host_string+':', cmd
         else:
             sudo(cmd)
-        
+
+@task
+def appendline(fqfn, line, use_sudo=0, dryrun=0, verbose=1):
+    """
+    Appends the given line to the given file only if the line does not already
+    exist in the file.
+    """
+    verbose = int(verbose)
+    dryrun = int(dryrun)
+    use_sudo = int(use_sudo)
+    kwargs = dict(fqfn=fqfn, line=line)
+    cmd = 'grep -qF "{line}" {fqfn} || echo "{line}" >> {fqfn}'.format(**kwargs)
+    if verbose:
+        print(cmd)
+    if not dryrun:
+        if use_sudo:
+            sudo(cmd)
+        else:
+            run(cmd)
+    return [cmd]
+    

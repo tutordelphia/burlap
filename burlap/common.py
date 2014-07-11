@@ -611,14 +611,6 @@ def render_to_string(template, verbose=True):
     from django.template.loader import render_to_string
     
     final_fqfn = find_template(template, verbose=verbose)
-#    for path in get_template_dirs():
-#        fqfn = os.path.abspath(os.path.join(path, template))
-#        if os.path.isfile(fqfn):
-#            print>>sys.stderr, 'Using template: %s' % (fqfn,)
-#            final_fqfn = fqfn
-#            break
-#        else:
-#            print>>sys.stderr, 'Template not found: %s' % (fqfn,)
     assert final_fqfn, 'Template not found: %s' % template
     #assert env.django_settings_module, 'No Django settings module defined.'
     #os.environ['DJANGO_SETTINGS_MODULE'] = env.django_settings_module
@@ -746,3 +738,10 @@ def tunnel(local_port, remote_port):
     env.tunnel_local_port = local_port
     env.tunnel_remote_port = remote_port
     local(' ssh -i %(key_filename)s -L %(tunnel_local_port)s:localhost:%(tunnel_remote_port)s %(user)s@%(host_string)s -N' % env)
+
+def pc(*args):
+    """
+    Print comment.
+    """
+    print('echo "%s"' % ' '.join(map(str, args)))
+    

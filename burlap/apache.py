@@ -92,6 +92,9 @@ env.apache_wsgi_processes = 5
 
 env.apache_wsgi_threads = 15
 
+env.apache_domain_redirect_templates = [] # [(wrong_domain,right_domain)]
+env.apache_domain_redirects = [] # [(wrong_domain,right_domain)]
+
 env.apache_extra_rewrite_rules = ''
 
 env.apache_modevasive_DOSEmailNotify = 'admin@localhost'
@@ -289,6 +292,11 @@ def set_apache_site_specifics(site):
     env.apache_auth_basic_authuserfile = env.apache_auth_basic_authuserfile_template % env
     env.apache_domain_with_sub = env.apache_domain_with_sub_template % env
     env.apache_domain_without_sub = env.apache_domain_without_sub_template % env
+    
+    env.apache_domain_redirects = []
+    for _wrong, _right in env.apache_domain_redirect_templates:
+        env.apache_domain_redirects.append((_wrong % env, _right % env))
+    
 #    print 'site:',env.SITE
 #    print 'env.apache_domain_with_sub_template:',env.apache_domain_with_sub_template
 #    print 'env.apache_domain_with_sub:',env.apache_domain_with_sub
@@ -296,66 +304,102 @@ def set_apache_site_specifics(site):
 #    raw_input('<enter>')
 
 @task
-def configure(full=1, site=ALL, delete_old=0):
+def configure(full=1, site=None, delete_old=0, dryrun=0):
     """
     Configures Apache to host one or more websites.
     """
     from burlap import service
     
     print 'Configuring Apache...'
+    dryrun = int(dryrun)
+    
+    site = site or env.SITE
+    
     apache_specifics = set_apache_specifics()
     
     if int(delete_old):
         # Delete all existing enabled and available sites.
-        sudo('rm -f %(apache_sites_available)s/*' % env)
-        sudo('rm -f %(apache_sites_enabled)s/*' % env)
+        cmd = 'rm -f %(apache_sites_available)s/*' % env
+        print(cmd)
+        if not dryrun:
+            sudo(cmd)
+        cmd = 'rm -f %(apache_sites_enabled)s/*' % env
+        print(cmd)
+        if not dryrun:
+            sudo(cmd)
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
         print '-'*80
         print 'Site:',site
+        print '-'*80
         
-        print 'env.apache_ssl_domain:',env.apache_ssl_domain
-        print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
+#        print 'env.apache_ssl_domain:',env.apache_ssl_domain
+#        print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
         
-        fn = common.render_to_file('django.template.wsgi')
+        fn = common.render_to_file('django.template.wsgi', verbose=0)
         remote_dir = os.path.split(env.apache_django_wsgi)[0]
-        sudo('mkdir -p %s' % remote_dir)
-        put(local_path=fn, remote_path=env.apache_django_wsgi, use_sudo=True)
+        cmd = 'mkdir -p %s' % remote_dir
+        print(cmd)
+        if not dryrun:
+            sudo(cmd)
+            
+        if not dryrun:
+            put(local_path=fn, remote_path=env.apache_django_wsgi, use_sudo=True)
+        else:
+            env.put_remote_path = env.apache_django_wsgi
         
         if env.apache_ssl:
             env.apache_ssl_certificates = list(iter_certificates())
         
-        fn = common.render_to_file('apache_site.template.conf')
+        fn = common.render_to_file('apache_site.template.conf', verbose=0)
         env.apache_site_conf = site+'.conf'
         env.apache_site_conf_fqfn = os.path.join(env.apache_sites_available, env.apache_site_conf)
-        put(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True)
+        if not dryrun:
+            put(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True)
+        else:
+            env.put_remote_path = env.apache_site_conf_fqfn
         
-        sudo('a2ensite %(apache_site_conf)s' % env)
+        cmd = 'a2ensite %(apache_site_conf)s' % env
+        print(cmd)
+        if not dryrun:
+            sudo(cmd)
     
     if service.is_selected(APACHE2_MODEVASIVE):
-        configure_modevasive()
+        configure_modevasive(dryrun=dryrun)
         
     if service.is_selected(APACHE2_MODSECURITY):
-        configure_modsecurity()
+        configure_modsecurity(dryrun=dryrun)
     
     for mod_enabled in env.apache_mods_enabled:
         env.apache_mod_enabled = mod_enabled
-        sudo('a2enmod %(apache_mod_enabled)s' % env)
+        cmd = 'a2enmod %(apache_mod_enabled)s' % env
+        print(cmd)
+        if not dryrun:
+            sudo(cmd)
         
     if int(full):
         # Write master Apache configuration file.
-        fn = common.render_to_file('apache_httpd.template.conf')
-        put(local_path=fn, remote_path=env.apache_conf, use_sudo=True)
+        fn = common.render_to_file('apache_httpd.template.conf', verbose=0)
+        if not dryrun:
+            put(local_path=fn, remote_path=env.apache_conf, use_sudo=True)
+        else:
+            env.put_remote_path = env.apache_conf
         
         # Write Apache listening ports configuration.
-        fn = common.render_to_file('apache_ports.template.conf')
-        put(local_path=fn, remote_path=env.apache_ports, use_sudo=True)
+        fn = common.render_to_file('apache_ports.template.conf', verbose=0)
+        if not dryrun:
+            put(local_path=fn, remote_path=env.apache_ports, use_sudo=True)
+        else:
+            env.put_remote_path = env.apache_ports
         
     #sudo('mkdir -p %(apache_app_log_dir)s' % env)
     #sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_app_log_dir)s' % env)
 #    sudo('mkdir -p %(apache_log_dir)s' % env)
 #    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_log_dir)s' % env)
-    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_root)s' % env)
+    cmd = 'chown -R %(apache_user)s:%(apache_group)s %(apache_root)s' % env
+    print(cmd)
+    if not dryrun:
+        sudo(cmd)
 #    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_docroot)s' % env)
 #    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_pid)s' % env)
 
