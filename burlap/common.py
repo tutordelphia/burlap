@@ -7,7 +7,8 @@ import tempfile
 import importlib
 import warnings
 import glob
-from collections import namedtuple
+import yaml
+from collections import namedtuple, OrderedDict
 from StringIO import StringIO
 from pprint import pprint
 from fabric.api import (
@@ -688,8 +689,7 @@ def shell(gui=0, dryrun=0):
         cmd = 'ssh -t %(shell_x_opt)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
     elif env.password:
         cmd = 'ssh -t %(shell_x_opt)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
-#    print 'shell:',cmd
-#    return
+    print cmd
     if int(dryrun):
         return
     os.system(cmd)
@@ -744,4 +744,49 @@ def pc(*args):
     Print comment.
     """
     print('echo "%s"' % ' '.join(map(str, args)))
+
+def represent_ordereddict(dumper, data):
+    value = []
+
+    for item_key, item_value in data.items():
+        node_key = dumper.represent_data(item_key)
+        node_value = dumper.represent_data(item_value)
+
+        value.append((node_key, node_value))
+
+    return yaml.nodes.MappingNode(u'tag:yaml.org,2002:map', value)
+
+yaml.add_representer(OrderedDict, represent_ordereddict)
+
+#TODO:make thread/process safe with lockfile?
+class Shelf(object):
     
+    def __init__(self):
+        pass
+        
+    @property
+    def filename(self):
+        return 'roles/%s/shelf.yaml' % (env.ROLE.lower(),)
+
+    @property
+    def _dict(self):
+        try:
+            return OrderedDict(yaml.load(open(self.filename, 'rb')) or {})
+        except IOError:
+            return OrderedDict()
+
+    def get(self, name, default=None):
+        d = self._dict
+        return d.get(name, default)
+    
+    def setdefault(self, name, default):
+        d = self._dict
+        d.setdefault(name, default)
+        yaml.dump(d, open(self.filename, 'wb'))
+    
+    def set(self, name, value):
+        d = self._dict
+        d[name] = value
+        yaml.dump(d, open(self.filename, 'wb'))
+
+shelf = Shelf()

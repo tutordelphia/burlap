@@ -139,4 +139,7 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
         print 'Total physical storage: %s GB' % total_physical_storage_gb
         print 'Total logical storage: %s GB' % total_logical_storage_gb
         print 'Types: %s' % list_to_str_or_unknown(drive_transports)
-        
+
+def list_hosts():
+    print('hosts:', env.hosts)
+    

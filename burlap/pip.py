@@ -34,6 +34,7 @@ from burlap.common import (
 from burlap import versioner
 
 env.pip_build_directory = '/tmp/pip-build-root/pip'
+env.pip_check_permissions = True
 env.pip_user = 'www-data'
 env.pip_group = 'www-data'
 env.pip_chmod = '775'
@@ -92,6 +93,20 @@ def clean_virtualenv():
         'Unable to delete pre-existing environment.'
 
 @task
+def bootstrap():
+    """
+    Installs all the necessary packages necessary for managing virtual
+    environments with pip.
+    """
+    env.pip_path_versioned = env.pip_path % env
+    run('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py')
+    sudo('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env))
+    sudo('easy_install -U pip')
+    sudo('{pip_path_versioned} install --upgrade setuptools'.format(**env))
+    sudo('{pip_path_versioned} install --upgrade distribute'.format(**env))
+    sudo('{pip_path_versioned} install --upgrade virtualenv'.format(**env))
+
+@task
 def init(clean=0, check_global=0):
     """
     Creates the virtual environment.
@@ -119,7 +134,7 @@ def init(clean=0, check_global=0):
         else:
             sudo(cmd)
         
-    if not env.is_local:
+    if not env.is_local and env.pip_check_permissions:
         sudo('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
         sudo('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
 

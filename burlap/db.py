@@ -119,12 +119,12 @@ common.required_system_packages[POSTGRESQLCLIENT] = {
     (common.UBUNTU, '12.04'): [
         'postgresql-client-9.1',
         #'python-psycopg2',#install from pip instead
-        'postgresql-server-dev-9.1',
+        #'postgresql-server-dev-9.1',
     ],
     (common.UBUNTU, '14.04'): [
         'postgresql-client-9.3',
         #'python-psycopg2',#install from pip instead
-        'postgresql-server-dev-9.3',
+        #'postgresql-server-dev-9.3',
     ],
 }
 
@@ -494,7 +494,8 @@ def post_create(name=None, dryrun=0, site=None):
     assert env[ROLE]
     require('app_name')
     site = site or env.SITE
-    set_db(name=name, site=site)
+    #print 'site:',site
+    set_db(name=name, site=site, verbose=1)
     load_db_set(name=name)
 #    print 'site:',env[SITE]
 #    print 'role:',env[ROLE]

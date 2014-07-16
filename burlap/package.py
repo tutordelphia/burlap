@@ -38,7 +38,12 @@ def prepare():
         raise Exception, 'Unknown packager: %s' % (packager,)
 
 @task
-def install(*args, **kwargs):
+def install(**kwargs):
+    install_required(type='system', **kwargs)
+    install_custom(**kwargs)
+    
+@task
+def install_custom(*args, **kwargs):
     """
     Installs all system packages listed in the appropriate
     <packager>-requirements.txt.
@@ -168,10 +173,11 @@ def list_required(type=None, service=None, verbose=True):
     return packages
 
 @task
-def install_required(type=None, service=None):
+def install_required(type=None, service=None, list_only=0, **kwargs):
     """
     Installs system packages listed as required by services this host uses.
     """
+    list_only = int(list_only)
     type = (type or '').lower().strip()
     assert not type or type in common.PACKAGE_TYPES, \
         'Unknown package type: %s' % (type,)
@@ -182,11 +188,14 @@ def install_required(type=None, service=None):
     for type in types:
         if type == common.SYSTEM:
             content = '\n'.join(list_required(type=type, service=service))
+            if list_only:
+                print content
+                return
             fd, fn = tempfile.mkstemp()
             fout = open(fn, 'w')
             fout.write(content)
             fout.close()
-            install(fn=fn)
+            install_custom(fn=fn)
         else:
             raise NotImplementedError
 @task

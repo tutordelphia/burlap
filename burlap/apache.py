@@ -57,6 +57,7 @@ env.apache_ssl_chmod = 440
 env.apache_listen_ports = [80, 443]
 
 # A list of path patterns that should have HTTPS enforced.
+env.apache_ssl_secure_paths_enforce = True
 env.apache_ssl_secure_paths = ['/admin/(.*)']
 
 # Defines the expected name of the SSL certificates.
@@ -204,15 +205,19 @@ common.required_system_packages[APACHE2] = {
     common.FEDORA: ['httpd'],
     #common.UBUNTU: ['apache2', 'mod_ssl', 'mod_wsgi'],
     (common.UBUNTU, '12.04'): ['apache2', 'libapache2-mod-wsgi'],
+    (common.UBUNTU, '14.04'): ['apache2', 'libapache2-mod-wsgi'],
 }
 common.required_system_packages[APACHE2_MODEVASIVE] = {
     (common.UBUNTU, '12.04'): ['libapache2-mod-evasive'],
+    (common.UBUNTU, '14.04'): ['libapache2-mod-evasive'],
 }
 common.required_system_packages[APACHE2_MODEVASIVE] = {
     (common.UBUNTU, '12.04'): ['libapache2-modsecurity'],
+    (common.UBUNTU, '14.04'): ['libapache2-modsecurity'],
 }
 common.required_system_packages[APACHE2_VISITORS] = {
     (common.UBUNTU, '12.04'): ['visitors'],
+    (common.UBUNTU, '14.04'): ['visitors'],
 }
 
 def get_service_command(action):
@@ -335,7 +340,7 @@ def configure(full=1, site=None, delete_old=0, dryrun=0):
         
 #        print 'env.apache_ssl_domain:',env.apache_ssl_domain
 #        print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
-        
+#        print 'env.django_settings_module:',env.django_settings_module
         fn = common.render_to_file('django.template.wsgi', verbose=0)
         remote_dir = os.path.split(env.apache_django_wsgi)[0]
         cmd = 'mkdir -p %s' % remote_dir

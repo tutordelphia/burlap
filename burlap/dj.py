@@ -53,7 +53,9 @@ if not env.dj_settings_loaded:
 DJANGO = 'DJANGO'
 
 @task
-def render_remote_paths():
+def render_remote_paths(verbose=1):
+    verbose = int(verbose)
+    env.django_settings_module = env.django_settings_module_template % env
     env.remote_app_dir = env.remote_app_dir_template % env
     env.remote_app_src_dir = env.remote_app_src_dir_template % env
     env.remote_app_src_package_dir = env.remote_app_src_package_dir_template % env
@@ -65,12 +67,14 @@ def render_remote_paths():
         if env.remote_app_src_package_dir.startswith('./') or env.remote_app_src_package_dir == '.':
             env.remote_app_src_package_dir = os.path.abspath(env.remote_app_src_package_dir)
     env.remote_manage_dir = env.remote_manage_dir_template % env
-    print 'src_dir:',env.src_dir
-    print 'remote_app_dir:',env.remote_app_dir
-    print 'remote_app_src_dir:',env.remote_app_src_dir
-    print 'remote_app_src_package_dir_template:',env.remote_app_src_package_dir_template
-    print 'remote_app_src_package_dir:',env.remote_app_src_package_dir
-    print 'remote_manage_dir:',env.remote_manage_dir
+    if verbose:
+        print 'django_settings_module:',env.django_settings_module
+        print 'src_dir:',env.src_dir
+        print 'remote_app_dir:',env.remote_app_dir
+        print 'remote_app_src_dir:',env.remote_app_src_dir
+        print 'remote_app_src_package_dir_template:',env.remote_app_src_package_dir_template
+        print 'remote_app_src_package_dir:',env.remote_app_src_package_dir
+        print 'remote_manage_dir:',env.remote_manage_dir
 
 def iter_app_directories(ignore_import_error=False):
     #from django.utils.importlib import import_module
@@ -170,8 +174,8 @@ def migrate(app='', migration='', site=None, dryrun=0, fake=0):
 def set_db(name=None, site=None, role=None, verbose=0):
     name = name or 'default'
 #    print '!'*80
-#    print 'set_db.site:',site
-#    print 'set_db.role:',role
+#    print 'set_db.site:',site or env.SITE
+#    print 'set_db.role:',role or env.ROLE
     settings = get_settings(site=site, role=role, verbose=verbose)
     assert settings, 'Unable to load Django settings for site %s.' % (site,)
     env.django_settings = settings
@@ -222,6 +226,7 @@ def get_settings(site=None, role=None, verbose=True):
             if verbose:
                 print 'SITE:',env.SITE
                 print 'ROLE:',env.ROLE
+                print 'env.django_settings_module:',env.django_settings_module
             module = importlib.import_module(env.django_settings_module)
 #            print 'module.__name__:',module.__name__
 #            settings_dir = os.path.split(module.__file__)[0]

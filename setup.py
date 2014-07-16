@@ -37,5 +37,6 @@ setup(
         'feedparser>=5.1.3',
         'pytz>=2014.4',
         'python-dateutil>=2.2',
+        'lockfile>=0.9.1',
     ],
 )
