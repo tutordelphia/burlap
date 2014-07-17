@@ -553,7 +553,7 @@ def sync_media(sync_set=None, dryrun=0):
             #with settings(warn_only=True):
             sudo('mkdir -p %(apache_sync_remote_path)s' % env, user=env.apache_user)
             sudo('chmod -R %(apache_tmp_chmod)s %(apache_sync_remote_path)s' % env, user=env.apache_user)
-            cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % env
+            cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % env
 #            print '!'*80
 #            print cmd
             if not int(dryrun):

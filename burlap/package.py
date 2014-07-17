@@ -57,6 +57,23 @@ def install_custom(*args, **kwargs):
         raise Exception, 'Unknown packager: %s' % (packager,)
 
 @task
+def refresh(*args, **kwargs):
+    """
+    Updates/upgrades all system packages.
+    """
+    packager = get_packager()
+    if packager == APT:
+        return refresh_apt(*args, **kwargs)
+    elif package == YUM:
+        raise NotImplementedError
+        #return upgrade_yum(*args, **kwargs)
+    else:
+        raise Exception, 'Unknown packager: %s' % (packager,)
+
+def refresh_apt():
+    sudo('apt-get update -y --fix-missing')
+
+@task
 def upgrade(*args, **kwargs):
     """
     Updates/upgrades all system packages.

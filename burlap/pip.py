@@ -480,7 +480,7 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
     else:
         env.pip_cache_dir = env.pip_remote_cache_dir % env
         env.pip_key_filename = os.path.abspath(env.key_filename)
-        local('rsync -avz --progress --rsh "ssh -i %(pip_key_filename)s" %(pip_local_cache_dir)s/* %(user)s@%(host_string)s:%(pip_remote_cache_dir)s' % env)
+        local('rsync -avz --progress --rsh "ssh -o StrictHostKeyChecking=no -i %(pip_key_filename)s" %(pip_local_cache_dir)s/* %(user)s@%(host_string)s:%(pip_remote_cache_dir)s' % env)
     
     env.pip_upgrade_flag = ''
     if int(upgrade):

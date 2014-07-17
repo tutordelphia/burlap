@@ -60,7 +60,14 @@ def _get_environ_handler(name, d):
     
     def func(site=None, **kwargs):
         site = site or d.get('default_site') or env.SITE
-        hostname = kwargs.get('hostname', kwargs.get('hn', kwargs.get('h')))
+        
+#        print kwargs.get('name')
+        hostname = kwargs.get('hostname')
+        hostname = hostname or kwargs.get('name')
+        hostname = hostname or kwargs.get('hn')
+        hostname = hostname or kwargs.get('h')
+#        print 'hostname:',hostname
+#        return
         
         # Load environment for current role.
         env.update(env_default)
@@ -103,12 +110,14 @@ def _get_environ_handler(name, d):
             
         #print 'env.vm_type1:',env.vm_type
         # Filter hosts list by a specific host name.
+        #env.hostname = hostname
         if hostname:
+            _hostname = hostname
             hostname = translator(hostname=hostname)
             _hosts = env.hosts
             env.hosts = [_ for _ in env.hosts if _ == hostname]
             assert env.hosts, \
-                'Hostname %s does not match any known hosts.' % (hostname,)
+                'Hostname %s does not match any known hosts.' % (_hostname,)
                 
         if env.is_local is None:
             if env.hosts:

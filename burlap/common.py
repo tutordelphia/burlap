@@ -668,7 +668,7 @@ def info():
     print 'default_site:',env.default_site
 
 @task
-def shell(gui=0, dryrun=0):
+def shell(gui=0, dryrun=0, ):
     """
     Opens a UNIX shell.
     """
@@ -681,14 +681,17 @@ def shell(gui=0, dryrun=0):
         env.shell_host_string = env.host_string
     else:
         env.shell_host_string = '%(user)s@%(host_string)s' % env
+        
+    env.shell_check_host_key_str = '-o StrictHostKeyChecking=no'
+        
     env.shell_default_dir = env.shell_default_dir_template % env
     env.shell_interactive_shell_str = env.shell_interactive_shell % env
     if env.is_local:
         cmd = '%(shell_interactive_shell_str)s' % env
     elif env.key_filename:
-        cmd = 'ssh -t %(shell_x_opt)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
+        cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
     elif env.password:
-        cmd = 'ssh -t %(shell_x_opt)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
+        cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
     print cmd
     if int(dryrun):
         return

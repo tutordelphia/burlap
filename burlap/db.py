@@ -569,7 +569,7 @@ def dump(dryrun=0, dest_dir=None, to_local=None):
     
     # Download the database dump file on the remote host to localhost.
     if (0 if to_local is None else int(to_local)) and not env.is_local:
-        cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -i %(key_filename)s" %(user)s@%(host_string)s:%(db_dump_fn)s %(db_dump_fn)s') % env
+        cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i %(key_filename)s" %(user)s@%(host_string)s:%(db_dump_fn)s %(db_dump_fn)s') % env
         print cmd
         if not dryrun:
             local(cmd)

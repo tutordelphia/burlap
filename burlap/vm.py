@@ -333,13 +333,32 @@ def get_or_create_ec2_instance(name=None, group=None, release=None):
 #        get_ec2_connection().attach_volume(volume.id, instance.id, env.vm_ec2_volume)
 #        print 'EBS volume attached.'
 
-    delay = 10
-    print 'Stalling for %is for sshd to start...' % delay
-    time.sleep(delay)
+#    delay = 10
+#    print 'Stalling for %is for sshd to start...' % delay
+#    time.sleep(delay)
     
     # Refresh instance reference.
     instance = get_all_ec2_instances(instance_ids=[instance.id])[0]
     assert instance.public_dns_name, 'No public DNS name found!'
+
+    # Confirm we can SSH into the server.
+    #TODO:better handle timeouts? try/except doesn't really work?
+    env.connection_attempts = 10
+    while 1:
+        try:
+            with settings(warn_only=True):
+                env.host_string = instance.public_dns_name
+                ret = run('who -b')
+                #print 'ret.return_code:',ret.return_code
+                if not ret.return_code:
+                    break
+        except Exception, e:
+            print 'error:',e
+        except SystemExit, e:
+            print 'systemexit:',e
+            pass
+        print('Waiting for sshd to accept connections...')
+        time.sleep(3)
 
     print ""
     print "Login with: ssh -i %s %s@%s" \
@@ -427,23 +446,47 @@ def delete(name=None, group=None, release=None, except_release=None,
             except_release=except_release,
         )
         
-        #print instances
         for instance_name, instance_data in instances.items():
+            public_dns_name = instance_data['public_dns_name']
             print('\nDeleting %s (%s)...' \
                 % (instance_name, instance_data['id']))
             if not dryrun:
                 conn.terminate_instances(instance_ids=[instance_data['id']])
                 
+            # Clear host key on localhost.
+            known_hosts = os.path.expanduser('~/.ssh/known_hosts')
+            cmd = 'ssh-keygen -f "%s" -R %s' % (known_hosts, public_dns_name)
+            local(cmd)
+
     else:
         raise NotImplementedError
 
 @task
-def respawn(name, group=None):
+def get_name():
+    """
+    Retrieves the instance name associated with the current host string.
+    """
+    if env.vm_type == EC2:
+        for instance in get_all_running_ec2_instances():
+            if env.host_string == instance.public_dns_name:
+                name = instance.tags.get(env.vm_name_tag)
+                return name
+    else:
+        raise NotImplementedError
+
+@task
+def respawn(name=None, group=None):
     """
     Deletes and recreates one or more VM instances.
     """
+    
+    if name is None:
+        name = get_name()
+        #print name
+    
     delete(name=name, group=group, dryrun=0)
-    get_or_create(name=name, group=group)
+    instance = get_or_create(name=name, group=group)
+    env.host_string = instance.public_dns_name
 
 @task
 def shutdown(force=False):
