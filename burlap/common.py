@@ -608,6 +608,7 @@ def render_to_string(template, verbose=True):
     """
     Renders the given template to a string.
     """
+    import django
     from django.template import Context, Template
     from django.template.loader import render_to_string
     
@@ -715,14 +716,17 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
     renderer = renderer or render_remote_paths
     env_default = save_env()
     for site, site_data in sites:
+#        print 'env.django_settings_module_template00:',env.django_settings_module_template
         if no_secure and site.endswith('_secure'):
             continue
         env.update(env_default)
         env.update(env.sites[site])
         env.SITE = site
         renderer()
+#        print 'env.django_settings_module_template01:',env.django_settings_module_template
         if setter:
             setter(site)
+#        print 'env.django_settings_module_template02:',env.django_settings_module_template
         yield site, site_data
     env.update(env_default)
 
@@ -764,8 +768,13 @@ yaml.add_representer(OrderedDict, represent_ordereddict)
 #TODO:make thread/process safe with lockfile?
 class Shelf(object):
     
-    def __init__(self):
-        pass
+    def __init__(self, ascii_str=True):
+        
+        # If true, automatically ensure all string values are plain ASCII.
+        # This helps keep the YAML clean, otherwise verbose syntax would be
+        # added for non-ASCII encodings, even if the string only contains
+        # ASCII characters.
+        self.ascii_str = ascii_str
         
     @property
     def filename(self):
@@ -789,6 +798,8 @@ class Shelf(object):
     
     def set(self, name, value):
         d = self._dict
+        if self.ascii_str and isinstance(value, basestring):
+            value = str(value)
         d[name] = value
         yaml.dump(d, open(self.filename, 'wb'))
 

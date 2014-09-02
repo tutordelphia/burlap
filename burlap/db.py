@@ -101,7 +101,9 @@ POSTGIS = 'POSTGIS'
 POSTGRESQLCLIENT = 'POSTGRESQLCLIENT'
 
 common.required_system_packages[MYSQL] = {
-    common.FEDORA: ['mysql-server'],    common.UBUNTU: ['mysql-server', 'libmysqlclient-dev'],
+    common.FEDORA: ['mysql-server'],
+    (common.UBUNTU, '12.04'): ['mysql-server', 'libmysqlclient-dev'],
+    (common.UBUNTU, '14.04'): ['mysql-server', 'libmysqlclient-dev'],
 }
 common.required_system_packages[POSTGRESQL] = {
     common.FEDORA: ['postgresql-server'],
@@ -305,10 +307,11 @@ def configure(name='default', site=None, _role=None, dryrun=0):
         print 'No database parameters found.'
 
 @task
-def load_db_set(name):
+def load_db_set(name, verbose=0):
     """
     Loads database parameters from a specific named set.
     """
+    verbose = int(verbose)
     db_set = env.db_sets.get(name, {})
     env.update(db_set)
 
@@ -319,12 +322,12 @@ def exists(name='default', site=None, dryrun=0, verbose=1):
     """
     from burlap.dj import set_db, render_remote_paths
     
-    if name:
-        set_db(name=name, site=site)
-        load_db_set(name=name)
-    
     dryrun = int(dryrun)
     verbose = int(verbose)
+    
+    if name:
+        set_db(name=name, site=site, verbose=verbose)
+        load_db_set(name=name)
     
     ret = None
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
@@ -379,6 +382,12 @@ def exists(name='default', site=None, dryrun=0, verbose=1):
     if ret is not None:
         print('%s database on site %s %s exist' % (name, env.SITE, 'DOES' if ret else 'DOES NOT'))
         return ret
+
+@task
+def prep_mysql_root_password():
+    sudo("dpkg --configure -a")
+    sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password password %(db_root_password)s'" % env)
+    sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password %(db_root_password)s'" % env)
 
 @task
 def create(drop=0, name='default', dryrun=0, site=None, post_process=0, db_engine=None, db_user=None, db_host=None, db_password=None, db_name=None):
@@ -528,13 +537,14 @@ def update_all(skip_databases=None):
         update(site=site, skip_databases=skip_databases)
 
 @task
-def dump(dryrun=0, dest_dir=None, to_local=None):
+def dump(dryrun=0, dest_dir=None, to_local=None, from_local=0):
     """
     Exports the target database to a single transportable file on the localhost,
     appropriate for loading using load().
     """
     from burlap.dj import set_db
     dryrun = int(dryrun)
+    from_local = int(from_local)
     set_db()
     if dest_dir:
         env.db_dump_dest_dir = dest_dir
@@ -551,8 +561,9 @@ def dump(dryrun=0, dest_dir=None, to_local=None):
         env.db_schemas_str = ' '.join('-n %s' % _ for _ in env.db_schemas)
         cmd = env.db_postgresql_dump_command % env
         print cmd
+        print 'db_host:',env.db_host
         if not dryrun:
-            if env.is_local:
+            if env.is_local or from_local:
                 local(cmd)
             else:
                 sudo(cmd)
@@ -568,7 +579,7 @@ def dump(dryrun=0, dest_dir=None, to_local=None):
         raise NotImplemented
     
     # Download the database dump file on the remote host to localhost.
-    if (0 if to_local is None else int(to_local)) and not env.is_local:
+    if not from_local and (0 if to_local is None else int(to_local)) and not env.is_local:
         cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i %(key_filename)s" %(user)s@%(host_string)s:%(db_dump_fn)s %(db_dump_fn)s') % env
         print cmd
         if not dryrun:
@@ -727,6 +738,7 @@ def load(db_dump_fn='', dryrun=0, prep_only=0, force_upload=0):
     
     if env.db_load_command:
         cmd = env.db_load_command % env
+        print cmd
         if not dryrun:
             run(cmd)
     elif 'postgres' in env.db_engine or 'postgis' in env.db_engine:
@@ -741,15 +753,15 @@ def load(db_dump_fn='', dryrun=0, prep_only=0, force_upload=0):
         print cmd
         if not dryrun:
             run(cmd)
-            
+        
         with settings(warn_only=True):
             
             if 'postgis' in env.db_engine:
-                cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --dbname=%(db_name)s --command="CREATE EXTENSION postgis;"'
+                cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --dbname=%(db_name)s --command="CREATE EXTENSION postgis;"' % env
                 print cmd
                 if not dryrun:
                     run(cmd)
-                cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --dbname=%(db_name)s --command="CREATE EXTENSION postgis_topology;"'
+                cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --dbname=%(db_name)s --command="CREATE EXTENSION postgis_topology;"' % env
                 print cmd
                 if not dryrun:
                     run(cmd)
@@ -1180,7 +1192,7 @@ def write_postgres_pgpass(name=None, use_sudo=0, dryrun=0, verbose=1):
     return cmds
 
 @task
-def shell(name='default', user=None, password=None, dryrun=0, root=0, verbose=1, write_password=1, no_db=0):
+def shell(name='default', user=None, password=None, dryrun=0, root=0, verbose=1, write_password=1, no_db=0, no_pw=0):
     """
     Opens a SQL shell to the given database, assuming the configured database
     and user supports this feature.
@@ -1192,18 +1204,27 @@ def shell(name='default', user=None, password=None, dryrun=0, root=0, verbose=1,
     root = int(root)
     write_password = int(write_password)
     no_db = int(no_db)
+    no_pw = int(no_pw)
     
     # Load database credentials.
-    set_db(name=name)
-    load_db_set(name=name)
+    set_db(name=name, verbose=verbose)
+    load_db_set(name=name, verbose=verbose)
     if root:
         env.db_user = env.db_root_user
         env.db_password = env.db_root_password
     else:
-        if user:
+        if user is not None:
             env.db_user = user
-        if password:
+        if password is not None:
             env.db_password = password
+    
+    # Switch relative to absolute host name.
+    env.db_shell_host = env.db_host
+#    if env.db_shell_host in ('localhost', '127.0.0.1'):
+#        env.db_shell_host = env.host_string
+    
+    if no_pw:
+        env.db_password = ''
     
     cmds = []
     env.db_name_str = ''
@@ -1222,14 +1243,18 @@ def shell(name='default', user=None, password=None, dryrun=0, root=0, verbose=1,
             env.db_name_str = ' --dbname=%(db_name)s' % env
         
         cmds.append(('/bin/bash -i -c \"psql --username=%(db_user)s '\
-            '--host=%(db_host)s%(db_name_str)s\"') % env)
+            '--host=%(db_shell_host)s%(db_name_str)s\"') % env)
     elif 'mysql' in env.db_engine:
         
         if not no_db:
             env.db_name_str = ' %(db_name)s' % env
-            
-        cmds.append(('/bin/bash -i -c \"mysql -u %(db_user)s '\
-            '-p\'%(db_password)s\' -h %(db_host)s%(db_name_str)s\"') % env)
+        
+        if env.db_password:
+            cmds.append(('/bin/bash -i -c \"mysql -u %(db_user)s '\
+                '-p\'%(db_password)s\' -h %(db_shell_host)s%(db_name_str)s\"') % env)
+        else:
+            cmds.append(('/bin/bash -i -c \"mysql -u %(db_user)s '\
+                '-h %(db_shell_host)s%(db_name_str)s\"') % env)
     else:
         raise NotImplementedError
         

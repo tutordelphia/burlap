@@ -27,6 +27,10 @@ if not env.dj_settings_loaded:
     env.dj_settings_loaded = True
     
     # The default django settings module import path.
+    print 'reset django settings module template!!!'
+    if 'django_settings_module_template' in env:
+        print '!'*80
+        print 'env.django_settings_module_template:',env.django_settings_module_template
     env.django_settings_module_template = '%(app_name)s.settings.settings'
     #
     # This is the name of the executable to call to access Django's management
@@ -53,6 +57,12 @@ if not env.dj_settings_loaded:
 DJANGO = 'DJANGO'
 
 @task
+def check_remote_paths(verbose=1):
+    if 'django_settings_module' in env:
+        return
+    render_remote_paths(verbose)
+
+@task
 def render_remote_paths(verbose=1):
     verbose = int(verbose)
     env.django_settings_module = env.django_settings_module_template % env
@@ -68,6 +78,8 @@ def render_remote_paths(verbose=1):
             env.remote_app_src_package_dir = os.path.abspath(env.remote_app_src_package_dir)
     env.remote_manage_dir = env.remote_manage_dir_template % env
     if verbose:
+        print 'render_remote_paths'
+        print 'django_settings_module_template:',env.django_settings_module_template
         print 'django_settings_module:',env.django_settings_module
         print 'src_dir:',env.src_dir
         print 'remote_app_dir:',env.remote_app_dir
@@ -174,14 +186,18 @@ def migrate(app='', migration='', site=None, dryrun=0, fake=0):
 def set_db(name=None, site=None, role=None, verbose=0):
     name = name or 'default'
 #    print '!'*80
-#    print 'set_db.site:',site or env.SITE
-#    print 'set_db.role:',role or env.ROLE
+    site = site or env.SITE
+    role = role or env.ROLE
+    print 'set_db.site:',site
+    print 'set_db.role:',role
+    print 'verbose:',verbose
     settings = get_settings(site=site, role=role, verbose=verbose)
     assert settings, 'Unable to load Django settings for site %s.' % (site,)
     env.django_settings = settings
-    #print 'settings:',settings
-    #print 'databases:',settings.DATABASES
+    print 'settings:',settings
+    print 'databases:',settings.DATABASES
     default_db = settings.DATABASES[name]
+    print 'default_db:',default_db
     env.db_name = default_db['NAME']
     env.db_user = default_db['USER']
     env.db_host = default_db['HOST']
@@ -192,10 +208,12 @@ def has_database(name, site=None, role=None):
     settings = get_settings(site=site, role=role, verbose=0)
     return name in settings.DATABASES
 
-def get_settings(site=None, role=None, verbose=True):
+@task
+def get_settings(site=None, role=None, verbose=1):
     """
     Retrieves the Django settings dictionary.
     """
+    print 'verbose:',verbose
     stdout = sys.stdout
     stderr = sys.stderr
     if not verbose:
@@ -206,14 +224,19 @@ def get_settings(site=None, role=None, verbose=True):
         if site and site.endswith('_secure'):
             site = site[:-7]
         site = site or env.SITE
-        #print 'site:',site
+        print 'get_settings.site:',env.SITE
+        print 'get_settings.role:',env.ROLE
         common.set_site(site)
         tmp_role = env.ROLE
         if role:
             env.ROLE = os.environ[ROLE] = role
+        check_remote_paths(verbose=verbose)
+        print 'get_settings.django_settings_module_template:',env.django_settings_module_template
+        print 'get_settings.django_settings_module:',env.django_settings_module
         env.django_settings_module = env.django_settings_module_template % env
+        #print 'Django settings module:',env.django_settings_module
         if verbose:
-            print 'Django settings module:',env.django_settings_module
+            print 'Django settings module1:',env.django_settings_module
         try:
     #        module = __import__(
     #            env.django_settings_module,

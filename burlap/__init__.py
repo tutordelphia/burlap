@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import copy
 import os
 import re
@@ -8,7 +10,7 @@ import pkgutil
 import inspect
 import warnings
 
-VERSION = (0, 2, 16)
+VERSION = (0, 2, 17)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -50,7 +52,8 @@ try:
     
     env_default = common.save_env()
 
-except ImportError:
+except ImportError as e:
+    print(e, file=sys.stderr)
     pass
 
 def _get_environ_handler(name, d):
@@ -61,13 +64,12 @@ def _get_environ_handler(name, d):
     def func(site=None, **kwargs):
         site = site or d.get('default_site') or env.SITE
         
-#        print kwargs.get('name')
         hostname = kwargs.get('hostname')
         hostname = hostname or kwargs.get('name')
         hostname = hostname or kwargs.get('hn')
         hostname = hostname or kwargs.get('h')
-#        print 'hostname:',hostname
-#        return
+
+        verbose = int(kwargs.get('verbose', '0'))
         
         # Load environment for current role.
         env.update(env_default)
@@ -99,16 +101,15 @@ def _get_environ_handler(name, d):
         if site:
             env[common.SITE] = os.environ[common.SITE] = site
         env.update(d)
-#        print 'd:'
-#        for k in sorted(d.keys()):
-#            print k,d[k]
-        #print 'env.vm_type0:',env.vm_type
         
         # Dynamically retrieve hosts.
         if env.hosts_retriever:
-            env.hosts = list(retriever())
-            
-        #print 'env.vm_type1:',env.vm_type
+#            print('retriever:',retriever)
+#            print('hosts:',env.hosts)
+            if verbose:
+                print('Building host list...')
+            env.hosts = list(retriever(verbose=verbose))
+
         # Filter hosts list by a specific host name.
         #env.hostname = hostname
         if hostname:
@@ -125,8 +126,7 @@ def _get_environ_handler(name, d):
             elif env.host_string:
                 env.is_local = 'localhost' in env.host_string or '127.0.0.1' in env.host_string
         
-        #print 'env.vm_type2:',env.vm_type
-        print 'Loaded role %s.' % (name,)
+        print('Loaded role %s.' % (name,))
     func.__doc__ = 'Sets enivronment variables for the "%s" role.' % (name,)
     return func
 
@@ -239,7 +239,6 @@ if common and not no_load:
             _settings_fn = os.path.join(common.ROLE_DIR, _name, 'settings.yaml')
             if _name.startswith('.') or not os.path.isfile(_settings_fn):
                 continue
-            #print 'Checking %s...' % (_name,)
     #        if _name == 'all' or not :
     #            continue
     #        _config = copy.deepcopy(_common)
@@ -264,7 +263,6 @@ if common and not no_load:
         __all__.append(module_name)
         module = loader.find_module(module_name).load_module(module_name)
         sub_modules[module_name] = module
-        #print module
 
     if burlap_populate_stack:
         populate_fabfile()

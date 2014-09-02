@@ -205,7 +205,7 @@ common.required_system_packages[APACHE2] = {
     common.FEDORA: ['httpd'],
     #common.UBUNTU: ['apache2', 'mod_ssl', 'mod_wsgi'],
     (common.UBUNTU, '12.04'): ['apache2', 'libapache2-mod-wsgi'],
-    (common.UBUNTU, '14.04'): ['apache2', 'libapache2-mod-wsgi'],
+    (common.UBUNTU, '14.04'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'],
 }
 common.required_system_packages[APACHE2_MODEVASIVE] = {
     (common.UBUNTU, '12.04'): ['libapache2-mod-evasive'],
@@ -280,7 +280,13 @@ def set_apache_site_specifics(site):
     
     site_data = env.sites[site]
     
+#    print 'env.django_settings_module_template0:',env.django_settings_module_template
+#    print 'env.django_settings_module0:',env.django_settings_module
+    
     get_settings(site=site)
+    
+#    print 'env.django_settings_module_template1:',env.django_settings_module_template
+#    print 'env.django_settings_module1:',env.django_settings_module
     
     # Set site specific values.
     env.apache_site = site
@@ -309,7 +315,7 @@ def set_apache_site_specifics(site):
 #    raw_input('<enter>')
 
 @task
-def configure(full=1, site=None, delete_old=0, dryrun=0):
+def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
     """
     Configures Apache to host one or more websites.
     """
@@ -317,6 +323,7 @@ def configure(full=1, site=None, delete_old=0, dryrun=0):
     
     print 'Configuring Apache...'
     dryrun = int(dryrun)
+    verbose = int(verbose)
     
     site = site or env.SITE
     
@@ -338,10 +345,11 @@ def configure(full=1, site=None, delete_old=0, dryrun=0):
         print 'Site:',site
         print '-'*80
         
-#        print 'env.apache_ssl_domain:',env.apache_ssl_domain
-#        print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
-#        print 'env.django_settings_module:',env.django_settings_module
-        fn = common.render_to_file('django.template.wsgi', verbose=0)
+        print 'env.apache_ssl_domain:',env.apache_ssl_domain
+        print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
+        print 'env.django_settings_module:',env.django_settings_module
+#        raw_input('enter')
+        fn = common.render_to_file('django.template.wsgi', verbose=verbose)
         remote_dir = os.path.split(env.apache_django_wsgi)[0]
         cmd = 'mkdir -p %s' % remote_dir
         print(cmd)
@@ -356,7 +364,7 @@ def configure(full=1, site=None, delete_old=0, dryrun=0):
         if env.apache_ssl:
             env.apache_ssl_certificates = list(iter_certificates())
         
-        fn = common.render_to_file('apache_site.template.conf', verbose=0)
+        fn = common.render_to_file('apache_site.template.conf', verbose=verbose)
         env.apache_site_conf = site+'.conf'
         env.apache_site_conf_fqfn = os.path.join(env.apache_sites_available, env.apache_site_conf)
         if not dryrun:
@@ -384,14 +392,14 @@ def configure(full=1, site=None, delete_old=0, dryrun=0):
         
     if int(full):
         # Write master Apache configuration file.
-        fn = common.render_to_file('apache_httpd.template.conf', verbose=0)
+        fn = common.render_to_file('apache_httpd.template.conf', verbose=verbose)
         if not dryrun:
             put(local_path=fn, remote_path=env.apache_conf, use_sudo=True)
         else:
             env.put_remote_path = env.apache_conf
         
         # Write Apache listening ports configuration.
-        fn = common.render_to_file('apache_ports.template.conf', verbose=0)
+        fn = common.render_to_file('apache_ports.template.conf', verbose=verbose)
         if not dryrun:
             put(local_path=fn, remote_path=env.apache_ports, use_sudo=True)
         else:

@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 import datetime
@@ -58,44 +60,29 @@ env.vm_ec2_aws_secret_access_key = None
 env.vm_ec2_volume = '/dev/sdh1'
 env.vm_ec2_keypair_name = None
 env.vm_ec2_use_elastic_ip = False
+env.vm_ec2_subnet_id = None
 
-def retrieve_ec2_hosts():
-    for name, data in list_instances(show=0).iteritems():
+def retrieve_ec2_hosts(verbose=0):
+    for name, data in list_instances(show=0, verbose=verbose).iteritems():
         yield data.public_dns_name
 
 env.hosts_retrievers['ec2'] = retrieve_ec2_hosts
 
-def translate_ec2_hostname(hostname):
-    for name, data in list_instances(show=0).iteritems():
+def translate_ec2_hostname(hostname, verbose=0):
+    for name, data in list_instances(show=0, verbose=verbose).iteritems():
         if name == hostname:
             return data.public_dns_name
 
 env.hostname_translators['ec2'] = translate_ec2_hostname
 
 def get_ec2_connection():
-#    assert 'AWS_CREDENTIAL_FILE' in os.environ, \
-#        'AWS environment variables not set.'
-#    return boto.connect_ec2()
-#    print env.vm_ec2_aws_access_key_id
-#    print env.vm_ec2_aws_secret_access_key
     conn = boto.ec2.connect_to_region(
         #env.vm_ec2_zone,
         env.vm_ec2_region,
         aws_access_key_id=env.vm_ec2_aws_access_key_id,
         aws_secret_access_key=env.vm_ec2_aws_secret_access_key,
     )
-#    print 'conn:',conn
     return conn
-
-@task
-def test():
-    from burlap.common import shelf
-    #conn = get_ec2_connection()
-    #print conn
-#    instances = get_all_ec2_instances()
-#    print instances
-#    shelf.set('vm_ips', [1,2,3])
-#    shelf.set('vm_xyz', [123])
 
 def get_all_ec2_instances(instance_ids=None):
     conn = get_ec2_connection()
@@ -107,40 +94,54 @@ def get_all_running_ec2_instances():
     return instances
 
 @task
-def list_instances(show=1, name=None, group=None, release=None, except_release=None):
+def list_instances(show=1, name=None, group=None, release=None, except_release=None, verbose=0):
     """
     Retrieves all virtual machines instances in the current environment.
     """
+    verbose = int(verbose)
     require('vm_type', 'vm_group')
-    #print 'env.vm_typeL:',env.vm_type
     assert env.vm_type, 'No VM type specified.'
-    #assert env.vm_group, 'No VM group specified.'
     env.vm_type = (env.vm_type or '').lower()
     _name = name
     _group = group
     _release = release
+    if verbose:
+        print('name=%s, group=%s, release=%s' % (_name, _group, _release))
     data = type(env)()
     if env.vm_type == EC2:
         for instance in get_all_running_ec2_instances():
             name = instance.tags.get(env.vm_name_tag)
             group = instance.tags.get(env.vm_group_tag)
             release = instance.tags.get(env.vm_release_tag)
-#            print 'name:',name
-#            print 'group:',group,env.vm_group
             if env.vm_group and group and env.vm_group != group:
-                print('skipping vm_group:',env.vm_group, group)
+                if verbose:
+                    print(('Skipping instance %s because its group "%s" '
+                        'does not match env.vm_group "%s".') \
+                            % (instance.public_dns_name, group, env.vm_group))
                 continue
             if _group and group and group != _group:
-                print('skipping direct group:',_group, group)
+                if verbose:
+                    print(('Skipping instance %s because its group "%s" '
+                        'does not match local group "%s".') \
+                            % (instance.public_dns_name, group, _group))
                 continue
             if _name and name and name != _name:
-                print('skipping direct name:',_name,name)
+                if verbose:
+                    print(('Skipping instance %s because its name "%s" '
+                        'does not match name "%s".') \
+                            % (instance.public_dns_name, name, _name))
                 continue
             if _release and release and release != _release:
-                print('skipping direct release:',_release,release)
+                if verbose:
+                    print(('Skipping instance %s because its release "%s" '
+                        'does not match release "%s".') \
+                            % (instance.public_dns_name, release, _release))
                 continue
             if except_release and release == except_release:
                 continue
+            if verbose:
+                print('Adding instance %s (%s).' \
+                    % (name, instance.public_dns_name))
             data.setdefault(name, type(env)())
             data[name]['id'] = instance.id
             data[name]['public_dns_name'] = instance.public_dns_name
@@ -154,14 +155,17 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
     else:
         raise NotImplementedError
 
-#class SecurityGroup(object):
-#    
-#    def get_or_create(cls, name):
-#        pass
+def set_ec2_security_group_id(name, id):
+    from burlap.common import shelf, OrderedDict
+    v = shelf.get('vm_ec2_security_group_ids', OrderedDict())
+    v[name] = str(id)
+    shelf.set('vm_ec2_security_group_ids', v)
 
-#sg = SecurityGroup()
-#get_or_create = task(sg.get_or_create)
-
+def get_ec2_security_group_id(name):
+    from burlap.common import shelf, OrderedDict
+    v = shelf.get('vm_ec2_security_group_ids', OrderedDict())
+    return v.get(name)
+    
 @task
 def get_or_create_ec2_security_groups(names=None, verbose=1):
     """
@@ -181,12 +185,20 @@ def get_or_create_ec2_security_groups(names=None, verbose=1):
     ret = []
     for name in names:
         try:
-            group = conn.get_all_security_groups(groupnames=[name])[0]
-        except boto.exception.EC2ResponseError:
+            group_id = get_ec2_security_group_id(name)
+            #group = conn.get_all_security_groups(groupnames=[name])[0]
+            # Note, groups in a VPC can't be referred to by name?
+            group = conn.get_all_security_groups(group_ids=[group_id])[0]
+        except boto.exception.EC2ResponseError as e:
+            if verbose:
+                print(e)
             group = get_ec2_connection().create_security_group(
                 name,
                 name,
+                vpc_id=env.vm_ec2_vpc_id,
             )
+            print('group_id:',group.id)
+            set_ec2_security_group_id(name, group.id)
         ret.append(group)
         
         # Find existing rules.
@@ -211,10 +223,6 @@ def get_or_create_ec2_security_groups(names=None, verbose=1):
         # Calculate differences.
         del_sets = actual_sets.difference(expected_sets)
         add_sets = expected_sets.difference(actual_sets)
-#        print 'actual:',actual_sets
-#        print 'expected:',expected_sets
-#        print 'del:',del_sets
-#        print 'add:',add_sets
         
         # Revoke deleted.
         for auth in del_sets:
@@ -248,7 +256,7 @@ def get_or_create_ec2_key_pair(name=None, verbose=1):
     #return kp
     return pem_path
 
-def get_or_create_ec2_instance(name=None, group=None, release=None):
+def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0):
     """
     Creates a new EC2 instance.
     
@@ -259,20 +267,29 @@ def get_or_create_ec2_instance(name=None, group=None, release=None):
 
     assert name, "A name must be specified."
 
+    verbose = int(verbose)
+
     conn = get_ec2_connection()
 
-    get_or_create_ec2_security_groups()
+    security_groups = get_or_create_ec2_security_groups()
+    security_group_ids = [_.id for _ in security_groups]
+    if verbose:
+        print('security_groups:',security_group_ids)
+        #return
     
     pem_path = get_or_create_ec2_key_pair()
 
     print('Creating EC2 instance from %s...' % (env.vm_ec2_ami,))
-    print env.vm_ec2_zone
+    print(env.vm_ec2_zone)
     reservation = conn.run_instances(
         env.vm_ec2_ami,
         key_name=env.vm_ec2_keypair_name,
-        security_groups=env.vm_ec2_selected_security_groups,
+        #security_groups=env.vm_ec2_selected_security_groups,#conflicts with subnet_id?!
+        security_group_ids=security_group_ids,
         placement=env.vm_ec2_zone,
-        instance_type=env.vm_ec2_instance_type)
+        instance_type=env.vm_ec2_instance_type,
+        subnet_id=env.vm_ec2_subnet_id,
+    )
     instance = reservation.instances[0]
     
     # Name new instance.
@@ -290,9 +307,12 @@ def get_or_create_ec2_instance(name=None, group=None, release=None):
         except EC2ResponseError as e:
             #print('Unable to set tag: %s' % e)
             print('Waiting for the instance to be created...')
+            if verbose:
+                print(e)
             time.sleep(3)
 
     # Assign IP.
+    allocation_id = None
     if env.vm_ec2_use_elastic_ip:
         # Initialize name/ip mapping since we can't tag elastic IPs.
         shelf.setdefault('vm_elastic_ip_mappings', OrderedDict())
@@ -300,22 +320,37 @@ def get_or_create_ec2_instance(name=None, group=None, release=None):
         elastic_ip = vm_elastic_ip_mappings.get(name)
         if not elastic_ip:
             print('Allocating new elastic IP address...')
-            addr = conn.allocate_address()
+            addr = conn.allocate_address(domain=env.vm_ec2_allocate_address_domain)
+            #allocation_id = addr.allocation_id
+            #print('allocation_id:',allocation_id)
             elastic_ip = addr.public_ip
             print('Allocated address %s.' % elastic_ip)
             vm_elastic_ip_mappings[name] = str(elastic_ip)
             shelf.set('vm_elastic_ip_mappings', vm_elastic_ip_mappings)
             #conn.get_all_addresses()
+        
+        # Lookup allocation_id.
+        all_eips = conn.get_all_addresses()
+        for eip in all_eips:
+            if elastic_ip == eip.public_ip:
+                allocation_id = eip.allocation_id
+                break
+        print('allocation_id:',allocation_id)
+            
         while 1:
             try:
                 conn.associate_address(
                     instance_id=instance.id,
-                    public_ip=elastic_ip)
+                    #public_ip=elastic_ip,
+                    allocation_id=allocation_id, # needed for VPC instances
+                    )
                 print('IP address associated!')
                 break
             except EC2ResponseError as e:
                 #print('Unable to assign IP: %s' % e)
-                print('Waiting for the instance to initialize...')
+                print('Waiting to associate IP address...')
+                if verbose:
+                    print(e)
                 time.sleep(3)
 
 #    volume = None
@@ -353,23 +388,23 @@ def get_or_create_ec2_instance(name=None, group=None, release=None):
                 if not ret.return_code:
                     break
         except Exception, e:
-            print 'error:',e
+            print('error:',e)
         except SystemExit, e:
-            print 'systemexit:',e
+            print('systemexit:',e)
             pass
         print('Waiting for sshd to accept connections...')
         time.sleep(3)
 
-    print ""
-    print "Login with: ssh -i %s %s@%s" \
-        % (pem_path, env.user, instance.public_dns_name)
-    print "OR"
-    print "fab %(ROLE)s:hostname=%(name)s shell" % dict(name=name, ROLE=env.ROLE)
+    print("")
+    print("Login with: ssh -o StrictHostKeyChecking=no -i %s %s@%s" \
+        % (pem_path, env.user, instance.public_dns_name))
+    print("OR")
+    print("fab %(ROLE)s:hostname=%(name)s shell" % dict(name=name, ROLE=env.ROLE))
     
     ip = socket.gethostbyname(instance.public_dns_name)
-    print ""
-    print """Example hosts entry:
-%(ip)s    www.mydomain.com # %(name)s""" % dict(ip=ip, name=name)
+    print("")
+    print("""Example hosts entry:
+%(ip)s    www.mydomain.com # %(name)s""" % dict(ip=ip, name=name))
     return instance
 
 @task
@@ -383,6 +418,7 @@ def exists(name=None, group=None, release=None, except_release=None, verbose=1):
         group=group,
         release=release,
         except_release=except_release,
+        verbose=verbose,
         show=verbose)
     ret = bool(instances)
     if verbose:
@@ -391,12 +427,13 @@ def exists(name=None, group=None, release=None, except_release=None, verbose=1):
     return instances
 
 @task
-def get_or_create(name=None, group=None, config=None, extra=0):
+def get_or_create(name=None, group=None, config=None, extra=0, verbose=0):
     """
     Creates a virtual machine instance.
     """
     require('vm_type', 'vm_group')
     
+    verbose = int(verbose)
     extra = int(extra)
     
     if config:
@@ -418,12 +455,18 @@ def get_or_create(name=None, group=None, config=None, extra=0):
     release = int('%i%02i%02i' % (today.year, today.month, today.day))
     
     if not name:
-        existing_instances = list_instances(group=group, release=release)
+        existing_instances = list_instances(
+            group=group,
+            release=release,
+            verbose=verbose)
         name = env.vm_name_template.format(index=len(existing_instances)+1)
     
     if env.vm_type == EC2:
         return get_or_create_ec2_instance(
-            name=name, group=group, release=release)
+            name=name,
+            group=group,
+            release=release,
+            verbose=verbose)
     else:
         raise NotImplementedError
 
@@ -482,7 +525,6 @@ def respawn(name=None, group=None):
     
     if name is None:
         name = get_name()
-        #print name
     
     delete(name=name, group=group, dryrun=0)
     instance = get_or_create(name=name, group=group)
