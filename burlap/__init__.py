@@ -10,7 +10,9 @@ import pkgutil
 import inspect
 import warnings
 
-VERSION = (0, 2, 17)
+from pprint import pprint
+
+VERSION = (0, 2, 18)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -156,7 +158,8 @@ def find_yaml_settings_fn(name, local=False):
     if os.path.isfile(settings_fn):
         return settings_fn
 
-def load_yaml_settings(name, priors=None):
+def load_yaml_settings(name, priors=None, verbose=0):
+    verbose = int(verbose)
     config = type(env)()
     if priors is None:
         priors = set()
@@ -168,17 +171,26 @@ def load_yaml_settings(name, priors=None):
     if not settings_fn:
         warnings.warn('Warning: Could not find Yaml settings for role %s.' % (name,))
         return config
+    if verbose:
+        print('Loading settings:', settings_fn)
     config.update(yaml.safe_load(open(settings_fn)) or type(env)())
+    #if verbose: sys.stdout.write('sites0:'); pprint(config['sites'], indent=4)
     if 'inherits' in config:
         parent_name = config['inherits']
         del config['inherits']
-        parent_config = load_yaml_settings(parent_name, priors=priors)
+        parent_config = load_yaml_settings(
+            parent_name,
+            priors=priors,
+            verbose=verbose)
         parent_config.update(config)
         config = parent_config
+    #if verbose: sys.stdout.write('sites1:'); pprint(config['sites'], indent=4)
     
     # Load local overrides.
     settings_local_fn = find_yaml_settings_fn(name, local=True)
     if settings_local_fn:
+        if verbose:
+            print('Loading local settings:', settings_local_fn)
         config.update(yaml.safe_load(open(settings_local_fn)) or type(env)())
     
     return config

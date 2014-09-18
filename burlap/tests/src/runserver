@@ -1,0 +1,14 @@
+#!/bin/bash
+# Helper script for running the local dev server, ensuring
+# our virtual environment is used.
+#set -e
+#script_dir=`dirname $0`
+#cd $script_dir
+if [ -z "$PORT" ]; then
+    export PORT=8111
+fi
+if [ -z "$ROLE" ]; then
+    export ROLE=dev
+fi
+. ~/.bash_aliases
+./manage runserver localhost:$PORT

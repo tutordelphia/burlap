@@ -1,0 +1,23 @@
+inherits: all
+
+apache_locale: "-testing"
+apache_log_level: debug
+
+services:
+-   apache2
+-   cron
+-   db
+-   django
+-   postgresql
+-   ntpclient
+-   packager
+-   pip
+-   postgresqlclient
+-   tarball
+-   user
+
+user: vagrant
+user_groups:
+-   admin
+-   root
+-   www-data

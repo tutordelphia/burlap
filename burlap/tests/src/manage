@@ -1,0 +1,10 @@
+#!/bin/bash
+# Helper script for ensuring we use the Python binary in our local
+# virtual environment when calling management commands.
+# Otherwise, we'd have to always run `. ../.env/bin/activate`, which can be
+# annoying.
+# Be sue to run `fab <role> pip.init` first in order to setup
+# the target role's Python virtual environment.
+DIR=`dirname $0`;
+cd $DIR;
+../.env/bin/python manage.py $@

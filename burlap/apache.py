@@ -507,7 +507,9 @@ def install_auth_basic_user_file(site=None):
     """
     Installs users for basic httpd auth.
     """
+    print 'env.apache_auth_basic0:',env.apache_auth_basic
     apache_specifics = set_apache_specifics()
+    print 'env.apache_auth_basic1:',env.apache_auth_basic
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
         print '~'*80

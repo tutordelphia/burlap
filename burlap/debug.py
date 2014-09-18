@@ -1,4 +1,5 @@
 import re
+from pprint import pprint
 
 from fabric.api import (
     env,
@@ -14,12 +15,20 @@ from fabric.api import (
 )
 
 @task
-def list_env():
+def list_settings(name):
+    from burlap import load_yaml_settings
+    load_yaml_settings(name=name, verbose=1)
+
+@task
+def list_env(key=None):
     """
     Displays a list of environment key/value pairs.
     """
     for k,v in env.iteritems():
-        print k,v
+        if key and k != key:
+            continue
+        print k,
+        pprint(v, indent=4)
 
 def list_to_str_or_unknown(lst):
     if len(lst):

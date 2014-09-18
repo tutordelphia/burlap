@@ -479,6 +479,8 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
         env.pip_cache_dir = os.path.abspath(env.pip_local_cache_dir % env)
     else:
         env.pip_cache_dir = env.pip_remote_cache_dir % env
+        print 'env.host_string:',env.host_string
+        print 'env.key_filename:',env.key_filename
         run('mkdir -p %(pip_cache_dir)s' % env)
         
         if not env.pip_cache_dir.endswith('/'):

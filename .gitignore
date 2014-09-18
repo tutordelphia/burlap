@@ -2,3 +2,4 @@
 /.pydevproject
 /burlap.egg-info
 /dist
+/.env2.7
