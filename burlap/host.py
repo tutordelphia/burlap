@@ -11,6 +11,8 @@ from fabric.api import (
     sudo,
     cd,
     task,
+    runs_once,
+    execute,
 )
 
 from fabric.contrib import files
@@ -102,3 +104,28 @@ def mount(dryrun=0):
             print cmd
             if not dryrun:
                 sudo(cmd)
+
+@task
+def get_public_ip():
+    """
+    Gets the public IP for a host.
+    """
+    ret = run('wget -qO- http://ipecho.net/plain ; echo')
+    return ret
+
+@task
+@runs_once
+def list_public_ips(show_hostname=0):
+    """
+    Aggregates the public IPs for several hosts.
+    """
+    show_hostname = int(show_hostname)
+    ret = execute(get_public_ip)
+    print '-'*80
+    have_updates = 0
+    for hn, output in ret.items():
+        if show_hostname:
+            print hn, output
+        else:
+            print output
+        

@@ -44,7 +44,7 @@ def configure(dryrun=0):
                     func()
 
 @task
-def pre_deploy():
+def pre_deploy(dryrun=0):
     """
     Runs methods services have requested be run before each deployment.
     """
@@ -72,7 +72,7 @@ def deploy(dryrun=0):
                     func()
 
 @task
-def post_deploy():
+def post_deploy(dryrun=0):
     """
     Runs methods services have requested be run before after deployment.
     """

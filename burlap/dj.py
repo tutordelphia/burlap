@@ -20,7 +20,10 @@ from fabric.api import (
 )
 
 from burlap import common
-from burlap.common import ROLE, QueuedCommand, ALL
+from burlap.common import (
+    ROLE, QueuedCommand, ALL,
+    sudo_or_dryrun,
+)
 
 env.setdefault('dj_settings_loaded', False)
 if not env.dj_settings_loaded:
@@ -63,7 +66,7 @@ def check_remote_paths(verbose=1):
     render_remote_paths(verbose)
 
 @task
-def render_remote_paths(verbose=1):
+def render_remote_paths(verbose=0):
     verbose = int(verbose)
     env.django_settings_module = env.django_settings_module_template % env
     env.remote_app_dir = env.remote_app_dir_template % env
@@ -77,10 +80,12 @@ def render_remote_paths(verbose=1):
         if env.remote_app_src_package_dir.startswith('./') or env.remote_app_src_package_dir == '.':
             env.remote_app_src_package_dir = os.path.abspath(env.remote_app_src_package_dir)
     env.remote_manage_dir = env.remote_manage_dir_template % env
+    env.shell_default_dir = env.shell_default_dir_template % env
     if verbose:
         print 'render_remote_paths'
         print 'django_settings_module_template:',env.django_settings_module_template
         print 'django_settings_module:',env.django_settings_module
+        print 'shell_default_dir:',env.shell_default_dir
         print 'src_dir:',env.src_dir
         print 'remote_app_dir:',env.remote_app_dir
         print 'remote_app_src_dir:',env.remote_app_src_dir
@@ -188,21 +193,25 @@ def set_db(name=None, site=None, role=None, verbose=0):
 #    print '!'*80
     site = site or env.SITE
     role = role or env.ROLE
-    print 'set_db.site:',site
-    print 'set_db.role:',role
-    print 'verbose:',verbose
+    verbose = int(verbose)
+    if verbose:
+        print 'set_db.site:',site
+        print 'set_db.role:',role
     settings = get_settings(site=site, role=role, verbose=verbose)
     assert settings, 'Unable to load Django settings for site %s.' % (site,)
     env.django_settings = settings
-    print 'settings:',settings
-    print 'databases:',settings.DATABASES
+    if verbose:
+        print 'settings:',settings
+        print 'databases:',settings.DATABASES
     default_db = settings.DATABASES[name]
-    print 'default_db:',default_db
+    if verbose:
+        print 'default_db:',default_db
     env.db_name = default_db['NAME']
     env.db_user = default_db['USER']
     env.db_host = default_db['HOST']
     env.db_password = default_db['PASSWORD']
     env.db_engine = default_db['ENGINE']
+    return default_db
 
 def has_database(name, site=None, role=None):
     settings = get_settings(site=site, role=role, verbose=0)
@@ -213,9 +222,9 @@ def get_settings(site=None, role=None, verbose=1):
     """
     Retrieves the Django settings dictionary.
     """
-    print 'verbose:',verbose
     stdout = sys.stdout
     stderr = sys.stderr
+    verbose = int(verbose)
     if not verbose:
         sys.stdout = StringIO()
         sys.stderr = StringIO()
@@ -224,19 +233,18 @@ def get_settings(site=None, role=None, verbose=1):
         if site and site.endswith('_secure'):
             site = site[:-7]
         site = site or env.SITE
-        print 'get_settings.site:',env.SITE
-        print 'get_settings.role:',env.ROLE
+        if verbose:
+            print 'get_settings.site:',env.SITE
+            print 'get_settings.role:',env.ROLE
         common.set_site(site)
         tmp_role = env.ROLE
         if role:
             env.ROLE = os.environ[ROLE] = role
         check_remote_paths(verbose=verbose)
-        print 'get_settings.django_settings_module_template:',env.django_settings_module_template
-        print 'get_settings.django_settings_module:',env.django_settings_module
-        env.django_settings_module = env.django_settings_module_template % env
-        #print 'Django settings module:',env.django_settings_module
         if verbose:
-            print 'Django settings module1:',env.django_settings_module
+            print 'get_settings.django_settings_module_template:',env.django_settings_module_template
+            print 'get_settings.django_settings_module:',env.django_settings_module
+        env.django_settings_module = env.django_settings_module_template % env
         try:
     #        module = __import__(
     #            env.django_settings_module,
@@ -246,10 +254,10 @@ def get_settings(site=None, role=None, verbose=1):
             #print 'settings_dir:',settings_dir
             os.environ['SITE'] = env.SITE
             os.environ['ROLE'] = env.ROLE
-            if verbose:
-                print 'SITE:',env.SITE
-                print 'ROLE:',env.ROLE
-                print 'env.django_settings_module:',env.django_settings_module
+#            if verbose:
+#                print 'SITE:',env.SITE
+#                print 'ROLE:',env.ROLE
+#                print 'env.django_settings_module:',env.django_settings_module
             module = importlib.import_module(env.django_settings_module)
 #            print 'module.__name__:',module.__name__
 #            settings_dir = os.path.split(module.__file__)[0]
@@ -298,6 +306,29 @@ def get_settings(site=None, role=None, verbose=1):
         sys.stdout = stdout
         sys.stderr = stderr
     return module
+
+@task
+def loaddata(path, site=None, dryrun=0):
+    """
+    Runs the Dango loaddata management command.
+    
+    By default, runs on only the current site.
+    
+    Pass site=all to run on all sites.
+    """
+    render_remote_paths()
+    site = site or env.SITE
+    env._loaddata_path = path
+    for site, site_data in common.iter_sites(site=site, no_secure=True):
+        try:
+            set_db(site=site)
+            env.SITE = site
+            cmd = ('export SITE=%(SITE)s; export ROLE=%(ROLE)s; '
+                'cd %(shell_default_dir)s; '
+                './manage loaddata %(_loaddata_path)s') % env
+            sudo_or_dryrun(cmd, dryrun=dryrun)
+        except KeyError:
+            pass
 
 @task
 def record_manifest():

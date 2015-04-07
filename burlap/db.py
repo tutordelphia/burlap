@@ -16,13 +16,16 @@ from fabric.api import (
     sudo,
     cd,
     task,
+    runs_once,
+    execute,
 )
 from fabric.contrib import files
 
 from burlap import common
 from burlap.common import (
-    run,
-    put,
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
     set_site,
     SITE,
     ROLE,
@@ -30,6 +33,7 @@ from burlap.common import (
     QueuedCommand,
     Migratable,
 )
+#from burlap.plan import run, sudo
 
 env.db_dump_fn = None
 
@@ -46,8 +50,9 @@ env.db_app_migration_order = []
 env.db_dump_dest_dir = '/tmp'
 
 # The login for performance administrative tasks (e.g. CREATE/DROP database).
-env.db_root_user = 'root'
-env.db_root_password = 'root'
+env.db_root_user = 'root'#DEPRECATED
+env.db_root_password = 'root'#DEPRECATED
+env.db_root_logins = {} # {(type,host):{user:?, password:?}}
 
 # If set, allows remote users to connect to the database.
 # This shouldn't be necessary if the webserver and database
@@ -76,6 +81,10 @@ env.db_mysql_preload_commands = []
 env.db_mysql_character_set = 'utf8'
 env.db_mysql_collate = 'utf8_general_ci'
 env.db_mysql_port = 3306
+env.db_mysql_root_password = None
+env.db_mysql_custom_mycnf = False
+
+env.db_syncdb_command_template = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --noinput %(db_syncdb_database)s %(db_syncdb_all_flag)s --traceback'
 
 # If true, means we're responsible for installing and configuring
 # the database server.
@@ -131,6 +140,13 @@ common.required_system_packages[POSTGRESQLCLIENT] = {
 }
 
 UTF8 = 'UTF8'
+
+@task
+def test(dryrun=0):
+    import inspect
+    print 'run:',run,inspect.getsourcefile(run)
+    run_or_dryrun('who -b', dryrun=dryrun)
+    sudo_or_dryrun('ls /etc/apache/sites-available')
 
 class Database(Migratable):
     
@@ -192,12 +208,12 @@ class User(Migratable):
 
 def set_collation_mysql(name=None, site=None, dryrun=0):
     from burlap.dj import set_db
+    dryrun = int(dryrun)
     set_db(name=name, site=site)
+    set_root_login()
     cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
         "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
-    print cmd
-    if not int(dryrun):
-        run(cmd)
+    run_or_dryrun(cmd, dryrun=dryrun)
 
 def set_collation_mysql_all(name=None, site=None, dryrun=0):
     for site in env.available_sites:
@@ -239,37 +255,37 @@ def configure(name='default', site=None, _role=None, dryrun=0):
         cmd = 'cp /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf.$(date +%%Y%%m%%d%%H%%M).bak' % env
         print(cmd)
         if not dryrun:
-            sudo(cmd)
+            sudo_or_dryrun(cmd)
         cmd = 'cp /etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf /etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf.$(date +%%Y%%m%%d%%H%%M).bak' % env
         print(cmd)
         if not dryrun:
-            sudo(cmd)
+            sudo_or_dryrun(cmd)
         
         pc('Allowing remote connections...')
         if not dryrun:
-            #TODO:reimplement put() to support command generation and dryrun?
             fn = common.render_to_file('pg_hba.template.conf')
-            put(local_path=fn,
+            put_or_dryrun(local_path=fn,
                 remote_path='/etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf' % env,
-                use_sudo=True)
+                use_sudo=True,
+                dryrun=dryrun)
         
         # Don't do this. Keep it locked down and use an SSH tunnel instead.
         # See common.tunnel()
-        #sudo('sed -i "s/#listen_addresses = \'localhost\'/listen_addresses = \'*\'/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env)
+        #sudo_or_dryrun('sed -i "s/#listen_addresses = \'localhost\'/listen_addresses = \'*\'/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env)
         
         pc('Enabling auto-vacuuming...')
         cmd = 'sed -i "s/#autovacuum = on/autovacuum = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env
         print(cmd)
         if not dryrun:
-            sudo(cmd)
+            sudo_or_dryrun(cmd)
         cmd = 'sed -i "s/#track_counts = on/track_counts = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env
         print(cmd)
         if not dryrun:
-            sudo(cmd)
+            sudo_or_dryrun(cmd)
         
         # Set UTF-8 as the default database encoding.
         #TODO:fix? throws error code?
-#        sudo('psql --user=postgres --no-password --command="'
+#        sudo_or_dryrun('psql --user=postgres --no-password --command="'
 #            'UPDATE pg_database SET datistemplate = FALSE WHERE datname = \'template1\';'
 #            'DROP DATABASE template1;'
 #            'CREATE DATABASE template1 WITH TEMPLATE = template0 ENCODING = \'UNICODE\';'
@@ -281,27 +297,37 @@ def configure(name='default', site=None, _role=None, dryrun=0):
         cmd = 'service postgresql restart'
         print(cmd)
         if not dryrun:
-            sudo(cmd)
+            sudo_or_dryrun(cmd)
 
     elif 'mysql' in env.db_engine:
+        
+        set_root_login()
+        
+        if env.db_mysql_custom_mycnf:
+            fn = common.render_to_file('my.template.cnf')
+            put_or_dryrun(local_path=fn,
+                remote_path='/etc/mysql/my.cnf' % env,
+                use_sudo=True,
+                dryrun=dryrun)
+        
         if env.db_allow_remote_connections:
             
             # Enable remote connections.
             cmd = "sed -i 's/127.0.0.1/0.0.0.0/g' %(db_mysql_conf)s" % env
             print(cmd)
             if not dryrun:
-                sudo(cmd)
+                sudo_or_dryrun(cmd)
             
             # Enable root logins from remote connections.
             cmd = 'mysql -u %(db_root_user)s -p"%(db_root_password)s" --execute="USE mysql; GRANT ALL ON *.* to %(db_root_user)s@\'%%\' IDENTIFIED BY \'%(db_root_password)s\'; FLUSH PRIVILEGES;"' % env
             print(cmd)
             if not dryrun:
-                sudo(cmd)
+                sudo_or_dryrun(cmd)
             
             cmd = 'service mysql restart'
             print(cmd)
             if not dryrun:
-                sudo(cmd)
+                sudo_or_dryrun(cmd)
             
     else:
         print 'No database parameters found.'
@@ -328,6 +354,8 @@ def exists(name='default', site=None, dryrun=0, verbose=1):
     if name:
         set_db(name=name, site=site, verbose=verbose)
         load_db_set(name=name)
+        
+    set_root_login()
     
     ret = None
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
@@ -352,7 +380,7 @@ def exists(name='default', site=None, dryrun=0, verbose=1):
         if verbose:
             print cmd
         if not dryrun:
-            ret = run(cmd)
+            ret = run_or_dryrun(cmd)
             #print('ret:',ret)
             ret = int(ret) >= 1
             
@@ -373,7 +401,7 @@ def exists(name='default', site=None, dryrun=0, verbose=1):
         if verbose:
             print cmd
         if not dryrun:
-            ret = run(cmd)
+            ret = run_or_dryrun(cmd)
             ret = 'notexists' not in ret
 
     else:
@@ -385,9 +413,37 @@ def exists(name='default', site=None, dryrun=0, verbose=1):
 
 @task
 def prep_mysql_root_password():
-    sudo("dpkg --configure -a")
-    sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password password %(db_root_password)s'" % env)
-    sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password %(db_root_password)s'" % env)
+    args = dict(
+        db_root_password=env.db_mysql_root_password or env.db_root_password,
+    )
+    sudo_or_dryrun("dpkg --configure -a")
+    sudo_or_dryrun("debconf-set-selections <<< 'mysql-server mysql-server/root_password password %(db_root_password)s'" % args)
+    sudo_or_dryrun("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password %(db_root_password)s'" % args)
+    #sudo apt-get -y install mysql-server
+
+def set_root_login(db_type=None, db_host=None):
+    """
+    Looks up the root login for the given database on the given host and sets
+    it to environment variables. 
+    """
+    
+    if db_type is None:
+        if 'mysql' in env.db_engine:
+            db_type = 'mysql'
+        elif 'postgres' in env.db_engine or 'postgis' in env.db_engine:
+            db_type = 'postgresql'
+        else:
+            raise NotImplementedError
+    
+    db_host = db_host or env.db_host
+    
+    key = '%s-%s' % (db_type, db_host)
+    if key in env.db_root_logins:
+        data = env.db_root_logins[key]
+        if 'username' in data:
+            env.db_root_user = data['username']
+        if 'password' in data:
+            env.db_root_password = data['password']
 
 @task
 def create(drop=0, name='default', dryrun=0, site=None, post_process=0, db_engine=None, db_user=None, db_host=None, db_password=None, db_name=None):
@@ -425,48 +481,42 @@ def create(drop=0, name='default', dryrun=0, site=None, post_process=0, db_engin
     env.dryrun = int(dryrun)
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
             
+        set_root_login()
+        
         # Create role/user.
         with settings(warn_only=True):
             cmd = 'psql --user={db_postgresql_postgres_user} --no-password --command="CREATE USER {db_user} WITH PASSWORD \'{db_password}\';"'.format(**env)
-            print cmd
-            if not dryrun:
-                sudo(cmd)
+            sudo_or_dryrun(cmd, dryrun=dryrun)
             
         cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --command="CREATE DATABASE %(db_name)s WITH OWNER=%(db_user)s ENCODING=\'%(db_postgresql_encoding)s\'"' % env
-        print cmd
-        if not dryrun:
-            sudo(cmd)
-        #run('psql --user=postgres -d %(db_name)s -c "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %(db_user)s_ro CASCADE; DROP ROLE IF EXISTS %(db_user)s_ro; DROP USER IF EXISTS %(db_user)s_ro; CREATE USER %(db_user)s_ro WITH PASSWORD \'readonly\'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO %(db_user)s_ro;"')
+        sudo_or_dryrun(cmd, dryrun=dryrun)
+        #run_or_dryrun('psql --user=postgres -d %(db_name)s -c "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %(db_user)s_ro CASCADE; DROP ROLE IF EXISTS %(db_user)s_ro; DROP USER IF EXISTS %(db_user)s_ro; CREATE USER %(db_user)s_ro WITH PASSWORD \'readonly\'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO %(db_user)s_ro;"')
         with settings(warn_only=True):
             cmd = 'createlang -U postgres plpgsql %(db_name)s' % env
-            print cmd
-            if not dryrun:
-                sudo(cmd)
+            sudo_or_dryrun(cmd, dryrun=dryrun)
     elif 'mysql' in env.db_engine:
+        
+        set_root_login()
         
         if int(drop):
             cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute='DROP DATABASE IF EXISTS %(db_name)s'" % env
-            print cmd
-            if not int(dryrun):
-                sudo(cmd)
+            sudo_or_dryrun(cmd, dryrun=dryrun)
             
         cmd = "mysqladmin -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' create %(db_name)s" % env
-        print cmd
-        if not int(dryrun):
-            sudo(cmd)
+        sudo_or_dryrun(cmd, dryrun=dryrun)
             
 #        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
 #            "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
 #        print cmd
 #        if not int(dryrun):
-#            sudo(cmd)
+#            sudo_or_dryrun(cmd)
         set_collation_mysql(dryrun=dryrun)
             
         # Create user.
         cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute=\"GRANT USAGE ON *.* TO %(db_user)s@'%%'; DROP USER %(db_user)s@'%%';\"" % env
         print cmd
         if not int(dryrun):
-            run(cmd)
+            run_or_dryrun(cmd)
         
         # Grant user access to the database.
         cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s "\
@@ -475,7 +525,7 @@ def create(drop=0, name='default', dryrun=0, site=None, post_process=0, db_engin
             "'%(db_password)s'; FLUSH PRIVILEGES;\"") % env
         print cmd
         if not int(dryrun):
-            run(cmd)
+            run_or_dryrun(cmd)
         
         #TODO:why is this necessary? why doesn't the user@% pattern above give
         #localhost access?!
@@ -485,11 +535,11 @@ def create(drop=0, name='default', dryrun=0, site=None, post_process=0, db_engin
             "'%(db_password)s'; FLUSH PRIVILEGES;\"") % env
         print cmd
         if not int(dryrun):
-            run(cmd)
+            run_or_dryrun(cmd)
             
         # Let the primary login do so from everywhere.
-#        cmd = 'mysql -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute="USE mysql; GRANT ALL ON %(db_name)s.* to %(db_user)s@\'%\' IDENTIFIED BY \'%(db_password)s\'; FLUSH PRIVILEGES;"'
-#        sudo(cmd)
+#        cmd = 'mysql -h %(db_host)s -u %()s -p'%(db_root_password)s' --execute="USE mysql; GRANT ALL ON %(db_name)s.* to %(db_user)s@\'%\' IDENTIFIED BY \'%(db_password)s\'; FLUSH PRIVILEGES;"'
+#        sudo_or_dryrun(cmd)
     
     else:
         raise NotImplemented
@@ -516,27 +566,42 @@ def post_create(name=None, dryrun=0, site=None):
     #createsuperuser(dryrun=dryrun)
 
 @task
-def update(name=None, site=None, skip_databases=None):
+#@runs_once
+def update(name=None, site=None, skip_databases=None, do_install_sql=0, dryrun=0, migrate_apps=''):
     """
     Updates schema and custom SQL.
     """
     from burlap.dj import set_db
+    dryrun = int(dryrun)
     set_db(name=name, site=site)
-    syncdb(site=site) # Note, this loads initial_data fixtures.
-    migrate(site=site, skip_databases=skip_databases)
-    install_sql(name=name, site=site)
+    syncdb(site=site, dryrun=dryrun) # Note, this loads initial_data fixtures.
+    migrate(
+        site=site,
+        skip_databases=skip_databases,
+        dryrun=dryrun,
+        migrate_apps=migrate_apps)
+    if int(do_install_sql):
+        install_sql(name=name, site=site, dryrun=dryrun)
     #TODO:run syncdb --all to force population of new content types?
 
 @task
-def update_all(skip_databases=None):
+#@runs_once
+def update_all(skip_databases=None, dryrun=0, do_install_sql=0, migrate_apps=''):
     """
     Runs the Django migrate command for all unique databases
     for all available sites.
     """
+    dryrun = int(dryrun)
     for site in env.available_sites:
-        update(site=site, skip_databases=skip_databases)
+        update(
+            site=site,
+            skip_databases=skip_databases,
+            do_install_sql=do_install_sql,
+            dryrun=dryrun,
+            migrate_apps=migrate_apps)
 
 @task
+@runs_once
 def dump(dryrun=0, dest_dir=None, to_local=None, from_local=0):
     """
     Exports the target database to a single transportable file on the localhost,
@@ -554,7 +619,7 @@ def dump(dryrun=0, dest_dir=None, to_local=None, from_local=0):
         to_local = 1
         
     if env.db_dump_command:
-        run(env.db_dump_command % env)
+        run_or_dryrun(env.db_dump_command % env)
     elif 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         assert env.db_schemas, \
             'Please specify the list of schemas to dump in db_schemas.'
@@ -566,7 +631,7 @@ def dump(dryrun=0, dest_dir=None, to_local=None, from_local=0):
             if env.is_local or from_local:
                 local(cmd)
             else:
-                sudo(cmd)
+                sudo_or_dryrun(cmd)
     elif 'mysql' in env.db_engine:
         cmd = env.db_mysql_dump_command % env
         print cmd
@@ -574,7 +639,7 @@ def dump(dryrun=0, dest_dir=None, to_local=None, from_local=0):
             if env.is_local:
                 local(cmd)
             else:
-                sudo(cmd)
+                sudo_or_dryrun(cmd)
     else:
         raise NotImplemented
     
@@ -593,7 +658,7 @@ def get_free_space(verbose=0):
     Return free space in bytes.
     """
     cmd = "df -k | grep -vE '^Filesystem|tmpfs|cdrom|none|udev|cgroup' | awk '{ print $1 \" \" $4 }'"
-    lines = [_ for _ in run(cmd).strip().split('\n') if _.startswith('/')]
+    lines = [_ for _ in run_or_dryrun(cmd).strip().split('\n') if _.startswith('/')]
     assert len(lines) == 1, 'Ambiguous devices: %s' % str(lines)
     device, kb = lines[0].split(' ')
     free_space = int(kb) * 1024
@@ -612,7 +677,7 @@ def get_size(verbose=0):
         #cmd = 'psql --user=%(db_postgresql_postgres_user)s --tuples-only -c "SELECT pg_size_pretty(pg_database_size(\'%(db_name)s\'));"' % env
         cmd = 'psql --user=%(db_postgresql_postgres_user)s --tuples-only -c "SELECT pg_database_size(\'%(db_name)s\');"' % env
         #print cmd
-        output = run(cmd)
+        output = run_or_dryrun(cmd)
         output = int(output.strip().split('\n')[-1].strip())
         if int(verbose):
             print 'database size (bytes):',output
@@ -692,12 +757,13 @@ def dumpload(dryrun=0):
             '--dbname=%(db_name)s') % env
         print cmd
         if not dryrun:
-            run(cmd)
+            run_or_dryrun(cmd)
     else:
         raise NotImplementedError
 
 @task
-def load(db_dump_fn='', dryrun=0, prep_only=0, force_upload=0):
+@runs_once
+def load(db_dump_fn='', dryrun=0, prep_only=0, force_upload=0, from_local=0, verbose=0):
     """
     Restores a database snapshot onto the target database server.
     
@@ -706,13 +772,16 @@ def load(db_dump_fn='', dryrun=0, prep_only=0, force_upload=0):
     If prep_only=1, commands for preparing the load will be generated,
     but not the command to finally load the snapshot.
     """
+    verbose = int(verbose)
     from burlap.dj import set_db
-    print '!'*80
-    print 'db.load.site:',env.SITE
-    print 'db.load.role:',env.ROLE
+#    print '!'*80
+#    print 'db.load.site:',env.SITE
+#    print 'db.load.role:',env.ROLE
+    
     env.db_dump_fn = db_dump_fn
     set_db(site=env.SITE, role=env.ROLE)
     
+    from_local = int(from_local)
     prep_only = int(prep_only)
     dryrun = int(dryrun)
     
@@ -724,13 +793,17 @@ def load(db_dump_fn='', dryrun=0, prep_only=0, force_upload=0):
         env.db_remote_dump_fn = db_dump_fn
     else:
         env.db_remote_dump_fn = '/tmp/'+os.path.split(env.db_dump_fn)[-1]
+#    print '~'*80
+#    print 'env.db_remote_dump_fn:',env.db_remote_dump_fn
+#    print 'env.hosts2:',env.hosts,env.host_string
     
     if not prep_only:
-        if int(force_upload) or (not dryrun and not env.is_local and not files.exists(env.db_dump_fn)):
+        if int(force_upload) or (not dryrun and not env.is_local and not files.exists(env.db_remote_dump_fn)):
             assert os.path.isfile(env.db_dump_fn), \
                 missing_local_dump_error
-            print 'Uploading database snapshot...'
-            put(local_path=env.db_dump_fn, remote_path=env.db_remote_dump_fn)
+            if verbose:
+                print 'Uploading database snapshot...'
+            put_or_dryrun(local_path=env.db_dump_fn, remote_path=env.db_remote_dump_fn)
     
     if env.is_local and not dryrun and not prep_only:
         assert os.path.isfile(env.db_dump_fn), \
@@ -738,51 +811,39 @@ def load(db_dump_fn='', dryrun=0, prep_only=0, force_upload=0):
     
     if env.db_load_command:
         cmd = env.db_load_command % env
-        print cmd
-        if not dryrun:
-            run(cmd)
+        run_or_dryrun(cmd, dryrun=dryrun)
     elif 'postgres' in env.db_engine or 'postgis' in env.db_engine:
+        
+        set_root_login()
         
         with settings(warn_only=True):
             cmd = 'dropdb --user=%(db_postgresql_postgres_user)s %(db_name)s' % env
             print cmd
             if not dryrun:
-                run(cmd)
+                run_or_dryrun(cmd)
                 
         cmd = 'psql --user=%(db_postgresql_postgres_user)s -c "CREATE DATABASE %(db_name)s;"' % env
-        print cmd
-        if not dryrun:
-            run(cmd)
+        run_or_dryrun(cmd)
         
         with settings(warn_only=True):
             
             if 'postgis' in env.db_engine:
                 cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --dbname=%(db_name)s --command="CREATE EXTENSION postgis;"' % env
-                print cmd
-                if not dryrun:
-                    run(cmd)
+                run_or_dryrun(cmd)
                 cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --dbname=%(db_name)s --command="CREATE EXTENSION postgis_topology;"' % env
-                print cmd
-                if not dryrun:
-                    run(cmd)
+                run_or_dryrun(cmd)
             
             cmd = 'psql --user=%(db_postgresql_postgres_user)s -c "DROP OWNED BY %(db_user)s CASCADE;"' % env
-            print cmd
-            if not dryrun:
-                run(cmd)
+            run_or_dryrun(cmd)
             
         cmd = ('psql --user=%(db_postgresql_postgres_user)s -c "DROP USER IF EXISTS %(db_user)s; '
             'CREATE USER %(db_user)s WITH PASSWORD \'%(db_password)s\'; '
             'GRANT ALL PRIVILEGES ON DATABASE %(db_name)s to %(db_user)s;"') % env
-        print cmd
-        if not dryrun:
-            run(cmd)
+        run_or_dryrun(cmd)
         for createlang in env.db_postgresql_createlangs:
             env.db_createlang = createlang
             cmd = 'createlang -U %(db_postgresql_postgres_user)s %(db_createlang)s %(db_name)s || true' % env
-            print cmd
-            if not dryrun:
-                run(cmd)
+            run_or_dryrun(cmd)
         
         if not prep_only:
             #cmd = 'gunzip -c %(db_remote_dump_fn)s | pg_restore --jobs=8 -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s' % env #TODO:deprecated
@@ -791,23 +852,23 @@ def load(db_dump_fn='', dryrun=0, prep_only=0, force_upload=0):
                 cmd = env.db_postgresql_custom_load_cmd % env
             else:
                 cmd = 'pg_restore --jobs=8 -U %(db_postgresql_postgres_user)s --create --dbname=%(db_name)s %(db_remote_dump_fn)s' % env
-            print cmd
-            if not dryrun:
-                run(cmd)
+            run_or_dryrun(cmd)
         
     elif 'mysql' in env.db_engine:
+        
+        set_root_login()
         
         # Drop the database if it's there.
         #cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' "
         cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
             "--execute='DROP DATABASE IF EXISTS %(db_name)s'") % env
-        run(cmd)
+        run_or_dryrun(cmd, dryrun=dryrun)
         
         # Now, create the database.
         #cmd = ("mysqladmin -h %(db_host)s -u %(db_user)s -p'%(db_password)s' "
         cmd = ("mysqladmin -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
             "create %(db_name)s") % env
-        run(cmd)
+        run_or_dryrun(cmd, dryrun=dryrun)
         
         #TODO:create user
 #        DROP USER '<username>'@'%';
@@ -820,27 +881,27 @@ def load(db_dump_fn='', dryrun=0, prep_only=0, force_upload=0):
 #            "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
 #        print cmd
 #        if not int(dryrun):
-#            sudo(cmd)
+#            sudo_or_dryrun(cmd)
         set_collation_mysql(dryrun=dryrun)
         
         # Raise max packet limitation.
-        run(
+        run_or_dryrun(
             ('mysql -v -h %(db_host)s -D %(db_name)s -u %(db_root_user)s '
             '-p"%(db_root_password)s" --execute="SET global '
             'net_buffer_length=%(db_mysql_net_buffer_length)s; SET global '
-            'max_allowed_packet=%(db_mysql_max_allowed_packet)s;"') % env)
+            'max_allowed_packet=%(db_mysql_max_allowed_packet)s;"') % env, dryrun=dryrun)
         
         # Run any server-specific commands (e.g. to setup permissions) before
         # we load the data.
         for command in env.db_mysql_preload_commands:
-            run(command % env)
+            run_or_dryrun(command % env, dryrun=dryrun)
         
         # Restore the database content from the dump file.
         env.db_dump_fn = db_dump_fn
-        cmd = ('gunzip < %(db_dump_fn)s | mysql -u %(db_root_user)s '
+        cmd = ('gunzip < %(db_remote_dump_fn)s | mysql -u %(db_root_user)s '
             '--password=%(db_root_password)s --host=%(db_host)s '
             '-D %(db_name)s') % env
-        run(cmd)
+        run_or_dryrun(cmd, dryrun=dryrun)
         
         set_collation_mysql(dryrun=dryrun)
         
@@ -848,7 +909,7 @@ def load(db_dump_fn='', dryrun=0, prep_only=0, force_upload=0):
         raise NotImplemented
 
 @task
-def syncdb(site=None, all=0, dryrun=0):
+def syncdb(site=None, all=0, dryrun=0, database=None):
     """
     Wrapper around Django's syncdb command.
     """
@@ -866,13 +927,14 @@ def syncdb(site=None, all=0, dryrun=0):
     render_remote_paths()
     
     env.db_syncdb_all_flag = '--all' if int(all) else ''
-    cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --noinput %(db_syncdb_all_flag)s -v 3 --traceback' % env
-    print 'cmd:',cmd
-    if not dryrun:
-        run(cmd)
+    env.db_syncdb_database = ''
+    if database:
+        env.db_syncdb_database = ' --database=%s' % database
+    cmd = env.db_syncdb_command_template % env
+    run_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def migrate(app_name='', site=None, fake=0, skip_databases=None, dryrun=0):
+def migrate(app_name='', site=None, fake=0, skip_databases=None, dryrun=0, do_fake=1, do_real=0, migrate_apps=''):
     """
     Wrapper around Django's migrate command.
     """
@@ -880,10 +942,19 @@ def migrate(app_name='', site=None, fake=0, skip_databases=None, dryrun=0):
     
     dryrun = int(dryrun)
     
-    print 'Migrating...'
+    # If fake migrations are enabled, then run the real migrations on the real database.
+    do_real = int(do_real)
+    do_fake = int(do_fake)
+    
     set_site(site or env.SITE)
     
     render_remote_paths()
+    
+    migrate_apps = [
+        _.strip()
+        for _ in migrate_apps.strip().split(',')
+        if _.strip()
+    ]
     
     skip_databases = (skip_databases or '')
     if isinstance(skip_databases, basestring):
@@ -895,46 +966,44 @@ def migrate(app_name='', site=None, fake=0, skip_databases=None, dryrun=0):
     if env.django_migrate_fakeouts:
         for fakeout in env.django_migrate_fakeouts:
             env.db_app_name = fakeout['app']
+            if migrate_apps and env.db_app_name not in migrate_apps:
+                continue
             env.db_database_name = fakeout['database']
             if env.db_database_name in skip_databases:
                 continue
-            cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations --fake -v 3 --traceback' % env
-            print(cmd)
-            if not dryrun:
-                run(cmd)
-            if has_database(name=env.db_database_name, site=site):
-                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --database=%(db_database_name)s --traceback' % env
-                print(cmd)
-                if not dryrun: run(cmd)
-                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --database=%(db_database_name)s --noinput --delete-ghost-migrations -v 3 --traceback' % env
-                print(cmd)
-                if not dryrun: run(cmd)
+            if do_fake:
+                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations --fake --traceback' % env
+                run_or_dryrun(cmd, dryrun=dryrun)
+            if do_real and has_database(name=env.db_database_name, site=site):
+#                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --database=%(db_database_name)s --traceback' % env
+#                run_or_dryrun(cmd, dryrun=dryrun)
+                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --database=%(db_database_name)s --noinput --delete-ghost-migrations --traceback' % env
+                run_or_dryrun(cmd, dryrun=dryrun)
     
     env.db_migrate_fake = '--fake' if int(fake) else ''
-    if app_name:
+    if migrate_apps:
+        for app_name in migrate_apps:
+            env.db_app_name = app_name
+            cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations %(db_migrate_fake)s --traceback' % env
+            run_or_dryrun(cmd, dryrun=dryrun)
+    elif app_name:
         env.db_app_name = app_name
-        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations %(db_migrate_fake)s -v 3 --traceback' % env
-        print(cmd)
-        if not dryrun:
-            run(cmd)
+        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations %(db_migrate_fake)s --traceback' % env
+        run_or_dryrun(cmd, dryrun=dryrun)
     else:
         
         # First migrate apps in a specific order if given.
         for app_name in env.db_app_migration_order:
             env.db_app_name = app_name
-            cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s %(db_app_name)s -v 3 --traceback' % env
-            print(cmd)
-            if not dryrun:
-                run(cmd)
+            cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s %(db_app_name)s --traceback' % env
+            run_or_dryrun(cmd, dryrun=dryrun)
             
         # Then migrate everything else remaining.
-        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s -v 3 --traceback' % env
-        print(cmd)
-        if not dryrun:
-            run(cmd)
+        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s --traceback' % env
+        run_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def database_files_dump(site=None):
+def database_files_dump(site=None, dryrun=0):
     """
     Runs the Django management command to export files stored in the database to the filesystem.
     Assumes the app django_database_files is installed.
@@ -946,9 +1015,9 @@ def database_files_dump(site=None):
     
     cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s database_files_dump' % env
     if env.is_local:
-        local(cmd)
+        local_or_dryrun(cmd, dryrun=dryrun)
     else:
-        run(cmd)
+        run_or_dryrun(cmd, dryrun=dryrun)
 
 @task
 def drop_views(name=None, site=None):
@@ -978,11 +1047,14 @@ def drop_views(name=None, site=None):
 #        $$
         todo
     elif 'mysql' in env.db_engine:
+        
+        set_root_login()
+        
         cmd = ("mysql --batch -v -h %(db_host)s " \
             #"-u %(db_root_user)s -p'%(db_root_password)s' " \
             "-u %(db_user)s -p'%(db_password)s' " \
             "--execute=\"SELECT GROUP_CONCAT(CONCAT(TABLE_SCHEMA,'.',table_name) SEPARATOR ', ') AS views FROM INFORMATION_SCHEMA.views WHERE TABLE_SCHEMA = '%(db_name)s' ORDER BY table_name DESC;\"") % env
-        result = sudo(cmd)
+        result = sudo_or_dryrun(cmd)
         result = re.findall(
             '^views[\s\t\r\n]+(.*)',
             result,
@@ -993,7 +1065,7 @@ def drop_views(name=None, site=None):
         #cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' " \
         cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' " \
             "--execute=\"DROP VIEW %(db_view_list)s CASCADE;\"") % env
-        sudo(cmd)
+        sudo_or_dryrun(cmd)
     else:
         raise NotImplementedError
 
@@ -1045,22 +1117,22 @@ def install_sql(name='default', site=None, dryrun=0):
         for path in get_paths('postgresql'):
             if not dryrun:
                 print 'Installing PostgreSQL script %s.' % path
-                put(local_path=path)
+                put_or_dryrun(local_path=path, dryrun=dryrun)
             else:
                 env.put_remote_path = path
             #cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s") % env
             cmd = ("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s") % env
             print(cmd)
             if not dryrun:
-                run(cmd)
+                run_or_dryrun(cmd)
     elif 'mysql' in env.db_engine:
         for path in get_paths('mysql'):
             print 'Installing MySQL script %s.' % path
-            put(local_path=path)
+            put_or_dryrun(local_path=path, dryrun=dryrun)
             cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s") % env
             print(cmd)
             if not dryrun:
-                run(cmd)
+                run_or_dryrun(cmd)
     else:
         raise NotImplementedError
 
@@ -1077,10 +1149,10 @@ def createsuperuser(username='admin', email=None, password=None, site=None):
     
     env.db_createsuperuser_username = username
     env.db_createsuperuser_email = email or username
-    run('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s createsuperuser --username=%(db_createsuperuser_username)s --email=%(db_createsuperuser_email)s' % env)
+    run_or_dryrun('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s createsuperuser --username=%(db_createsuperuser_username)s --email=%(db_createsuperuser_email)s' % env)
 
 @task
-def install_fixtures(name, site=None):
+def install_fixtures(name, site=None, dryrun=0):
     """
     Installs a set of Django fixtures.
     """
@@ -1094,11 +1166,15 @@ def install_fixtures(name, site=None):
         env.db_fq_fixture_path = os.path.join(env.remote_app_src_package_dir, fixture_path)
         print 'Loading %s...' % (env.db_fq_fixture_path,)
         if not env.is_local and not files.exists(env.db_fq_fixture_path):
-            put(local_path=env.db_fq_fixture_path, remote_path='/tmp/data.json', use_sudo=True)
+            put_or_dryrun(
+                local_path=env.db_fq_fixture_path,
+                remote_path='/tmp/data.json',
+                use_sudo=True,
+                dryrun=dryrun)
             env.db_fq_fixture_path = env.put_remote_path
         cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s loaddata %(db_fq_fixture_path)s' % env
         print cmd
-        run(cmd)
+        run_or_dryrun(cmd, dryrun=dryrun)
 
 @task
 def restart(site=common.ALL, dryrun=0):
@@ -1111,12 +1187,12 @@ def restart(site=common.ALL, dryrun=0):
             cmd = 'service mysqld restart'
             print(cmd)
             if not dryrun:
-                sudo(cmd)
+                sudo_or_dryrun(cmd)
         elif service_name.upper() == POSTGRESQL:
             cmd = 'service postgresql restart; sleep 3'
             print(cmd)
             if not dryrun:
-                sudo(cmd)
+                sudo_or_dryrun(cmd)
 
 #TODO:deprecated? use write_postgres_pgass instead?
 @task
@@ -1133,11 +1209,11 @@ def save_db_password(user, password):
         env.db_save_user = user
         env.db_save_password = password
 
-        sudo('sudo -u postgres psql -c "ALTER USER %(db_save_user)s PASSWORD \'%(db_save_password)s\';"' % env)
+        sudo_or_dryrun('sudo -u postgres psql -c "ALTER USER %(db_save_user)s PASSWORD \'%(db_save_password)s\';"' % env)
         
-        sudo("sed -i '/%(db_save_user)s/d' ~/.pgpass" % env)
-        sudo('echo "localhost:5432:*:%(db_save_user)s:%(db_save_password)s" >> ~/.pgpass' % env)
-        sudo('chmod 600 ~/.pgpass')
+        sudo_or_dryrun("sed -i '/%(db_save_user)s/d' ~/.pgpass" % env)
+        sudo_or_dryrun('echo "localhost:5432:*:%(db_save_user)s:%(db_save_password)s" >> ~/.pgpass' % env)
+        sudo_or_dryrun('chmod 600 ~/.pgpass')
     else:
         raise NotImplementedError
 
@@ -1185,9 +1261,9 @@ def write_postgres_pgpass(name=None, use_sudo=0, dryrun=0, verbose=1):
             print(cmd)
         if not dryrun:
             if use_sudo:
-                sudo(cmd)
+                sudo_or_dryrun(cmd, dryrun=dryrun)
             else:
-                run(cmd)
+                run_or_dryrun(cmd, dryrun=dryrun)
                 
     return cmds
 
@@ -1209,6 +1285,7 @@ def shell(name='default', user=None, password=None, dryrun=0, root=0, verbose=1,
     # Load database credentials.
     set_db(name=name, verbose=verbose)
     load_db_set(name=name, verbose=verbose)
+    set_root_login()
     if root:
         env.db_user = env.db_root_user
         env.db_password = env.db_root_password
@@ -1266,7 +1343,7 @@ def shell(name='default', user=None, password=None, dryrun=0, root=0, verbose=1,
                 if env.is_local:
                     local(cmd)
                 else:
-                    run(cmd)
+                    run_or_dryrun(cmd, dryrun=dryrun)
 
 common.service_configurators[MYSQL] = [configure]
 common.service_configurators[POSTGRESQL] = [configure]
@@ -1284,16 +1361,24 @@ def record_manifest():
         
     data = common.get_component_settings(DB)
     
-    #data['databases'] = {} # {site:django DATABASES}
     data['databases'] = []#{} # {site:django DATABASES}
     data['database_users'] = {} # {user:(host,password)}
     for site, site_data in common.iter_sites(site=ALL, no_secure=True):
         settings = get_settings(site=site)
         for _, db_data in settings.DATABASES.iteritems():
             #data['databases'][site] = settings.DATABASES
-            data['databases'].append(dict(engine=db_data['ENGINE'], name=db_data['NAME'], host=db_data['HOST'], port=db_data.get('PORT')))
+            data['databases'].append(dict(
+                engine=db_data['ENGINE'],
+                name=db_data['NAME'],
+                host=db_data['HOST'],
+                port=db_data.get('PORT')))
             data['database_users'].setdefault(db_data['USER'], [])
-            data['database_users'][db_data['USER']].append(dict(password=db_data['PASSWORD'], engine=db_data['ENGINE'], name=db_data['NAME'], host=db_data['HOST'], port=db_data.get('PORT')))
+            data['database_users'][db_data['USER']].append(dict(
+                password=db_data['PASSWORD'],
+                engine=db_data['ENGINE'],
+                name=db_data['NAME'],
+                host=db_data['HOST'],
+                port=db_data.get('PORT')))
     
     return data
 

@@ -4,13 +4,13 @@ import datetime
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
+    #local,
+    #put as _put,
     require,
     #run as _run,
-    run,
+    #run,
     settings,
-    sudo,
+    #sudo,
     cd,
     task,
 )
@@ -18,8 +18,10 @@ from fabric.contrib import files
 
 from burlap.common import (
     ALL,
-    run,
-    put,
+    run_or_dryrun,
+    put_or_dryrun,
+    local_or_dryrun,
+    sudo_or_dryrun,
     render_to_string,
     get_packager,
     get_os_version,
@@ -196,6 +198,7 @@ env.apache_service_commands = {
     },
 }
 
+APACHE = 'APACHE'
 APACHE2 = 'APACHE2'
 APACHE2_MODEVASIVE = 'APACHE2_MODEVASIVE'
 APACHE2_MODSECURITY = 'APACHE2_MODSECURITY'
@@ -225,40 +228,34 @@ def get_service_command(action):
     return env.apache_service_commands[action][os_version.distro]
 
 @task
-def enable():
+def enable(dryrun=0):
     cmd = get_service_command(common.ENABLE)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def disable():
+def disable(dryrun=0):
     cmd = get_service_command(common.DISABLE)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def start():
+def start(dryrun=0):
     cmd = get_service_command(common.START)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def stop():
+def stop(dryrun=0):
     cmd = get_service_command(common.STOP)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def reload():
+def reload(dryrun=0):
     cmd = get_service_command(common.RELOAD)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
 def restart():
     cmd = get_service_command(common.RESTART)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
 def visitors(force=0):
@@ -319,6 +316,7 @@ def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
     """
     Configures Apache to host one or more websites.
     """
+    from burlap.common import get_current_hostname
     from burlap import service
     
     print 'Configuring Apache...'
@@ -328,23 +326,29 @@ def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
     site = site or env.SITE
     
     apache_specifics = set_apache_specifics()
+    hostname = get_current_hostname()
+    target_sites = env.available_sites_by_host.get(hostname, None)
     
     if int(delete_old):
         # Delete all existing enabled and available sites.
         cmd = 'rm -f %(apache_sites_available)s/*' % env
-        print(cmd)
-        if not dryrun:
-            sudo(cmd)
+        sudo_or_dryrun(cmd, dryrun=dryrun)
         cmd = 'rm -f %(apache_sites_enabled)s/*' % env
-        print(cmd)
-        if not dryrun:
-            sudo(cmd)
+        sudo_or_dryrun(cmd, dryrun=dryrun)
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
         print '-'*80
         print 'Site:',site
         print '-'*80
         
+        # Only load site configurations that are allowed for this host.
+        if target_sites is None:
+            pass
+        else:
+            assert isinstance(target_sites, (tuple, list))
+            if site not in target_sites:
+                continue
+                
         print 'env.apache_ssl_domain:',env.apache_ssl_domain
         print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
         print 'env.django_settings_module:',env.django_settings_module
@@ -352,12 +356,10 @@ def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
         fn = common.render_to_file('django.template.wsgi', verbose=verbose)
         remote_dir = os.path.split(env.apache_django_wsgi)[0]
         cmd = 'mkdir -p %s' % remote_dir
-        print(cmd)
-        if not dryrun:
-            sudo(cmd)
+        sudo_or_dryrun(cmd, dryrun=dryrun)
             
         if not dryrun:
-            put(local_path=fn, remote_path=env.apache_django_wsgi, use_sudo=True)
+            put_or_dryrun(local_path=fn, remote_path=env.apache_django_wsgi, use_sudo=True, dryrun=dryrun)
         else:
             env.put_remote_path = env.apache_django_wsgi
         
@@ -368,14 +370,12 @@ def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
         env.apache_site_conf = site+'.conf'
         env.apache_site_conf_fqfn = os.path.join(env.apache_sites_available, env.apache_site_conf)
         if not dryrun:
-            put(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True)
+            put_or_dryrun(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True, dryrun=dryrun)
         else:
             env.put_remote_path = env.apache_site_conf_fqfn
         
         cmd = 'a2ensite %(apache_site_conf)s' % env
-        print(cmd)
-        if not dryrun:
-            sudo(cmd)
+        sudo_or_dryrun(cmd, dryrun=dryrun)
     
     if service.is_selected(APACHE2_MODEVASIVE):
         configure_modevasive(dryrun=dryrun)
@@ -386,22 +386,20 @@ def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
     for mod_enabled in env.apache_mods_enabled:
         env.apache_mod_enabled = mod_enabled
         cmd = 'a2enmod %(apache_mod_enabled)s' % env
-        print(cmd)
-        if not dryrun:
-            sudo(cmd)
+        sudo_or_dryrun(cmd, dryrun=dryrun)
         
     if int(full):
         # Write master Apache configuration file.
         fn = common.render_to_file('apache_httpd.template.conf', verbose=verbose)
         if not dryrun:
-            put(local_path=fn, remote_path=env.apache_conf, use_sudo=True)
+            put_or_dryrun(local_path=fn, remote_path=env.apache_conf, use_sudo=True, dryrun=dryrun)
         else:
             env.put_remote_path = env.apache_conf
         
         # Write Apache listening ports configuration.
         fn = common.render_to_file('apache_ports.template.conf', verbose=verbose)
         if not dryrun:
-            put(local_path=fn, remote_path=env.apache_ports, use_sudo=True)
+            put_or_dryrun(local_path=fn, remote_path=env.apache_ports, use_sudo=True, dryrun=dryrun)
         else:
             env.put_remote_path = env.apache_ports
         
@@ -410,23 +408,21 @@ def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
 #    sudo('mkdir -p %(apache_log_dir)s' % env)
 #    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_log_dir)s' % env)
     cmd = 'chown -R %(apache_user)s:%(apache_group)s %(apache_root)s' % env
-    print(cmd)
-    if not dryrun:
-        sudo(cmd)
+    sudo_or_dryrun(cmd, dryrun=dryrun)
 #    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_docroot)s' % env)
 #    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_pid)s' % env)
 
     #restart()#break apache? run separately?
 
 @task
-def configure_modsecurity():
+def configure_modsecurity(dryrun=0):
     
     env.apache_mods_enabled.append('mod-security')
     env.apache_mods_enabled.append('headers')
     
     # Write modsecurity.conf.
     fn = common.render_to_file('apache_modsecurity.template.conf')
-    put(local_path=fn, remote_path='/etc/modsecurity/modsecurity.conf', use_sudo=True)
+    put_or_dryrun(local_path=fn, remote_path='/etc/modsecurity/modsecurity.conf', use_sudo=True, dryrun=dryrun)
     
     # Write OWASP rules.
     env.apache_modsecurity_download_filename = '/tmp/owasp-modsecurity-crs.tar.gz'
@@ -571,17 +567,23 @@ def sync_media(sync_set=None, dryrun=0):
             sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
 
 @task
-def configure_all():
-    return configure(full=1, site=ALL, delete_old=1)
+def configure_all(dryrun=0):
+    """
+    Installs the Apache site configurations for both secure and non-secure
+    sites.
+    """
+    return configure(full=1, site=ALL, delete_old=1, dryrun=dryrun)
 
 @task
-def record_manifest():
+def record_manifest(verbose=0):
     """
     Called after a deployment to record any data necessary to detect changes
     for a future deployment.
     """
-    data = common.get_component_settings(APACHE2)
+    data = common.get_component_settings(prefixes=[APACHE, APACHE2])
     #TODO:hash media names and content
+    if int(verbose):
+        print data
     return data
 
 def compare_manifest(old):

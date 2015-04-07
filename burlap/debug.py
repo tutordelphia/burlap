@@ -24,11 +24,18 @@ def list_env(key=None):
     """
     Displays a list of environment key/value pairs.
     """
-    for k,v in env.iteritems():
+    for k,v in sorted(env.iteritems(), key=lambda o:o[0]):
         if key and k != key:
             continue
         print k,
         pprint(v, indent=4)
+
+@task
+def list_sites(site='all', *args, **kwargs):
+    from burlap.common import iter_sites
+    kwargs['site'] = site
+    for site, data in iter_sites(*args, **kwargs):
+        print site
 
 def list_to_str_or_unknown(lst):
     if len(lst):

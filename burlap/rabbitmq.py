@@ -7,16 +7,21 @@ from fabric.api import (
     put as _put,
     require,
     #run as _run,
-    run,
+    #run,
     settings,
-    sudo,
+    #sudo,
     cd,
     task,
 )
 
 from fabric.contrib import files
 
-from burlap.common import run, put, QueuedCommand
+from burlap.common import (
+    run_or_dryrun,
+    sudo_or_dryrun,
+    put_or_dryrun,
+    QueuedCommand,
+)
 from burlap import common
 
 env.rabbitmq_host = "localhost"
@@ -34,6 +39,7 @@ env.rabbitmq_logdir = "/var/log/rabbitmq"
 env.rabbitmq_mnesiadir = "/var/lib/rabbitmq/mnesia"
 env.rabbitmq_start_args = ""
 env.rabbitmq_erlang_cookie_template = ''
+env.rabbitmq_ignore_service_errors = 0
 
 env.rabbitmq_service_commands = {
     common.START:{
@@ -75,40 +81,40 @@ def get_service_command(action):
     return env.rabbitmq_service_commands[action][os_version.distro]
 
 @task
-def enable():
+def enable(dryrun=0):
     cmd = get_service_command(common.ENABLE)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def disable():
+def disable(dryrun=0):
     cmd = get_service_command(common.DISABLE)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def start():
-    cmd = get_service_command(common.START)
-    print cmd
-    sudo(cmd)
+def start(dryrun=0):
+    s = {'warn_only':True} if env.rabbitmq_ignore_service_errors else {} 
+    with settings(**s):
+        cmd = get_service_command(common.START)
+        sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def stop():
-    cmd = get_service_command(common.STOP)
-    print cmd
-    sudo(cmd)
+def stop(dryrun=0):
+    s = {'warn_only':True} if env.rabbitmq_ignore_service_errors else {} 
+    with settings(**s):
+        cmd = get_service_command(common.STOP)
+        sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def restart():
-    cmd = get_service_command(common.RESTART)
-    print cmd
-    sudo(cmd)
+def restart(dryrun=0):
+    s = {'warn_only':True} if env.rabbitmq_ignore_service_errors else {} 
+    with settings(**s):
+        cmd = get_service_command(common.RESTART)
+        sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def status():
+def status(dryrun=0):
     cmd = get_service_command(common.STATUS)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd, dryrun=dryrun)
 
 def render_paths():
     from burlap.dj import render_remote_paths
@@ -117,18 +123,18 @@ def render_paths():
         env.rabbitmq_erlang_cookie = env.rabbitmq_erlang_cookie_template % env
 
 @task
-def list_vhosts():
+def list_vhosts(dryrun=0):
     """
     Displays a list of configured RabbitMQ vhosts.
     """
-    sudo('rabbitmqctl list_vhosts')
+    sudo_or_dryrun('rabbitmqctl list_vhosts', dryrun=dryrun)
 
 @task
-def list_users():
+def list_users(dryrun=0):
     """
     Displays a list of configured RabbitMQ users.
     """
-    sudo('rabbitmqctl list_users')
+    sudo_or_dryrun('rabbitmqctl list_users', dryrun=dryrun)
     
 @task
 def configure(site=None, full=0, dryrun=0):
@@ -163,13 +169,9 @@ def configure(site=None, full=0, dryrun=0):
         env.rabbitmq_broker_vhost = vhost
         with settings(warn_only=True):
             cmd = 'rabbitmqctl add_vhost %(rabbitmq_broker_vhost)s' % env
-            print cmd
-            if not dryrun:
-                sudo(cmd)
+            sudo_or_dryrun(cmd, dryrun=dryrun)
             cmd = 'rabbitmqctl set_permissions -p %(rabbitmq_broker_vhost)s %(rabbitmq_broker_user)s ".*" ".*" ".*"' % env
-            print cmd
-            if not dryrun:
-                sudo(cmd)
+            sudo_or_dryrun(cmd, dryrun=dryrun)
 
 @task
 def configure_all(**kwargs):

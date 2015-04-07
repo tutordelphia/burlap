@@ -32,6 +32,9 @@ from burlap import common
 from burlap.common import (
     ALL,
     #run,
+#    run_or_dryrun,
+#    sudo_or_dryrun,
+    local_or_dryrun,
     put,
     SITE,
     ROLE,
@@ -85,8 +88,12 @@ def generate_csr(domain='', r=None, dryrun=0):
     """
     Creates a certificate signing request to be submitted to a formal
     certificate authority to generate a certificate.
+    
+    Note, the provider may say the CSR must be created on the target server,
+    but this is not necessary.
     """
     from apache import set_apache_specifics, set_apache_site_specifics
+    dryrun = int(dryrun)
     env.ssl_domain = domain or env.ssl_domain
     role = r or env.ROLE or ALL
     ssl_dst = 'roles/%s/ssl' % (role,)
@@ -102,11 +109,9 @@ def generate_csr(domain='', r=None, dryrun=0):
         assert env.ssl_domain, 'No SSL domain defined.'
     
         #2048?
-        env.ssl_base_dst = '%s/%s' % (ssl_dst, env.ssl_domain)
+        env.ssl_base_dst = '%s/%s' % (ssl_dst, env.ssl_domain.replace('*.', ''))
         cmd = 'openssl req -nodes -newkey rsa:%(ssl_length)s -subj "/C=%(ssl_country)s/ST=%(ssl_state)s/L=%(ssl_city)s/O=%(ssl_organization)s/CN=%(ssl_domain)s" -keyout %(ssl_base_dst)s.key -out %(ssl_base_dst)s.csr' % env
-        print cmd
-        if not int(dryrun):
-            local(cmd)
+        local_or_dryrun(cmd, dryrun=dryrun)
 
 def get_expiration_date(fn):
     """

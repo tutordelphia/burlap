@@ -21,6 +21,10 @@ from burlap.common import (
     run,
     put,
     QueuedCommand,
+    local_or_dryrun,
+    run_or_dryrun,
+    sudo_or_dryrun,
+    put_or_dryrun,
 )
 from burlap import common
 
@@ -50,10 +54,11 @@ def get_tarball_path():
     return env.tarball_path
 
 @task
-def create(gzip=1):
+def create(gzip=1, dryrun=0):
     """
     Generates a tarball of all deployable code.
     """
+    dryrun = int(dryrun)
     assert env.SITE, 'Site unspecified.'
     assert env.ROLE, 'Role unspecified.'
     env.tarball_gzip = bool(int(gzip))
@@ -64,11 +69,10 @@ def create(gzip=1):
     cmd = ("cd %(absolute_src_dir)s; " \
         "tar %(tarball_exclusions_str)s --exclude-vcs %(tarball_gzip_flag)s " \
         "--create --verbose --dereference --file %(tarball_path)s *") % env
-    print cmd
-    local(cmd)
+    local_or_dryrun(cmd, dryrun=dryrun)
 
 @task
-def deploy(clean=0):
+def deploy(clean=0, dryrun=0):
     """
     Copies the tarball to the target server.
     
@@ -79,7 +83,7 @@ def deploy(clean=0):
     tarball_path = get_tarball_path()
     assert os.path.isfile(tarball_path), \
         'No tarball found. Ensure you ran create() first.'
-    put(local_path=env.tarball_path)
+    put_or_dryrun(local_path=env.tarball_path, dryrun=dryrun)
     
     env.remote_app_dir = env.remote_app_dir_template % env
     env.remote_app_src_dir = env.remote_app_src_dir_template % env
@@ -88,25 +92,25 @@ def deploy(clean=0):
     if int(clean):
         print 'Deleting old remote source...'
         #sudo('[ -d %(remote_app_src_dir)s ] && rm -Rf  %(remote_app_src_dir)s' % env)
-        sudo('rm -Rf  %(remote_app_src_dir)s' % env)
-        sudo('mkdir -p %(remote_app_src_dir)s' % env)
+        sudo_or_dryrun('rm -Rf  %(remote_app_src_dir)s' % env)
+        sudo_or_dryrun('mkdir -p %(remote_app_src_dir)s' % env)
     
     print 'Extracting tarball...'
-    sudo('mkdir -p %(remote_app_src_dir)s' % env)
-    sudo('tar -xvzf %(put_remote_path)s -C %(remote_app_src_dir)s' % env)
+    sudo_or_dryrun('mkdir -p %(remote_app_src_dir)s' % env, dryrun=dryrun)
+    sudo_or_dryrun('tar -xvzf %(put_remote_path)s -C %(remote_app_src_dir)s' % env, dryrun=dryrun)
     
     for path in env.tarball_extra_dirs:
         env.tarball_extra_dir_path = path % env
         if path.startswith('/'):
-            sudo('mkdir -p %(tarball_extra_dir_path)s' % env)
+            sudo_or_dryrun('mkdir -p %(tarball_extra_dir_path)s' % env, dryrun=dryrun)
         else:
-            sudo('mkdir -p %(remote_app_dir)s/%(tarball_extra_dir_path)s' % env)
+            sudo_or_dryrun('mkdir -p %(remote_app_dir)s/%(tarball_extra_dir_path)s' % env, dryrun=dryrun)
     
     # Mark executables.
     print 'Marking source files as executable...'
-    sudo('chmod +x %(remote_app_src_package_dir)s/*' % env)
-    sudo('chmod -R %(apache_chmod)s %(remote_app_src_package_dir)s' % env)
-    sudo('chown -R %(apache_user)s:%(apache_group)s %(remote_app_dir)s' % env)
+    sudo_or_dryrun('chmod +x %(remote_app_src_package_dir)s/*' % env, dryrun=dryrun)
+    sudo_or_dryrun('chmod -R %(apache_chmod)s %(remote_app_src_package_dir)s' % env, dryrun=dryrun)
+    sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(remote_app_dir)s' % env, dryrun=dryrun)
 
 @task
 def get_tarball_hash(fn=None, refresh=1, verbose=0):

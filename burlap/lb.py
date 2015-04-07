@@ -23,10 +23,14 @@ from fabric.contrib import files
 from burlap import common
 from burlap.common import run, put
 
-try:
-    import boto
-except ImportError:
-    boto = None
+def get_boto():
+    # Importing this directly causing all the ssl.* commands
+    # to show up under lb.boto.connection?!
+    try:
+        import boto
+    except ImportError:
+        boto = None
+    return boto
 
 EC2 = 'ec2'
 

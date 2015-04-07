@@ -13,6 +13,8 @@ from fabric.api import (
     local,
     put as _put,
     require,
+    runs_once,
+    execute,
     #run as _run,
     run,
     settings,
@@ -32,6 +34,9 @@ except ImportError:
     boto = None
 
 EC2 = 'ec2'
+
+#env.vm_type = None
+#env.vm_group = None
 
 env.vm_name_tag = 'Name'
 env.vm_group_tag = 'Group'
@@ -61,6 +66,10 @@ env.vm_ec2_volume = '/dev/sdh1'
 env.vm_ec2_keypair_name = None
 env.vm_ec2_use_elastic_ip = False
 env.vm_ec2_subnet_id = None
+env.vm_ec2_allocate_address_domain = None
+
+# If true, we will attempt to add or delete group rules.
+env.vm_ec2_security_group_owner = False
 
 def retrieve_ec2_hosts(verbose=0):
     for name, data in list_instances(show=0, verbose=verbose).iteritems():
@@ -94,6 +103,7 @@ def get_all_running_ec2_instances():
     return instances
 
 @task
+#@runs_once #breaks get_or_create()
 def list_instances(show=1, name=None, group=None, release=None, except_release=None, verbose=0):
     """
     Retrieves all virtual machines instances in the current environment.
@@ -155,16 +165,41 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
     else:
         raise NotImplementedError
 
+#@task
+#@runs_once
+#def list(*args, **kwargs):
+#    #execute(list_instances, *args, **kwargs)
+#    list_instances(*args, **kwargs)
+    
 def set_ec2_security_group_id(name, id):
     from burlap.common import shelf, OrderedDict
     v = shelf.get('vm_ec2_security_group_ids', OrderedDict())
     v[name] = str(id)
     shelf.set('vm_ec2_security_group_ids', v)
 
-def get_ec2_security_group_id(name):
+@task
+def get_ec2_security_group_id(name=None, verbose=0):
     from burlap.common import shelf, OrderedDict
-    v = shelf.get('vm_ec2_security_group_ids', OrderedDict())
-    return v.get(name)
+    
+    verbose = int(verbose)
+    
+    group_id = None
+    conn = get_ec2_connection()
+    groups = conn.get_all_security_groups()
+    for group in groups:
+        if verbose:
+            print('group:',group.name,group.id)
+        if group.name == name:
+            group_id = group.id
+    
+    # Otherwise try the local cache.
+    if not group_id:
+        v = shelf.get('vm_ec2_security_group_ids', OrderedDict())
+        group_id = v.get(name)
+        
+    if verbose:
+        print(group_id)
+    return group_id
     
 @task
 def get_or_create_ec2_security_groups(names=None, verbose=1):
@@ -181,11 +216,15 @@ def get_or_create_ec2_security_groups(names=None, verbose=1):
     if isinstance(names, basestring):
         names = names.split(',')
     names = names or env.vm_ec2_selected_security_groups
+    if verbose:
+        print('Group names:',names)
     
     ret = []
     for name in names:
         try:
             group_id = get_ec2_security_group_id(name)
+            if verbose:
+                print('group_id:',group_id)
             #group = conn.get_all_security_groups(groupnames=[name])[0]
             # Note, groups in a VPC can't be referred to by name?
             group = conn.get_all_security_groups(group_ids=[group_id])[0]
@@ -212,26 +251,54 @@ def get_or_create_ec2_security_groups(names=None, verbose=1):
                 #group.revoke(ip_protocol, from_port, to_port, cidr_ip)
                 rule_groups = ((rule.groups and rule.groups.split(',')) or [None])
                 for src_group in rule_groups:
-                    actual_sets.add((ip_protocol, from_port, to_port, str(cidr_ip), src_group))
+                    src_group = (src_group or '').strip()
+                    if src_group:
+                        actual_sets.add((ip_protocol, from_port, to_port, str(cidr_ip), src_group))
+                    else:
+                        actual_sets.add((ip_protocol, from_port, to_port, str(cidr_ip)))
         
         # Find actual rules.
         expected_sets = set()
         for authorization in env.vm_ec2_available_security_groups.get(name, []):
-            ip_protocol, from_port, to_port, cidr_ip, src_group = authorization
-            expected_sets.add((ip_protocol, str(from_port), str(to_port), cidr_ip, src_group))
+            if verbose:
+                print('authorization:',authorization)
+            if len(authorization) == 4 or (len(authorization) == 5 and not (authorization[-1] or '').strip()):
+                src_group = None
+                ip_protocol, from_port, to_port, cidr_ip = authorization[:4]
+                if cidr_ip:
+                    expected_sets.add((ip_protocol, str(from_port), str(to_port), cidr_ip))
+            else:
+                ip_protocol, from_port, to_port, cidr_ip, src_group = authorization
+                if cidr_ip:
+                    expected_sets.add((ip_protocol, str(from_port), str(to_port), cidr_ip, src_group))
             
-        # Calculate differences.
-        del_sets = actual_sets.difference(expected_sets)
-        add_sets = expected_sets.difference(actual_sets)
-        
-        # Revoke deleted.
-        for auth in del_sets:
-            group.revoke(*auth)
-        
-        # Create fresh rules.
-        for auth in add_sets:
-            group.authorize(*auth)
+        # Calculate differences and update rules if we own the group.
+        if env.vm_ec2_security_group_owner:
+            if verbose:
+                print('expected_sets:')
+                print(expected_sets)
+                print('actual_sets:')
+                print(actual_sets)
+            del_sets = actual_sets.difference(expected_sets)
+            if verbose:
+                print('del_sets:')
+                print(del_sets)
+            add_sets = expected_sets.difference(actual_sets)
+            if verbose:
+                print('add_sets:')
+                print(add_sets)
             
+            # Revoke deleted.
+            for auth in del_sets:
+                print(len(auth))
+                print('revoking:',auth)
+                group.revoke(*auth)
+            
+            # Create fresh rules.
+            for auth in add_sets:
+                print('authorizing:',auth)
+                group.authorize(*auth)
+                
     return ret
 
 @task
@@ -256,7 +323,7 @@ def get_or_create_ec2_key_pair(name=None, verbose=1):
     #return kp
     return pem_path
 
-def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0):
+def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, backend_opts={}):
     """
     Creates a new EC2 instance.
     
@@ -275,12 +342,13 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0):
     security_group_ids = [_.id for _ in security_groups]
     if verbose:
         print('security_groups:',security_group_ids)
-        #return
     
     pem_path = get_or_create_ec2_key_pair()
 
+    assert env.vm_ec2_ami, 'No AMI specified.'
     print('Creating EC2 instance from %s...' % (env.vm_ec2_ami,))
     print(env.vm_ec2_zone)
+    opts = backend_opts.get('run_instances', {})
     reservation = conn.run_instances(
         env.vm_ec2_ami,
         key_name=env.vm_ec2_keypair_name,
@@ -289,6 +357,7 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0):
         placement=env.vm_ec2_zone,
         instance_type=env.vm_ec2_instance_type,
         subnet_id=env.vm_ec2_subnet_id,
+        **opts
     )
     instance = reservation.instances[0]
     
@@ -372,9 +441,20 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0):
 #    print 'Stalling for %is for sshd to start...' % delay
 #    time.sleep(delay)
     
-    # Refresh instance reference.
-    instance = get_all_ec2_instances(instance_ids=[instance.id])[0]
-    assert instance.public_dns_name, 'No public DNS name found!'
+    # Confirm public DNS name was assigned.
+    while 1:
+        try:
+            instance = get_all_ec2_instances(instance_ids=[instance.id])[0]
+            #assert instance.public_dns_name, 'No public DNS name found!'
+            if instance.public_dns_name:
+                break
+        except Exception, e:
+            print('error:',e)
+        except SystemExit, e:
+            print('systemexit:',e)
+            pass
+        print('Waiting for public DNS name to be assigned...')
+        time.sleep(3)
 
     # Confirm we can SSH into the server.
     #TODO:better handle timeouts? try/except doesn't really work?
@@ -427,7 +507,7 @@ def exists(name=None, group=None, release=None, except_release=None, verbose=1):
     return instances
 
 @task
-def get_or_create(name=None, group=None, config=None, extra=0, verbose=0):
+def get_or_create(name=None, group=None, config=None, extra=0, verbose=0, backend_opts={}):
     """
     Creates a virtual machine instance.
     """
@@ -449,6 +529,8 @@ def get_or_create(name=None, group=None, config=None, extra=0, verbose=0):
     
     ret = exists(name=name, group=group)
     if not extra and ret:
+        if verbose:
+            print('VM %s:%s exists.' % (name, group))
         return ret
     
     today = datetime.date.today()
@@ -466,7 +548,8 @@ def get_or_create(name=None, group=None, config=None, extra=0, verbose=0):
             name=name,
             group=group,
             release=release,
-            verbose=verbose)
+            verbose=verbose,
+            backend_opts=backend_opts)
     else:
         raise NotImplementedError
 
@@ -540,3 +623,11 @@ def shutdown(force=False):
 def reboot():
     #virsh reboot <name>
     todo
+
+@task
+@runs_once
+def list_ips():
+    data = list_instances(show=0, verbose=0)
+    for key, attrs in data.iteritems():
+        print(attrs.get('ip'))
+        

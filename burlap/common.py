@@ -18,11 +18,19 @@ from fabric.api import (
     require,
     run as _run,
     settings,
-    sudo,
+    sudo as _sudo,
     cd,
     hide,
     task,
 )
+
+import fabric.api
+
+if hasattr(fabric.api, '_run'):
+    _run = fabric.api._run
+    
+if hasattr(fabric.api, '_sudo'):
+    _sudo = fabric.api._sudo
 
 PACKAGERS = APT, YUM = ('apt-get', 'yum')
 
@@ -115,10 +123,58 @@ env.shell_interactive_shell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(
 # A list of all site names that should be available on the current host.
 env.available_sites = []
 
+# A list of all site names per host.
+# {hostname: [sites]}
+# If no entry found, will use available_sites.
+env.available_sites_by_host = {}
+
 # The command run to determine the percent of disk usage.
 env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{ print $5 " " $1 }'"
 
 env.post_callbacks = []
+
+def local_or_dryrun(*args, **kwargs):
+    dryrun = int(kwargs.get('dryrun', 0))
+    if 'dryrun' in kwargs:
+        del kwargs['dryrun']
+    if dryrun:
+        cmd = args[0]
+        print cmd
+    else:
+        return local(*args, **kwargs)
+        
+def run_or_dryrun(*args, **kwargs):
+    dryrun = int(kwargs.get('dryrun', 0))
+    if 'dryrun' in kwargs:
+        del kwargs['dryrun']
+    if dryrun:
+        cmd = args[0]
+        print cmd
+    else:
+        return _run(*args, **kwargs)
+
+def sudo_or_dryrun(*args, **kwargs):
+    dryrun = int(kwargs.get('dryrun', 0))
+    if 'dryrun' in kwargs:
+        del kwargs['dryrun']
+    if dryrun:
+        cmd = args[0]
+        print cmd
+    else:
+        return _sudo(*args, **kwargs)
+
+def put_or_dryrun(**kwargs):
+    dryrun = int(kwargs.get('dryrun', 0))
+    if 'dryrun' in kwargs:
+        del kwargs['dryrun']
+    if dryrun:
+        local_path = kwargs['local_path']
+        remote_path = kwargs.get('remote_path', local_path)
+        cmd = 'rsync %s %s' % (local_path, remote_path)
+        env.put_remote_path = remote_path
+        print cmd
+    else:
+        return put(**kwargs)
 
 def pretty_bytes(bytes):
     """
@@ -136,17 +192,17 @@ def pretty_bytes(bytes):
             return sign*bytes, x
         bytes /= 1024.0
 
-def get_component_settings(name):
+def get_component_settings(prefixes=[]):
     """
     Returns a subset of the env dictionary containing
     only those keys with the name prefix.
     """
-    name = name.lower().strip()
-    assert len(name), 'No name specified.'
     data = {}
-    for k in env:
-        if k.startswith('%s_' % name):
-            data[k] = env[k]
+    for name in prefixes:
+        name = name.lower().strip()
+        for k in env:
+            if k.startswith('%s_' % name):
+                data[k] = env[k]
     return data
 
 def check_settings_for_differences(old, new, as_bool=False, as_tri=False):
@@ -614,8 +670,6 @@ def render_to_string(template, verbose=True):
     
     final_fqfn = find_template(template, verbose=verbose)
     assert final_fqfn, 'Template not found: %s' % template
-    #assert env.django_settings_module, 'No Django settings module defined.'
-    #os.environ['DJANGO_SETTINGS_MODULE'] = env.django_settings_module
     from django.conf import settings
     try:
         settings.configure()
@@ -664,9 +718,10 @@ def set_site(site):
 
 @task
 def info():
-    print 'ROLE:',env.ROLE
-    print 'SITE:',env.SITE
-    print 'default_site:',env.default_site
+    print 'Info'
+    print '\tROLE:',env.ROLE
+    print '\tSITE:',env.SITE
+    print '\tdefault_site:',env.default_site
 
 @task
 def shell(gui=0, dryrun=0, ):
@@ -698,7 +753,8 @@ def shell(gui=0, dryrun=0, ):
         return
     os.system(cmd)
 
-def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=False):
+#@task
+def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=False, verbose=False):
     """
     Iterates over sites, safely setting environment variables for each site.
     """
@@ -716,6 +772,8 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
     renderer = renderer or render_remote_paths
     env_default = save_env()
     for site, site_data in sites:
+#        print '-'*80
+#        print 'site:',site
 #        print 'env.django_settings_module_template00:',env.django_settings_module_template
         if no_secure and site.endswith('_secure'):
             continue
@@ -751,6 +809,26 @@ def pc(*args):
     Print comment.
     """
     print('echo "%s"' % ' '.join(map(str, args)))
+
+def get_current_hostname(dryrun=0):
+#    import importlib
+#    
+#    retriever = None
+#    if env.hosts_retriever:
+#        # Dynamically retrieve hosts.
+#        module_name = '.'.join(env.hosts_retriever.split('.')[:-1])
+#        func_name = env.hosts_retriever.split('.')[-1]
+#        retriever = getattr(importlib.import_module(module_name), func_name)
+#    
+#    # Load host translator.
+#    translator = None
+#    if hostname:
+#        # Filter hosts list by a specific host name.
+#        module_name = '.'.join(env.hostname_translator.split('.')[:-1])
+#        func_name = env.hostname_translator.split('.')[-1]
+#        translator = getattr(importlib.import_module(module_name), func_name)
+    ret = run_or_dryrun('hostname')#, dryrun=dryrun)
+    return str(ret)
 
 def represent_ordereddict(dumper, data):
     value = []

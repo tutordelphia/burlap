@@ -262,7 +262,8 @@ if common and not no_load:
             _f = _get_environ_handler(_name, _config)
             _var_name = 'role_'+_name
             _f = WrappedCallableTask(_f, name=_name)
-            exec "%s = _f" % (_var_name,)
+            _cmd = "%s = _f" % (_var_name,)
+            exec _cmd
             role_commands[_var_name] = _f
 
     # Auto-import all sub-modules.

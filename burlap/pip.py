@@ -24,6 +24,10 @@ from fabric.tasks import Task
 
 from burlap import common
 from burlap.common import (
+    run_or_dryrun,
+    sudo_or_dryrun,
+)
+from burlap.common import (
     run,
     put,
     SITE,
@@ -93,18 +97,20 @@ def clean_virtualenv():
         'Unable to delete pre-existing environment.'
 
 @task
-def bootstrap():
+def bootstrap(dryrun=0):
     """
     Installs all the necessary packages necessary for managing virtual
     environments with pip.
     """
     env.pip_path_versioned = env.pip_path % env
-    run('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py')
-    sudo('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env))
-    sudo('easy_install -U pip')
-    sudo('{pip_path_versioned} install --upgrade setuptools'.format(**env))
-    sudo('{pip_path_versioned} install --upgrade distribute'.format(**env))
-    sudo('{pip_path_versioned} install --upgrade virtualenv'.format(**env))
+    run_or_dryrun('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py', dryrun=dryrun)
+    #sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env), dryrun=dryrun)
+    with settings(warn_only=True):
+        sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env), dryrun=dryrun)
+    sudo_or_dryrun('easy_install -U pip', dryrun=dryrun)
+    sudo_or_dryrun('{pip_path_versioned} install --upgrade setuptools'.format(**env), dryrun=dryrun)
+    sudo_or_dryrun('{pip_path_versioned} install --upgrade distribute'.format(**env), dryrun=dryrun)
+    sudo_or_dryrun('{pip_path_versioned} install --upgrade virtualenv'.format(**env), dryrun=dryrun)
 
 @task
 def init(clean=0, check_global=0):
@@ -126,8 +132,9 @@ def init(clean=0, check_global=0):
         sudo('pip install --upgrade pip')
     
     print env.pip_virtual_env_dir
-    if not files.exists(env.pip_virtual_env_dir):
-        print 'Creating new virtual environment...'
+    #if not files.exists(env.pip_virtual_env_dir):
+    print 'Creating new virtual environment...'
+    with settings(warn_only=True):
         cmd = 'virtualenv --no-site-packages %(pip_virtual_env_dir)s' % env
         if env.is_local:
             run(cmd)
@@ -296,6 +303,11 @@ def check(return_type=PENDING):
     
     return_type := pending|installed
     """
+    from burlap.plan import get_original
+    run0 = get_original('run')
+    import inspect
+    print 'run0:',run0, inspect.getsourcefile(run0)
+    
     assert env[ROLE]
     
     env.pip_path_versioned = env.pip_path % env
@@ -311,7 +323,7 @@ def check(return_type=PENDING):
     else:
         cmd_template = "%(pip_path_versioned)s freeze"
     cmd = cmd_template % env
-    result = run(cmd)
+    result = run0(cmd)
     installed_package_versions = {}
     for line in result.split('\n'):
         line = line.strip()
@@ -378,12 +390,13 @@ def check(return_type=PENDING):
     return pending
 
 @task
-def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1):
+def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1, dryrun=0):
     """
     Updates the local cache of pip packages.
     
     If all=1, skips check of host and simply updates everything.
     """
+    dryrun = int(dryrun)
     assert env[ROLE]
     ignore_errors = int(ignore_errors)
     env.pip_path_versioned = env.pip_path % env
@@ -455,13 +468,14 @@ def uninstall(package):
         sudo(env.pip_uninstall_command % env)
     
 @task
-def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
+def install(package='', clean=0, no_deps=1, all=0, upgrade=1, dryrun=0):
     """
     Installs the local cache of pip packages.
     """
     from burlap.dj import render_remote_paths
     print 'Installing pip requirements...'
     assert env[ROLE]
+    dryrun = int(dryrun)
     require('is_local')
     
     # Delete any pre-existing environment.

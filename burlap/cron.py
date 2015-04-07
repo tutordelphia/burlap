@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 
 from fabric.api import (
@@ -16,7 +17,13 @@ from fabric.api import (
 
 from fabric.contrib import files
 
-from burlap.common import run, put
+from burlap.common import (
+    run, put,
+    run_or_dryrun,
+    sudo_or_dryrun,
+    put_or_dryrun,
+    local_or_dryrun,
+)
 from burlap import common
 from burlap.common import QueuedCommand
 
@@ -133,11 +140,25 @@ def deploy(site=None, dryrun=0):
     """
     Writes entire crontab to the host.
     """
+    from burlap.common import get_current_hostname
+    dryrun = int(dryrun)
     
     cron_crontabs = []
+    hostname = get_current_hostname()
+    target_sites = env.available_sites_by_host.get(hostname, None)
+    #print 'hostname: "%s"' % (hostname,) 
     for site, site_data in common.iter_sites(site=site, renderer=render_paths):
-        print 'site:',site
-        print 'cron_crontabs_selected:',env.cron_crontabs_selected
+        #print>>sys.stderr, 'site:',site
+        #print 'cron_crontabs_selected:',env.cron_crontabs_selected
+        
+        # Only load site configurations that are allowed for this host.
+        if target_sites is None:
+            pass
+        else:
+            assert isinstance(target_sites, (tuple, list))
+            if site not in target_sites:
+                continue
+        
         for selected_crontab in env.cron_crontabs_selected:
             for line in env.cron_crontabs_available.get(selected_crontab, []):
                 cron_crontabs.append(line % env)
@@ -148,10 +169,11 @@ def deploy(site=None, dryrun=0):
     cron_crontabs = env.cron_crontab_headers + cron_crontabs
     cron_crontabs.append('\n')
     env.cron_crontabs_rendered = '\n'.join(cron_crontabs)
+    if dryrun:
+        print env.cron_crontabs_rendered
     fn = common.write_to_file(content=env.cron_crontabs_rendered)
-    if not int(dryrun):
-        put(local_path=fn)
-        sudo('crontab -u %(cron_user)s %(put_remote_path)s' % env)
+    put_or_dryrun(local_path=fn, dryrun=dryrun)
+    sudo_or_dryrun('crontab -u %(cron_user)s %(put_remote_path)s' % env, dryrun=dryrun)
 
 @task
 def deploy_all(**kwargs):
@@ -159,12 +181,14 @@ def deploy_all(**kwargs):
     return deploy(**kwargs)
 
 @task
-def record_manifest():
+def record_manifest(verbose=0):
     """
     Called after a deployment to record any data necessary to detect changes
     for a future deployment.
     """
     data = common.get_component_settings(CRON)
+    if int(verbose):
+        print data
     return data
 
 def compare_manifest(old):
