@@ -157,6 +157,7 @@ def deploy(site=None, dryrun=0):
         else:
             assert isinstance(target_sites, (tuple, list))
             if site not in target_sites:
+                print>>sys.stderr, 'Skipping:', site
                 continue
         
         for selected_crontab in env.cron_crontabs_selected:
