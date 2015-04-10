@@ -10,20 +10,20 @@ import re
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    #run as _run,
-    run,
     settings,
-    sudo,
     cd,
-    task,
 )
 
 from fabric.contrib import files
 
-from burlap.common import run, put
+from burlap.common import (
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
+)
+from burlap.decorators import task_or_dryrun
 from burlap import common
 
 env.celery_config_path = '/etc/sysconfig/celeryd'
@@ -128,43 +128,43 @@ def get_service_command(action):
     os_version = common.get_os_version()
     return env.celery_service_commands[action][os_version.distro]
 
-@task
+@task_or_dryrun
 def enable():
     cmd = get_service_command(common.ENABLE)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def disable():
     cmd = get_service_command(common.DISABLE)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def start():
     cmd = get_service_command(common.START)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def stop():
     cmd = get_service_command(common.STOP)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def status():
     cmd = get_service_command(common.STATUS)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def purge():
     """
     Clears all pending tasks in the Celery queue.
@@ -172,7 +172,7 @@ def purge():
     render_paths()
     sudo('export SITE=%(SITE)s; export ROLE=%(ROLE)s; %(celery_supervisor_django_manage)s celeryctl purge' % env)
 
-@task
+@task_or_dryrun
 def force_stop():
     """
     Forcibly terminates all Celery processes.
@@ -183,7 +183,7 @@ def force_stop():
     sudo('rm -f /tmp/celery*.pid')
     #sudo('rm -f /var/log/celery*.log')
 
-@task
+@task_or_dryrun
 def set_permissions():
     """
     Sets ownership and permissions for Celery-related files.
@@ -192,7 +192,7 @@ def set_permissions():
         env.celery_path_owned = path
         sudo('chown %(celery_daemon_user)s:%(celery_daemon_user)s %(celery_path_owned)s' % env)
 
-#@task
+#@task_or_dryrun
 #def configure():
 #    """
 #    Installs Celery configuration and daemon.

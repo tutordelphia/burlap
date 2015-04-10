@@ -21,7 +21,6 @@ from fabric.api import (
     sudo as _sudo,
     cd,
     hide,
-    task,
 )
 
 import fabric.api
@@ -88,7 +87,7 @@ env[ROLE] = None
 env.sites = {} # {site:site_settings}
 
 # If true, prevents run() from executing its command.
-env.dryrun = 0
+_dryrun = False
 
 env.services = []
 required_system_packages = type(env)() # {service:{os:[packages]}
@@ -133,8 +132,17 @@ env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk 
 
 env.post_callbacks = []
 
+def set_dryrun(dryrun):
+    global _dryrun
+    _dryrun = bool(int(dryrun or 0))
+
+def get_dryrun(dryrun=None):
+    if dryrun is None or dryrun == '':
+        return bool(int(_dryrun or 0))
+    return bool(int(dryrun or 0))
+
 def local_or_dryrun(*args, **kwargs):
-    dryrun = int(kwargs.get('dryrun', 0))
+    dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
     if dryrun:
@@ -144,7 +152,7 @@ def local_or_dryrun(*args, **kwargs):
         return local(*args, **kwargs)
         
 def run_or_dryrun(*args, **kwargs):
-    dryrun = int(kwargs.get('dryrun', 0))
+    dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
     if dryrun:
@@ -154,7 +162,7 @@ def run_or_dryrun(*args, **kwargs):
         return _run(*args, **kwargs)
 
 def sudo_or_dryrun(*args, **kwargs):
-    dryrun = int(kwargs.get('dryrun', 0))
+    dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
     if dryrun:
@@ -164,7 +172,7 @@ def sudo_or_dryrun(*args, **kwargs):
         return _sudo(*args, **kwargs)
 
 def put_or_dryrun(**kwargs):
-    dryrun = int(kwargs.get('dryrun', 0))
+    dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
     if dryrun:
@@ -546,48 +554,6 @@ try:
 except ImportError:
     warnings.warn('Unable to import Django settings.', ImportWarning)
 
-def run(*args, **kwargs):
-#    if env.is_local:
-#        kwargs['capture'] = True
-#        if env.dryrun:
-#            print args, kwargs
-#        else:
-#            print args, kwargs
-#            cmd = ' '.join(args)
-#            #cmd = ' '.join(args + ('2>&1',))
-#            try:
-#                output = StringIO()
-#                error = StringIO()
-#                sys.stdout = output
-#                sys.stderr = error
-#                result = local(cmd, **kwargs)
-#            except:
-#                raise
-#            finally:
-#                sys.stdout = sys.__stdout__
-#                sys.stderr = sys.__stderr__
-#                print 'stdout:',output.getvalue()
-#                print 'stderr:',error.getvalue()
-##            print 'result:',result
-##            print 'stdout:',result.stdout
-##            print 'stderr:',result.stderr
-#            print 
-#            return result
-    if env.dryrun:
-        print ' '.join(map(str, args)), kwargs
-    else:
-        return _run(*args, **kwargs)
-
-def put(**kwargs):
-    local_path = kwargs['local_path']
-    fd, fn = tempfile.mkstemp()
-    if not env.is_local:
-        os.remove(fn)
-    #kwargs['remote_path'] = kwargs.get('remote_path', '/tmp/%s' % os.path.split(local_path)[-1])
-    kwargs['remote_path'] = kwargs.get('remote_path', fn)
-    env.put_remote_path = kwargs['remote_path']
-    return _put(**kwargs)
-
 def get_rc(k):
     return env._rc.get(env[ROLE], type(env)()).get(k)
 
@@ -716,44 +682,7 @@ def set_site(site):
         return
     env[SITE] = os.environ[SITE] = site
 
-@task
-def info():
-    print 'Info'
-    print '\tROLE:',env.ROLE
-    print '\tSITE:',env.SITE
-    print '\tdefault_site:',env.default_site
 
-@task
-def shell(gui=0, dryrun=0, ):
-    """
-    Opens a UNIX shell.
-    """
-    from dj import render_remote_paths
-    render_remote_paths()
-    print 'env.remote_app_dir:',env.remote_app_dir
-    env.SITE = env.SITE or env.default_site
-    env.shell_x_opt = '-X' if int(gui) else ''
-    if '@' in env.host_string:
-        env.shell_host_string = env.host_string
-    else:
-        env.shell_host_string = '%(user)s@%(host_string)s' % env
-        
-    env.shell_check_host_key_str = '-o StrictHostKeyChecking=no'
-        
-    env.shell_default_dir = env.shell_default_dir_template % env
-    env.shell_interactive_shell_str = env.shell_interactive_shell % env
-    if env.is_local:
-        cmd = '%(shell_interactive_shell_str)s' % env
-    elif env.key_filename:
-        cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
-    elif env.password:
-        cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
-    print cmd
-    if int(dryrun):
-        return
-    os.system(cmd)
-
-#@task
 def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=False, verbose=False):
     """
     Iterates over sites, safely setting environment variables for each site.
@@ -788,29 +717,13 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
         yield site, site_data
     env.update(env_default)
 
-@task
-def disk():
-    """
-    Display percent of disk usage.
-    """
-    run(env.disk_usage_command % env)
-
-@task
-def tunnel(local_port, remote_port):
-    """
-    Creates an SSH tunnel.
-    """
-    env.tunnel_local_port = local_port
-    env.tunnel_remote_port = remote_port
-    local(' ssh -i %(key_filename)s -L %(tunnel_local_port)s:localhost:%(tunnel_remote_port)s %(user)s@%(host_string)s -N' % env)
-
 def pc(*args):
     """
     Print comment.
     """
     print('echo "%s"' % ' '.join(map(str, args)))
 
-def get_current_hostname(dryrun=0):
+def get_current_hostname():
 #    import importlib
 #    
 #    retriever = None
@@ -827,7 +740,7 @@ def get_current_hostname(dryrun=0):
 #        module_name = '.'.join(env.hostname_translator.split('.')[:-1])
 #        func_name = env.hostname_translator.split('.')[-1]
 #        translator = getattr(importlib.import_module(module_name), func_name)
-    ret = run_or_dryrun('hostname')#, dryrun=dryrun)
+    ret = run_or_dryrun('hostname')#)
     return str(ret)
 
 def represent_ordereddict(dumper, data):

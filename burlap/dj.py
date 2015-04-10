@@ -9,21 +9,19 @@ from StringIO import StringIO
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    run,
     settings,
-    sudo,
     cd,
-    task,
 )
 
 from burlap import common
 from burlap.common import (
     ROLE, QueuedCommand, ALL,
     sudo_or_dryrun,
+    run_or_dryrun,
+    local_or_dryrun,
 )
+from burlap.decorators import task_or_dryrun
 
 env.setdefault('dj_settings_loaded', False)
 if not env.dj_settings_loaded:
@@ -59,13 +57,13 @@ if not env.dj_settings_loaded:
 
 DJANGO = 'DJANGO'
 
-@task
+@task_or_dryrun
 def check_remote_paths(verbose=1):
     if 'django_settings_module' in env:
         return
     render_remote_paths(verbose)
 
-@task
+@task_or_dryrun
 def render_remote_paths(verbose=0):
     verbose = int(verbose)
     env.django_settings_module = env.django_settings_module_template % env
@@ -134,7 +132,7 @@ def iter_unique_databases(site=None):
         env.SITE = site
         yield site, site_data
 
-@task
+@task_or_dryrun
 def shell():
     """
     Opens a Django focussed Python shell.
@@ -153,12 +151,12 @@ def shell():
     #print cmd
     os.system(cmd)
     
-@task
-def syncdb(site=None, dryrun=0):
+@task_or_dryrun
+def syncdb(site=None):
     """
     Runs the standard Django syncdb command for one or more sites.
     """
-    dryrun = int(dryrun)
+    
     render_remote_paths()
     for site, site_data in iter_unique_databases(site=site):
         cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb' % env
@@ -167,12 +165,12 @@ def syncdb(site=None, dryrun=0):
         else:
             run(cmd)
 
-@task
-def migrate(app='', migration='', site=None, dryrun=0, fake=0):
+@task_or_dryrun
+def migrate(app='', migration='', site=None, fake=0):
     """
     Runs the standard South migrate command for one or more sites.
     """
-    dryrun = int(dryrun)
+    
     render_remote_paths()
     env.django_migrate_migration = migration
     env.django_migrate_fake_str = '--fake' if int(fake) else ''
@@ -217,7 +215,7 @@ def has_database(name, site=None, role=None):
     settings = get_settings(site=site, role=role, verbose=0)
     return name in settings.DATABASES
 
-@task
+@task_or_dryrun
 def get_settings(site=None, role=None, verbose=1):
     """
     Retrieves the Django settings dictionary.
@@ -307,8 +305,8 @@ def get_settings(site=None, role=None, verbose=1):
         sys.stderr = stderr
     return module
 
-@task
-def loaddata(path, site=None, dryrun=0):
+@task_or_dryrun
+def loaddata(path, site=None):
     """
     Runs the Dango loaddata management command.
     
@@ -326,11 +324,11 @@ def loaddata(path, site=None, dryrun=0):
             cmd = ('export SITE=%(SITE)s; export ROLE=%(ROLE)s; '
                 'cd %(shell_default_dir)s; '
                 './manage loaddata %(_loaddata_path)s') % env
-            sudo_or_dryrun(cmd, dryrun=dryrun)
+            sudo_or_dryrun(cmd)
         except KeyError:
             pass
 
-@task
+@task_or_dryrun
 def record_manifest():
     """
     Called after a deployment to record any data necessary to detect changes
@@ -356,7 +354,7 @@ def record_manifest():
     
     return data
 
-@task
+@task_or_dryrun
 def compare_manifest(data=None):
     """
     Called before a deployment, given the data returned by record_manifest(),

@@ -1,6 +1,8 @@
-from fabric.api import env, sudo, task
+from fabric.api import env
 
 from burlap import common
+from burlap.common import sudo_or_dryrun
+from burlap.decorators import task_or_dryrun
 
 MEMCACHED = 'MEMCACHED'
 
@@ -47,33 +49,28 @@ def get_service_command(action):
     os_version = common.get_os_version()
     return env.memcached_service_commands[action][os_version.distro]
 
-@task
+@task_or_dryrun
 def start():
     cmd = get_service_command(common.START)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
 
-@task
+@task_or_dryrun
 def stop():
     cmd = get_service_command(common.STOP)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
 
-@task
+@task_or_dryrun
 def reload():
     cmd = get_service_command(common.RELOAD)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
 
-@task
+@task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
     
-@task
+@task_or_dryrun
 def status():
     cmd = get_service_command(common.STATUS)
-    print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
     

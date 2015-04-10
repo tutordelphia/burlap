@@ -23,6 +23,7 @@ from burlap.common import (
     QueuedCommand,
 )
 from burlap import common
+from burlap.decorators import task_or_dryrun
 
 env.rabbitmq_host = "localhost"
 env.rabbitmq_vhost = "/"
@@ -80,41 +81,41 @@ def get_service_command(action):
     os_version = common.get_os_version()
     return env.rabbitmq_service_commands[action][os_version.distro]
 
-@task
-def enable(dryrun=0):
+@task_or_dryrun
+def enable():
     cmd = get_service_command(common.ENABLE)
-    sudo_or_dryrun(cmd, dryrun=dryrun)
+    sudo_or_dryrun(cmd)
 
-@task
-def disable(dryrun=0):
+@task_or_dryrun
+def disable():
     cmd = get_service_command(common.DISABLE)
-    sudo_or_dryrun(cmd, dryrun=dryrun)
+    sudo_or_dryrun(cmd)
 
-@task
-def start(dryrun=0):
+@task_or_dryrun
+def start():
     s = {'warn_only':True} if env.rabbitmq_ignore_service_errors else {} 
     with settings(**s):
         cmd = get_service_command(common.START)
-        sudo_or_dryrun(cmd, dryrun=dryrun)
+        sudo_or_dryrun(cmd)
 
-@task
-def stop(dryrun=0):
+@task_or_dryrun
+def stop():
     s = {'warn_only':True} if env.rabbitmq_ignore_service_errors else {} 
     with settings(**s):
         cmd = get_service_command(common.STOP)
-        sudo_or_dryrun(cmd, dryrun=dryrun)
+        sudo_or_dryrun(cmd)
 
-@task
-def restart(dryrun=0):
+@task_or_dryrun
+def restart():
     s = {'warn_only':True} if env.rabbitmq_ignore_service_errors else {} 
     with settings(**s):
         cmd = get_service_command(common.RESTART)
-        sudo_or_dryrun(cmd, dryrun=dryrun)
+        sudo_or_dryrun(cmd)
 
-@task
-def status(dryrun=0):
+@task_or_dryrun
+def status():
     cmd = get_service_command(common.STATUS)
-    sudo_or_dryrun(cmd, dryrun=dryrun)
+    sudo_or_dryrun(cmd)
 
 def render_paths():
     from burlap.dj import render_remote_paths
@@ -122,22 +123,22 @@ def render_paths():
     if env.rabbitmq_erlang_cookie_template:
         env.rabbitmq_erlang_cookie = env.rabbitmq_erlang_cookie_template % env
 
-@task
-def list_vhosts(dryrun=0):
+@task_or_dryrun
+def list_vhosts():
     """
     Displays a list of configured RabbitMQ vhosts.
     """
-    sudo_or_dryrun('rabbitmqctl list_vhosts', dryrun=dryrun)
+    sudo_or_dryrun('rabbitmqctl list_vhosts')
 
-@task
-def list_users(dryrun=0):
+@task_or_dryrun
+def list_users():
     """
     Displays a list of configured RabbitMQ users.
     """
-    sudo_or_dryrun('rabbitmqctl list_users', dryrun=dryrun)
+    sudo_or_dryrun('rabbitmqctl list_users')
     
-@task
-def configure(site=None, full=0, dryrun=0):
+@task_or_dryrun
+def configure(site=None, full=0):
     """
     Installs and configures RabbitMQ.
     """
@@ -145,7 +146,7 @@ def configure(site=None, full=0, dryrun=0):
     from burlap import package
     
     full = int(full)
-    dryrun = int(dryrun)
+    
     
 #    assert env.rabbitmq_erlang_cookie
     if full:
@@ -169,16 +170,16 @@ def configure(site=None, full=0, dryrun=0):
         env.rabbitmq_broker_vhost = vhost
         with settings(warn_only=True):
             cmd = 'rabbitmqctl add_vhost %(rabbitmq_broker_vhost)s' % env
-            sudo_or_dryrun(cmd, dryrun=dryrun)
+            sudo_or_dryrun(cmd)
             cmd = 'rabbitmqctl set_permissions -p %(rabbitmq_broker_vhost)s %(rabbitmq_broker_user)s ".*" ".*" ".*"' % env
-            sudo_or_dryrun(cmd, dryrun=dryrun)
+            sudo_or_dryrun(cmd)
 
-@task
+@task_or_dryrun
 def configure_all(**kwargs):
     kwargs['site'] = common.ALL
     return configure(**kwargs)
 
-@task
+@task_or_dryrun
 def record_manifest():
     """
     Called after a deployment to record any data necessary to detect changes

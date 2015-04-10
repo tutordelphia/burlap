@@ -3,21 +3,23 @@ import re
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    #run as _run,
-    run,
     settings,
-    sudo,
     cd,
     task,
 )
 
 from fabric.contrib import files
 
-from burlap.common import run, put, QueuedCommand
+from burlap.common import (
+    QueuedCommand,
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
+)
 from burlap import common
+from burlap.decorators import task_or_dryrun
 
 env.supervisor_config_path = '/etc/supervisord.conf'
 env.supervisor_daemon_bin_path_template = '%(pip_virtual_env_dir)s/bin/supervisord'
@@ -81,37 +83,37 @@ def get_service_command(action):
     os_version = common.get_os_version()
     return env.supervisor_service_commands[action][os_version.distro]
 
-@task
+@task_or_dryrun
 def enable():
     cmd = get_service_command(common.ENABLE)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def disable():
     cmd = get_service_command(common.DISABLE)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def start():
     cmd = get_service_command(common.START)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def stop():
     cmd = get_service_command(common.STOP)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def status():
     cmd = get_service_command(common.STATUS)
     print cmd
@@ -124,7 +126,7 @@ def render_paths():
     env.supervisor_bin_path = env.supervisor_bin_path_template % env
     env.supervisor_supervisorctl_path = env.supervisor_supervisorctl_path_template % env
 
-@task
+@task_or_dryrun
 def configure():
     """
     Installs supervisor configuration and daemon.
@@ -137,20 +139,20 @@ def configure():
     sudo('chmod +x %(supervisor_daemon_path)s' % env)
     sudo('update-rc.d supervisord defaults' % env)
 
-@task
+@task_or_dryrun
 def unconfigure():
     render_paths()
     stop()
     sudo('update-rc.d supervisord remove' % env)
     sudo('rm -Rf %(supervisor_daemon_path)s' % env)
 
-@task
-def deploy_services(site=None, dryrun=0):
+@task_or_dryrun
+def deploy_services(site=None):
     """
     Collects the configurations for all registered services and writes
     the appropriate supervisord.conf file.
     """
-    dryrun = int(dryrun)
+    
     
     render_paths()
     
@@ -172,12 +174,12 @@ def deploy_services(site=None, dryrun=0):
     else:
         put(local_path=fn, remote_path=env.supervisor_config_path, use_sudo=True)
 
-@task
+@task_or_dryrun
 def deploy_all_services(**kwargs):
     kwargs['site'] = common.ALL
     return deploy_services(**kwargs)
 
-@task
+@task_or_dryrun
 def record_manifest():
     """
     Called after a deployment to record any data necessary to detect changes

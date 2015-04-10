@@ -4,15 +4,9 @@ import datetime
 
 from fabric.api import (
     env,
-    #local,
-    #put as _put,
     require,
-    #run as _run,
-    #run,
     settings,
-    #sudo,
     cd,
-    task,
 )
 from fabric.contrib import files
 
@@ -37,6 +31,7 @@ from burlap.common import (
     QueuedCommand,
     Migratable,
 )
+from burlap.decorators import task_or_dryrun
 from burlap import common
 
 # An Apache-conf file and filename friendly string that uniquely identifies
@@ -227,37 +222,37 @@ def get_service_command(action):
     os_version = common.get_os_version()
     return env.apache_service_commands[action][os_version.distro]
 
-@task
-def enable(dryrun=0):
+@task_or_dryrun
+def enable():
     cmd = get_service_command(common.ENABLE)
-    sudo_or_dryrun(cmd, dryrun=dryrun)
+    sudo_or_dryrun(cmd)
 
-@task
-def disable(dryrun=0):
+@task_or_dryrun
+def disable():
     cmd = get_service_command(common.DISABLE)
-    sudo_or_dryrun(cmd, dryrun=dryrun)
+    sudo_or_dryrun(cmd)
 
-@task
-def start(dryrun=0):
+@task_or_dryrun
+def start():
     cmd = get_service_command(common.START)
-    sudo_or_dryrun(cmd, dryrun=dryrun)
+    sudo_or_dryrun(cmd)
 
-@task
-def stop(dryrun=0):
+@task_or_dryrun
+def stop():
     cmd = get_service_command(common.STOP)
-    sudo_or_dryrun(cmd, dryrun=dryrun)
+    sudo_or_dryrun(cmd)
 
-@task
-def reload(dryrun=0):
+@task_or_dryrun
+def reload():
     cmd = get_service_command(common.RELOAD)
-    sudo_or_dryrun(cmd, dryrun=dryrun)
+    sudo_or_dryrun(cmd)
 
-@task
+@task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
-    sudo_or_dryrun(cmd, dryrun=dryrun)
+    sudo_or_dryrun(cmd)
 
-@task
+@task_or_dryrun
 def visitors(force=0):
     """
     Generates an Apache access report using the Visitors command line tool.
@@ -311,8 +306,8 @@ def set_apache_site_specifics(site):
 #    print 'env.apache_enforce_subdomain:',env.apache_enforce_subdomain
 #    raw_input('<enter>')
 
-@task
-def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
+@task_or_dryrun
+def configure(full=1, site=None, delete_old=0, verbose=0):
     """
     Configures Apache to host one or more websites.
     """
@@ -320,7 +315,7 @@ def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
     from burlap import service
     
     print 'Configuring Apache...'
-    dryrun = int(dryrun)
+    
     verbose = int(verbose)
     
     site = site or env.SITE
@@ -332,9 +327,9 @@ def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
     if int(delete_old):
         # Delete all existing enabled and available sites.
         cmd = 'rm -f %(apache_sites_available)s/*' % env
-        sudo_or_dryrun(cmd, dryrun=dryrun)
+        sudo_or_dryrun(cmd)
         cmd = 'rm -f %(apache_sites_enabled)s/*' % env
-        sudo_or_dryrun(cmd, dryrun=dryrun)
+        sudo_or_dryrun(cmd)
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
         print '-'*80
@@ -356,12 +351,9 @@ def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
         fn = common.render_to_file('django.template.wsgi', verbose=verbose)
         remote_dir = os.path.split(env.apache_django_wsgi)[0]
         cmd = 'mkdir -p %s' % remote_dir
-        sudo_or_dryrun(cmd, dryrun=dryrun)
+        sudo_or_dryrun(cmd)
             
-        if not dryrun:
-            put_or_dryrun(local_path=fn, remote_path=env.apache_django_wsgi, use_sudo=True, dryrun=dryrun)
-        else:
-            env.put_remote_path = env.apache_django_wsgi
+        put_or_dryrun(local_path=fn, remote_path=env.apache_django_wsgi, use_sudo=True)
         
         if env.apache_ssl:
             env.apache_ssl_certificates = list(iter_certificates())
@@ -369,76 +361,67 @@ def configure(full=1, site=None, delete_old=0, dryrun=0, verbose=0):
         fn = common.render_to_file('apache_site.template.conf', verbose=verbose)
         env.apache_site_conf = site+'.conf'
         env.apache_site_conf_fqfn = os.path.join(env.apache_sites_available, env.apache_site_conf)
-        if not dryrun:
-            put_or_dryrun(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True, dryrun=dryrun)
-        else:
-            env.put_remote_path = env.apache_site_conf_fqfn
+        put_or_dryrun(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True)
         
         cmd = 'a2ensite %(apache_site_conf)s' % env
-        sudo_or_dryrun(cmd, dryrun=dryrun)
+        sudo_or_dryrun(cmd)
     
     if service.is_selected(APACHE2_MODEVASIVE):
-        configure_modevasive(dryrun=dryrun)
+        configure_modevasive()
         
     if service.is_selected(APACHE2_MODSECURITY):
-        configure_modsecurity(dryrun=dryrun)
+        configure_modsecurity()
     
     for mod_enabled in env.apache_mods_enabled:
         env.apache_mod_enabled = mod_enabled
         cmd = 'a2enmod %(apache_mod_enabled)s' % env
-        sudo_or_dryrun(cmd, dryrun=dryrun)
+        sudo_or_dryrun(cmd)
         
     if int(full):
         # Write master Apache configuration file.
         fn = common.render_to_file('apache_httpd.template.conf', verbose=verbose)
-        if not dryrun:
-            put_or_dryrun(local_path=fn, remote_path=env.apache_conf, use_sudo=True, dryrun=dryrun)
-        else:
-            env.put_remote_path = env.apache_conf
+        put_or_dryrun(local_path=fn, remote_path=env.apache_conf, use_sudo=True)
         
         # Write Apache listening ports configuration.
         fn = common.render_to_file('apache_ports.template.conf', verbose=verbose)
-        if not dryrun:
-            put_or_dryrun(local_path=fn, remote_path=env.apache_ports, use_sudo=True, dryrun=dryrun)
-        else:
-            env.put_remote_path = env.apache_ports
+        put_or_dryrun(local_path=fn, remote_path=env.apache_ports, use_sudo=True)
         
-    #sudo('mkdir -p %(apache_app_log_dir)s' % env)
-    #sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_app_log_dir)s' % env)
-#    sudo('mkdir -p %(apache_log_dir)s' % env)
-#    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_log_dir)s' % env)
+    #sudo_or_dryrun('mkdir -p %(apache_app_log_dir)s' % env)
+    #sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_app_log_dir)s' % env)
+#    sudo_or_dryrun('mkdir -p %(apache_log_dir)s' % env)
+#    sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_log_dir)s' % env)
     cmd = 'chown -R %(apache_user)s:%(apache_group)s %(apache_root)s' % env
-    sudo_or_dryrun(cmd, dryrun=dryrun)
-#    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_docroot)s' % env)
-#    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_pid)s' % env)
+    sudo_or_dryrun(cmd)
+#    sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_docroot)s' % env)
+#    sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_pid)s' % env)
 
     #restart()#break apache? run separately?
 
-@task
-def configure_modsecurity(dryrun=0):
+@task_or_dryrun
+def configure_modsecurity():
     
     env.apache_mods_enabled.append('mod-security')
     env.apache_mods_enabled.append('headers')
     
     # Write modsecurity.conf.
     fn = common.render_to_file('apache_modsecurity.template.conf')
-    put_or_dryrun(local_path=fn, remote_path='/etc/modsecurity/modsecurity.conf', use_sudo=True, dryrun=dryrun)
+    put_or_dryrun(local_path=fn, remote_path='/etc/modsecurity/modsecurity.conf', use_sudo=True)
     
     # Write OWASP rules.
     env.apache_modsecurity_download_filename = '/tmp/owasp-modsecurity-crs.tar.gz'
-    sudo('cd /tmp; wget --output-document=%(apache_modsecurity_download_filename)s %(apache_modsecurity_download_url)s' % env)
-    env.apache_modsecurity_download_top = sudo("cd /tmp; tar tzf %(apache_modsecurity_download_filename)s | sed -e 's@/.*@@' | uniq" % env)
-    sudo('cd /tmp; tar -zxvf %(apache_modsecurity_download_filename)s' % env)
-    sudo('cd /tmp; cp -R %(apache_modsecurity_download_top)s/* /etc/modsecurity/' % env)
-    sudo('mv /etc/modsecurity/modsecurity_crs_10_setup.conf.example  /etc/modsecurity/modsecurity_crs_10_setup.conf' % env)
+    sudo_or_dryrun('cd /tmp; wget --output-document=%(apache_modsecurity_download_filename)s %(apache_modsecurity_download_url)s' % env)
+    env.apache_modsecurity_download_top = sudo_or_dryrun("cd /tmp; tar tzf %(apache_modsecurity_download_filename)s | sed -e 's@/.*@@' | uniq" % env)
+    sudo_or_dryrun('cd /tmp; tar -zxvf %(apache_modsecurity_download_filename)s' % env)
+    sudo_or_dryrun('cd /tmp; cp -R %(apache_modsecurity_download_top)s/* /etc/modsecurity/' % env)
+    sudo_or_dryrun('mv /etc/modsecurity/modsecurity_crs_10_setup.conf.example  /etc/modsecurity/modsecurity_crs_10_setup.conf' % env)
     
-    sudo('rm -f /etc/modsecurity/activated_rules/*')
-    sudo('cd /etc/modsecurity/base_rules; for f in * ; do ln -s /etc/modsecurity/base_rules/$f /etc/modsecurity/activated_rules/$f ; done')
-    sudo('cd /etc/modsecurity/optional_rules; for f in * ; do ln -s /etc/modsecurity/optional_rules/$f /etc/modsecurity/activated_rules/$f ; done')
+    sudo_or_dryrun('rm -f /etc/modsecurity/activated_rules/*')
+    sudo_or_dryrun('cd /etc/modsecurity/base_rules; for f in * ; do ln -s /etc/modsecurity/base_rules/$f /etc/modsecurity/activated_rules/$f ; done')
+    sudo_or_dryrun('cd /etc/modsecurity/optional_rules; for f in * ; do ln -s /etc/modsecurity/optional_rules/$f /etc/modsecurity/activated_rules/$f ; done')
     
     env.apache_httpd_conf_append.append('Include "/etc/modsecurity/activated_rules/*.conf"')
 
-@task
+@task_or_dryrun
 def configure_modevasive():
     
     env.apache_mods_enabled.append('mod-evasive')
@@ -457,8 +440,8 @@ def iter_certificates():
         remote_cert_file = os.path.join(env.apache_ssl_dir, cert_file_template % env)
         yield cert_type, local_cert_file, remote_cert_file
 
-@task
-def install_ssl(site=ALL, dryrun=0):
+@task_or_dryrun
+def install_ssl(site=ALL):
     apache_specifics = set_apache_specifics()
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
@@ -470,7 +453,7 @@ def install_ssl(site=ALL, dryrun=0):
             continue
         set_apache_site_specifics(site_secure)
     
-        sudo('mkdir -p %(apache_ssl_dir)s' % env)
+        sudo_or_dryrun('mkdir -p %(apache_ssl_dir)s' % env)
         
         if env.apache_ssl:
             for cert_type, local_cert_file, remote_cert_file in iter_certificates():
@@ -481,11 +464,11 @@ def install_ssl(site=ALL, dryrun=0):
                         local_path=local_cert_file,
                         remote_path=remote_cert_file, use_sudo=True)
     
-    sudo('mkdir -p %(apache_ssl_dir)s' % env)
-    sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_ssl_dir)s' % env)
-    sudo('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s' % env)
+    sudo_or_dryrun('mkdir -p %(apache_ssl_dir)s' % env)
+    sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_ssl_dir)s' % env)
+    sudo_or_dryrun('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s' % env)
     
-#@task
+#@task_or_dryrun
 #def unconfigure():
 #    """
 #    Removes all custom configurations for Apache hosted websites.
@@ -495,10 +478,10 @@ def install_ssl(site=ALL, dryrun=0):
 #    os_version = get_os_version()
 #    env.apache_root = env.apache_roots[os_type][os_distro]
 #    with settings(warn_only=True):
-#        sudo("[ -f %(apache_root)s/sites-enabled/%(apache_server_name)s ] && rm -f %(apache_root)s/sites-enabled/%(apache_server_name)s" % env)
-#        sudo("[ -f %(apache_root)s/sites-available/%(apache_server_name)s ] && rm -f %(apache_root)s/sites-available/%(apache_server_name)s" % env)
+#        sudo_or_dryrun("[ -f %(apache_root)s/sites-enabled/%(apache_server_name)s ] && rm -f %(apache_root)s/sites-enabled/%(apache_server_name)s" % env)
+#        sudo_or_dryrun("[ -f %(apache_root)s/sites-available/%(apache_server_name)s ] && rm -f %(apache_root)s/sites-available/%(apache_server_name)s" % env)
 
-@task
+@task_or_dryrun
 def install_auth_basic_user_file(site=None):
     """
     Installs users for basic httpd auth.
@@ -524,12 +507,12 @@ def install_auth_basic_user_file(site=None):
             env.apache_auth_basic_username = username
             env.apache_auth_basic_password = password
             if files.exists(env.apache_auth_basic_authuserfile):
-                sudo('htpasswd -b %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
+                sudo_or_dryrun('htpasswd -b %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
             else:
-                sudo('htpasswd -b -c %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
+                sudo_or_dryrun('htpasswd -b -c %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
 
-@task
-def sync_media(sync_set=None, dryrun=0):
+@task_or_dryrun
+def sync_media(sync_set=None):
     """
     Uploads select media to an Apache accessible directory.
     """
@@ -557,24 +540,23 @@ def sync_media(sync_set=None, dryrun=0):
             
             env.apache_tmp_chmod = paths.get('chmod',  env.apache_chmod)
             #with settings(warn_only=True):
-            sudo('mkdir -p %(apache_sync_remote_path)s' % env, user=env.apache_user)
-            sudo('chmod -R %(apache_tmp_chmod)s %(apache_sync_remote_path)s' % env, user=env.apache_user)
+            sudo_or_dryrun('mkdir -p %(apache_sync_remote_path)s' % env, user=env.apache_user)
+            sudo_or_dryrun('chmod -R %(apache_tmp_chmod)s %(apache_sync_remote_path)s' % env, user=env.apache_user)
             cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % env
 #            print '!'*80
 #            print cmd
-            if not int(dryrun):
-                local(cmd)
-            sudo('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
+            local_or_dryrun(cmd)
+            sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
 
-@task
-def configure_all(dryrun=0):
+@task_or_dryrun
+def configure_all():
     """
     Installs the Apache site configurations for both secure and non-secure
     sites.
     """
-    return configure(full=1, site=ALL, delete_old=1, dryrun=dryrun)
+    return configure(full=1, site=ALL, delete_old=1)
 
-@task
+@task_or_dryrun
 def record_manifest(verbose=0):
     """
     Called after a deployment to record any data necessary to detect changes

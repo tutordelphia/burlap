@@ -5,26 +5,27 @@ from collections import OrderedDict
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    sudo,
-    task,
 )
 
 from burlap import common
 from burlap.common import (
-    get_packager, APT, YUM, ROLE, SITE, put,
+    get_packager, APT, YUM, ROLE, SITE,
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
     find_template,
     QueuedCommand,
 )
+from burlap.decorators import task_or_dryrun
 
 env.package_install_apt_extras = []
 env.package_install_yum_extras = []
 
 PACKAGER = 'PACKAGER'
 
-@task
+@task_or_dryrun
 def prepare():
     """
     Preparse the packaging system for installations.
@@ -37,12 +38,12 @@ def prepare():
     else:
         raise Exception, 'Unknown packager: %s' % (packager,)
 
-@task
+@task_or_dryrun
 def install(**kwargs):
     install_required(type='system', **kwargs)
     install_custom(**kwargs)
     
-@task
+@task_or_dryrun
 def install_custom(*args, **kwargs):
     """
     Installs all system packages listed in the appropriate
@@ -56,7 +57,7 @@ def install_custom(*args, **kwargs):
     else:
         raise Exception, 'Unknown packager: %s' % (packager,)
 
-@task
+@task_or_dryrun
 def refresh(*args, **kwargs):
     """
     Updates/upgrades all system packages.
@@ -73,7 +74,7 @@ def refresh(*args, **kwargs):
 def refresh_apt():
     sudo('apt-get update -y --fix-missing')
 
-@task
+@task_or_dryrun
 def upgrade(*args, **kwargs):
     """
     Updates/upgrades all system packages.
@@ -149,7 +150,7 @@ def install_yum(fn=None, package_name=None, update=0, list_only=0):
             env.yum_fn = env.put_remote_fn
         sudo('yum install --assumeyes $(cat %(yum_fn)s)' % env)
 
-@task
+@task_or_dryrun
 def list_required(type=None, service=None, verbose=True):
     """
     Displays all packages required by the current role
@@ -189,7 +190,7 @@ def list_required(type=None, service=None, verbose=True):
             print package
     return packages
 
-@task
+@task_or_dryrun
 def install_required(type=None, service=None, list_only=0, **kwargs):
     """
     Installs system packages listed as required by services this host uses.
@@ -215,7 +216,8 @@ def install_required(type=None, service=None, list_only=0, **kwargs):
             install_custom(fn=fn)
         else:
             raise NotImplementedError
-@task
+            
+@task_or_dryrun
 def record_manifest():
     """
     Called after a deployment to record any data necessary to detect changes

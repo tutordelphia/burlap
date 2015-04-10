@@ -10,22 +10,23 @@ import yaml
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
     runs_once,
     execute,
-    #run as _run,
-    run,
     settings,
-    sudo,
     cd,
-    task,
 )
 from fabric.contrib import files
 
 from burlap import common
-from burlap.common import run, put
+from burlap.common import (
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
+    get_dryrun,
+)
+from burlap.decorators import task_or_dryrun
 
 try:
     import boto
@@ -102,7 +103,7 @@ def get_all_running_ec2_instances():
     instances.reverse()
     return instances
 
-@task
+@task_or_dryrun
 #@runs_once #breaks get_or_create()
 def list_instances(show=1, name=None, group=None, release=None, except_release=None, verbose=0):
     """
@@ -165,7 +166,7 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
     else:
         raise NotImplementedError
 
-#@task
+#@task_or_dryrun
 #@runs_once
 #def list(*args, **kwargs):
 #    #execute(list_instances, *args, **kwargs)
@@ -177,7 +178,7 @@ def set_ec2_security_group_id(name, id):
     v[name] = str(id)
     shelf.set('vm_ec2_security_group_ids', v)
 
-@task
+@task_or_dryrun
 def get_ec2_security_group_id(name=None, verbose=0):
     from burlap.common import shelf, OrderedDict
     
@@ -201,7 +202,7 @@ def get_ec2_security_group_id(name=None, verbose=0):
         print(group_id)
     return group_id
     
-@task
+@task_or_dryrun
 def get_or_create_ec2_security_groups(names=None, verbose=1):
     """
     Creates a security group opening 22, 80 and 443
@@ -301,7 +302,7 @@ def get_or_create_ec2_security_groups(names=None, verbose=1):
                 
     return ret
 
-@task
+@task_or_dryrun
 def get_or_create_ec2_key_pair(name=None, verbose=1):
     """
     Creates and saves an EC2 key pair to a local PEM file.
@@ -463,7 +464,7 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
         try:
             with settings(warn_only=True):
                 env.host_string = instance.public_dns_name
-                ret = run('who -b')
+                ret = run_or_dryrun('who -b')
                 #print 'ret.return_code:',ret.return_code
                 if not ret.return_code:
                     break
@@ -487,7 +488,7 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
 %(ip)s    www.mydomain.com # %(name)s""" % dict(ip=ip, name=name))
     return instance
 
-@task
+@task_or_dryrun
 def exists(name=None, group=None, release=None, except_release=None, verbose=1):
     """
     Determines if a virtual machine instance exists.
@@ -506,7 +507,7 @@ def exists(name=None, group=None, release=None, except_release=None, verbose=1):
     #return ret
     return instances
 
-@task
+@task_or_dryrun
 def get_or_create(name=None, group=None, config=None, extra=0, verbose=0, backend_opts={}):
     """
     Creates a virtual machine instance.
@@ -553,13 +554,13 @@ def get_or_create(name=None, group=None, config=None, extra=0, verbose=0, backen
     else:
         raise NotImplementedError
 
-@task
+@task_or_dryrun
 def delete(name=None, group=None, release=None, except_release=None,
     dryrun=1, verbose=1):
     """
     Permanently erase one or more VM instances from existence.
     """
-    dryrun = int(dryrun)
+    
     verbose = int(verbose)
     
     if env.vm_type == EC2:
@@ -576,18 +577,18 @@ def delete(name=None, group=None, release=None, except_release=None,
             public_dns_name = instance_data['public_dns_name']
             print('\nDeleting %s (%s)...' \
                 % (instance_name, instance_data['id']))
-            if not dryrun:
+            if not get_dryrun():
                 conn.terminate_instances(instance_ids=[instance_data['id']])
                 
             # Clear host key on localhost.
             known_hosts = os.path.expanduser('~/.ssh/known_hosts')
             cmd = 'ssh-keygen -f "%s" -R %s' % (known_hosts, public_dns_name)
-            local(cmd)
+            local_or_dryrun(cmd)
 
     else:
         raise NotImplementedError
 
-@task
+@task_or_dryrun
 def get_name():
     """
     Retrieves the instance name associated with the current host string.
@@ -600,7 +601,7 @@ def get_name():
     else:
         raise NotImplementedError
 
-@task
+@task_or_dryrun
 def respawn(name=None, group=None):
     """
     Deletes and recreates one or more VM instances.
@@ -609,22 +610,22 @@ def respawn(name=None, group=None):
     if name is None:
         name = get_name()
     
-    delete(name=name, group=group, dryrun=0)
+    delete(name=name, group=group)
     instance = get_or_create(name=name, group=group)
     env.host_string = instance.public_dns_name
 
-@task
+@task_or_dryrun
 def shutdown(force=False):
     #virsh shutdown <name>
     #virsh destroy <name> #to force
     todo
 
-@task
+@task_or_dryrun
 def reboot():
     #virsh reboot <name>
     todo
 
-@task
+@task_or_dryrun
 @runs_once
 def list_ips():
     data = list_instances(show=0, verbose=0)

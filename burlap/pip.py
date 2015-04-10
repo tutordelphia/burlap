@@ -6,15 +6,9 @@ from collections import defaultdict
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    #run as _run,
-    run,
     settings,
-    sudo,
     cd,
-    task,
     runs_once,
     execute,
 )
@@ -25,16 +19,15 @@ from fabric.tasks import Task
 from burlap import common
 from burlap.common import (
     run_or_dryrun,
+    put_or_dryrun,
     sudo_or_dryrun,
-)
-from burlap.common import (
-    run,
-    put,
+    local_or_dryrun,
     SITE,
     ROLE,
     find_template,
     QueuedCommand,
 )
+from burlap.decorators import task_or_dryrun
 from burlap import versioner
 
 env.pip_build_directory = '/tmp/pip-build-root/pip'
@@ -45,7 +38,7 @@ env.pip_chmod = '775'
 env.pip_python_version = 2.7
 env.pip_virtual_env_dir_template = '%(remote_app_dir)s/.env'
 env.pip_virtual_env_dir = '.env'
-env.pip_virtual_env_exe = sudo
+env.pip_virtual_env_exe = sudo_or_dryrun
 env.pip_requirements_fn = 'pip-requirements.txt'
 env.pip_use_virt = True
 env.pip_build_dir = '/tmp/pip-build'
@@ -96,23 +89,23 @@ def clean_virtualenv():
     assert not files.exists(env.pip_virtual_env_dir), \
         'Unable to delete pre-existing environment.'
 
-@task
-def bootstrap(dryrun=0):
+@task_or_dryrun
+def bootstrap():
     """
     Installs all the necessary packages necessary for managing virtual
     environments with pip.
     """
     env.pip_path_versioned = env.pip_path % env
-    run_or_dryrun('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py', dryrun=dryrun)
-    #sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env), dryrun=dryrun)
+    run_or_dryrun('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py')
+    #sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env))
     with settings(warn_only=True):
-        sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env), dryrun=dryrun)
-    sudo_or_dryrun('easy_install -U pip', dryrun=dryrun)
-    sudo_or_dryrun('{pip_path_versioned} install --upgrade setuptools'.format(**env), dryrun=dryrun)
-    sudo_or_dryrun('{pip_path_versioned} install --upgrade distribute'.format(**env), dryrun=dryrun)
-    sudo_or_dryrun('{pip_path_versioned} install --upgrade virtualenv'.format(**env), dryrun=dryrun)
+        sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env))
+    sudo_or_dryrun('easy_install -U pip')
+    sudo_or_dryrun('{pip_path_versioned} install --upgrade setuptools'.format(**env))
+    sudo_or_dryrun('{pip_path_versioned} install --upgrade distribute'.format(**env))
+    sudo_or_dryrun('{pip_path_versioned} install --upgrade virtualenv'.format(**env))
 
-@task
+@task_or_dryrun
 def init(clean=0, check_global=0):
     """
     Creates the virtual environment.
@@ -181,7 +174,7 @@ def get_desired_package_versions(preserve_order=False):
         return versions_lst
     return versions
 
-@task
+@task_or_dryrun
 @runs_once
 def check_report():
     """
@@ -195,7 +188,7 @@ def check_report():
 
 GITHUB_TO_PIP_NAME_PATTERN = re.compile('^.*github.com/[^/]+/(?P<name>[^/]+)/[^/]+/(?P<tag>[^/]+)/?')
 
-@task
+@task_or_dryrun
 def check_for_updates():
     """
     Determines which packages have a newer version available.
@@ -288,7 +281,7 @@ def check_for_updates():
     print '-'*80
     print '%i packages have updates' % (len(stale_lines),)
 
-@task
+@task_or_dryrun
 def validate_requirements():
     """
     Ensures all package dependencies are included in our pip-requirements.txt
@@ -296,7 +289,7 @@ def validate_requirements():
     """
     todo
 
-@task
+@task_or_dryrun
 def check(return_type=PENDING):
     """
     Lists the packages that are missing or obsolete on the target.
@@ -389,14 +382,14 @@ def check(return_type=PENDING):
         return installed_package_versions
     return pending
 
-@task
-def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1, dryrun=0):
+@task_or_dryrun
+def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1):
     """
     Updates the local cache of pip packages.
     
     If all=1, skips check of host and simply updates everything.
     """
-    dryrun = int(dryrun)
+    
     assert env[ROLE]
     ignore_errors = int(ignore_errors)
     env.pip_path_versioned = env.pip_path % env
@@ -421,7 +414,7 @@ def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1, dryrun=0):
             cmd = env.pip_update_command % env
             if not int(mirrors):
                 cmd = cmd.replace('--use-mirrors', '')
-            local(cmd)
+            local_or_dryrun(cmd)
         else:
             # Download each package in a requirements file.
             # Note, specifying the requirements file in the command isn't properly
@@ -440,9 +433,9 @@ def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1, dryrun=0):
                 if not int(mirrors):
                     cmd = cmd.replace('--use-mirrors', '')
                     
-                local(cmd)
+                local_or_dryrun(cmd)
 
-@task
+@task_or_dryrun
 def upgrade_pip():
     from burlap.dj import render_remote_paths
     render_remote_paths()
@@ -451,7 +444,7 @@ def upgrade_pip():
     run(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade setuptools" % env)
     run(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade distribute" % env)
 
-@task
+@task_or_dryrun
 def uninstall(package):
     from burlap.dj import render_remote_paths
     
@@ -467,15 +460,15 @@ def uninstall(package):
     else:
         sudo(env.pip_uninstall_command % env)
     
-@task
-def install(package='', clean=0, no_deps=1, all=0, upgrade=1, dryrun=0):
+@task_or_dryrun
+def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
     """
     Installs the local cache of pip packages.
     """
     from burlap.dj import render_remote_paths
     print 'Installing pip requirements...'
     assert env[ROLE]
-    dryrun = int(dryrun)
+    
     require('is_local')
     
     # Delete any pre-existing environment.
@@ -501,7 +494,7 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1, dryrun=0):
             env.pip_cache_dir = env.pip_cache_dir + '/'
         
         env.pip_key_filename = os.path.abspath(env.key_filename)
-        local('rsync -avz --progress --rsh "ssh -o StrictHostKeyChecking=no -i %(pip_key_filename)s" %(pip_local_cache_dir)s/* %(user)s@%(host_string)s:%(pip_cache_dir)s' % env)
+        local_or_dryrun('rsync -avz --progress --rsh "ssh -o StrictHostKeyChecking=no -i %(pip_key_filename)s" %(pip_local_cache_dir)s/* %(user)s@%(host_string)s:%(pip_cache_dir)s' % env)
     
     env.pip_upgrade_flag = ''
     if int(upgrade):
@@ -530,7 +523,7 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1, dryrun=0):
         sudo('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
         sudo('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
 
-@task
+@task_or_dryrun
 def record_manifest():
     """
     Called after a deployment to record any data necessary to detect changes

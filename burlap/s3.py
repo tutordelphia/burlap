@@ -3,13 +3,8 @@ import re
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    #run as _run,
-    run,
     settings,
-    sudo,
     cd,
     task,
 )
@@ -24,11 +19,14 @@ from fabric.tasks import Task
 
 from burlap import common
 from burlap.common import (
-    #run,
-    put,
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
     SITE,
     ROLE,
 )
+from burlap.decorators import task_or_dryrun
 
 env.AWS_ACCESS_KEY_ID = None
 env.AWS_SECRET_ACCESS_KEY = None
@@ -47,8 +45,8 @@ common.required_ruby_packages[S3SYNC] = {
     common.UBUNTU: ['s3sync==1.2.5'],
 }
 
-@task
-def sync(sync_set, dryrun=0, auto_invalidate=1):
+@task_or_dryrun
+def sync(sync_set, auto_invalidate=1):
     """
     Uploads media to an Amazon S3 bucket using s3sync.
     
@@ -56,7 +54,6 @@ def sync(sync_set, dryrun=0, auto_invalidate=1):
     """
     from burlap.dj import get_settings, render_remote_paths
     auto_invalidate = int(auto_invalidate)
-    env.dryrun = int(dryrun)
 #    print'env.SITE:',env.SITE
     _settings = get_settings(verbose=1)
     assert _settings, 'Unable to import settings.'
@@ -64,7 +61,7 @@ def sync(sync_set, dryrun=0, auto_invalidate=1):
         if k.startswith('AWS_'):
             env[k] = _settings.__dict__[k]
     
-    #local('which s3sync')
+    #local_or_dryrun('which s3sync')
     #print 'AWS_STATIC_BUCKET_NAME:',_settings.AWS_STATIC_BUCKET_NAME
     
     render_remote_paths()
@@ -80,7 +77,7 @@ def sync(sync_set, dryrun=0, auto_invalidate=1):
         local_path = local_path % env
         
         if is_local:
-            local('which s3sync')#, capture=True)
+            local_or_dryrun('which s3sync')#, capture=True)
             env.s3_local_path = os.path.abspath(local_path)
         else:
             run('which s3sync')
@@ -100,7 +97,7 @@ def sync(sync_set, dryrun=0, auto_invalidate=1):
         print cmd
         if not int(dryrun):
             if is_local:
-                rets.append(local(cmd, capture=True)) # can't see progress
+                rets.append(local_or_dryrun(cmd, capture=True)) # can't see progress
                 #rets.append(run(cmd))
             else:
                 rets.append(run(cmd))
@@ -116,7 +113,7 @@ def sync(sync_set, dryrun=0, auto_invalidate=1):
             #TODO:handle more than 1000 paths?
             invalidate(*paths)
 
-@task
+@task_or_dryrun
 def invalidate(*paths):
     """
     Issues invalidation requests to a Cloudfront distribution

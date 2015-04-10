@@ -3,13 +3,8 @@ import re
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    #run as _run,
-    run,
     settings,
-    sudo,
     cd,
     task,
 )
@@ -19,18 +14,22 @@ from fabric.tasks import Task
 
 from burlap import common
 from burlap.common import (
-    #run,
-    put,
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
+    get_dryrun,
     SITE,
     ROLE,
 )
+from burlap.decorators import task_or_dryrun
 
-@task
-def configure(dryrun=0):
+@task_or_dryrun
+def configure():
     """
     Applies one-time settings changes to the host, usually to initialize the service.
     """
-    dryrun = int(dryrun)
+    
     print 'env.services:',env.services
     for service in list(env.services):
         service = service.strip().upper()
@@ -40,11 +39,11 @@ def configure(dryrun=0):
             print 'Configuring service %s...' % (service,)
             for func in funcs:
                 print 'Function:',func
-                if not dryrun:
+                if not get_dryrun():
                     func()
 
-@task
-def pre_deploy(dryrun=0):
+@task_or_dryrun
+def pre_deploy():
     """
     Runs methods services have requested be run before each deployment.
     """
@@ -56,23 +55,23 @@ def pre_deploy(dryrun=0):
             for func in funcs:
                 func()
                 
-@task
-def deploy(dryrun=0):
+@task_or_dryrun
+def deploy():
     """
     Applies routine, typically application-level changes to the service.
     """
-    dryrun = int(dryrun)
+    
     for service in env.services:
         service = service.strip().upper()
         funcs = common.service_deployers.get(service)
         if funcs:
             print 'Deploying service %s...' % (service,)
             for func in funcs:
-                if not dryrun:
+                if not get_dryrun():
                     func()
 
-@task
-def post_deploy(dryrun=0):
+@task_or_dryrun
+def post_deploy():
     """
     Runs methods services have requested be run before after deployment.
     """
@@ -84,19 +83,19 @@ def post_deploy(dryrun=0):
             for func in funcs:
                 func()
 
-@task
-def restart(dryrun=0):
-    dryrun = int(dryrun)
+@task_or_dryrun
+def restart():
+    
     for service in env.services:
         service = service.strip().upper()
         funcs = common.service_restarters.get(service)
         if funcs:
             print 'Restarting service %s...' % (service,)
             for func in funcs:
-                if not dryrun:
+                if not get_dryrun():
                     func()
 
-@task
+@task_or_dryrun
 def stop():
     for service in env.services:
         service = service.strip().upper()
@@ -113,7 +112,7 @@ def is_selected(name):
             return True
     return False
 
-@task
+@task_or_dryrun
 def pre_db_dump():
     """
     Runs methods services that have requested to be run before each
@@ -127,7 +126,7 @@ def pre_db_dump():
             for func in funcs:
                 func()
 
-@task
+@task_or_dryrun
 def post_db_dump():
     """
     Runs methods services that have requested to be run before each

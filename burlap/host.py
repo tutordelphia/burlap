@@ -3,14 +3,9 @@ import re
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    run as _run,
     settings,
-    sudo,
     cd,
-    task,
     runs_once,
     execute,
 )
@@ -19,18 +14,21 @@ from fabric.contrib import files
 from fabric.tasks import Task
 
 from burlap.common import (
-    run,
-    put,
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
     SITE,
     ROLE,
     render_to_file,
     find_template,
 )
+from burlap.decorators import task_or_dryrun
 
 env.host_hostname = None
 env.media_mount_dirs = []
 
-@task
+@task_or_dryrun
 def set_hostname(name=None):
     """
     Assigns a name to the server accessible from user space.
@@ -40,13 +38,13 @@ def set_hostname(name=None):
     """
     assert not env.hosts or len(env.hosts) == 1, 'Too many hosts.'
     env.host_hostname = name or env.host_hostname or env.host_string or env.hosts[0]
-    sudo('echo "%(host_hostname)s" > /etc/hostname' % env)
-    sudo('echo "127.0.0.1 %(host_hostname)s" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts' % env)
-    sudo('service hostname restart; sleep 3')
+    sudo_or_dryrun('echo "%(host_hostname)s" > /etc/hostname' % env)
+    sudo_or_dryrun('echo "127.0.0.1 %(host_hostname)s" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts' % env)
+    sudo_or_dryrun('service hostname restart; sleep 3')
 
 #TODO:deprecated?
-@task
-def mount(dryrun=0):
+@task_or_dryrun
+def mount():
     """
     Mounts file systems.
     
@@ -56,7 +54,6 @@ def mount(dryrun=0):
     remote_host:remote_path  /data/media             nfs     _netdev,soft,intr,rw,bg        0 0
     """
     #TODO:these are temporary commands, change to auto-mount in /etc/fstab?
-    dryrun = int(dryrun)
     for data in env.media_mount_dirs:
         if isinstance(data, (list, tuple)):
             from_path, to_path, owner, group, perms = data
@@ -71,49 +68,37 @@ def mount(dryrun=0):
         with settings(warn_only=1):
             
             cmd = 'umount %s' % to_path
-            print cmd
-            if not dryrun:
-                sudo(cmd)
+            sudo_or_dryrun(cmd)
                 
             cmd = 'rm -Rf %s' % to_path
-            print cmd
-            if not dryrun:
-                sudo(cmd)
+            sudo_or_dryrun(cmd)
                 
             cmd = 'mkdir -p %s' % to_path
-            print cmd
-            if not dryrun:
-                sudo(cmd)
+            sudo_or_dryrun(cmd)
                 
         cmd = 'mount -t nfs %s %s' % (from_path, to_path)
-        print cmd
-        if not dryrun:
-            sudo(cmd)
+        sudo_or_dryrun(cmd)
         
         if owner and group:
             env.mount_owner = owner
             env.mount_group = group
             cmd = 'chown -R %(mount_owner)s:%(mount_group)s /data/ops' % env
-            print cmd
-            if not dryrun:
-                sudo(cmd)
+            sudo_or_dryrun(cmd)
         
         if perms:
             env.mount_perms = perms
             cmd = 'chmod -R %(mount_perms)s /data/ops' % env
-            print cmd
-            if not dryrun:
-                sudo(cmd)
+            sudo_or_dryrun(cmd)
 
-@task
+@task_or_dryrun
 def get_public_ip():
     """
     Gets the public IP for a host.
     """
-    ret = run('wget -qO- http://ipecho.net/plain ; echo')
+    ret = run_or_dryrun('wget -qO- http://ipecho.net/plain ; echo')
     return ret
 
-@task
+@task_or_dryrun
 @runs_once
 def list_public_ips(show_hostname=0):
     """

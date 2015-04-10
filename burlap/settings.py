@@ -22,6 +22,7 @@ from fabric.tasks import Task
 
 from burlap import common
 from burlap.common import DJANGO, ALL
+from burlap.decorators import task_or_dryrun
 
 #class MyTask(Task):
 #    name = "testtask"
@@ -52,13 +53,13 @@ from burlap.common import DJANGO, ALL
 #        for task in self.tasks:
 #            locals_[task.name] = task
 #    
-#    @task
+#    @task_or_dryrun
 #    def anothertask(self):
 #        todo
 #
 #Component()
 
-@task
+@task_or_dryrun
 def list(keyword=''):
     """
     Displays a list of all environment key/value pairs for the current role.
@@ -77,7 +78,7 @@ def list(keyword=''):
         if not keyword_found:
             print 'Keyword "%s" not found.' % keyword
 
-@task
+@task_or_dryrun
 def record_manifest():
     """
     Called after a deployment to record any data necessary to detect changes

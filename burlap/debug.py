@@ -3,23 +3,20 @@ from pprint import pprint
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    #run as _run,
-    run,
     settings,
-    sudo,
     cd,
-    task,
 )
 
-@task
+from burlap.common import run_or_dryrun, sudo_or_dryrun
+from burlap.decorators import task_or_dryrun
+
+@task_or_dryrun
 def list_settings(name):
     from burlap import load_yaml_settings
     load_yaml_settings(name=name, verbose=1)
 
-@task
+@task_or_dryrun
 def list_env(key=None):
     """
     Displays a list of environment key/value pairs.
@@ -30,7 +27,7 @@ def list_env(key=None):
         print k,
         pprint(v, indent=4)
 
-@task
+@task_or_dryrun
 def list_sites(site='all', *args, **kwargs):
     from burlap.common import iter_sites
     kwargs['site'] = site
@@ -42,7 +39,7 @@ def list_to_str_or_unknown(lst):
         return ', '.join(map(str, lst))
     return 'unknown'
 
-@task
+@task_or_dryrun
 def list_server_specs(cpu=1, memory=1, hdd=1):
     """
     Displays a list of common servers characteristics, like number
@@ -56,7 +53,7 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
     # CPU
     if cpu:
         cmd = 'cat /proc/cpuinfo | grep -i "model name"'
-        ret = run(cmd)
+        ret = run_or_dryrun(cmd)
         matches = map(str.strip, re.findall('model name\s+:\s*([^\n]+)', ret, re.DOTALL|re.I))
         cores = {}
         for match in matches:
@@ -66,7 +63,7 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
     # Memory
     if memory:
         cmd = 'dmidecode --type 17'
-        ret = sudo(cmd)
+        ret = sudo_or_dryrun(cmd)
         #print repr(ret)
         matches = re.findall('Memory\s+Device\r\n(.*?)(?:\r\n\r\n|$)', ret, flags=re.DOTALL|re.I)
         #print len(matches)
@@ -104,14 +101,14 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
     if hdd:
         #cmd = 'ls /dev/*d* | grep "/dev/[a-z]+d[a-z]$"'
         cmd = 'find /dev -maxdepth 1 | grep -E "/dev/[a-z]+d[a-z]$"'
-        devices = map(str.strip, run(cmd).split('\n'))
+        devices = map(str.strip, run_or_dryrun(cmd).split('\n'))
         total_drives = len(devices)
         total_physical_storage_gb = 0
         total_logical_storage_gb = 0
         drive_transports = set()
         for device in devices:
             cmd = 'udisks --show-info %s |grep -i "  size:"' % (device)
-            ret = run(cmd)
+            ret = run_or_dryrun(cmd)
             size_bytes = float(re.findall('size:\s*([0-9]+)', ret)[0].strip())
             size_gb = int(round(size_bytes/1024/1024/1024))
             #print device, size_gb
@@ -119,14 +116,14 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
             
             with settings(warn_only=True):
                 cmd = 'hdparm -I %s|grep -i "Transport:"' % device
-                ret = sudo(cmd)
+                ret = sudo_or_dryrun(cmd)
                 if ret and not ret.return_code:
 #                    print dir(ret)
 #                    print ret.__dict__.keys()
                     drive_transports.add(ret.split('Transport:')[-1].strip())
                 
         cmd = "df | grep '^/dev/[mhs]d*' | awk '{s+=$2} END {print s/1048576}'"
-        ret = run(cmd)
+        ret = run_or_dryrun(cmd)
         total_logical_storage_gb = float(ret)
     
     if cpu:
@@ -158,4 +155,54 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
 
 def list_hosts():
     print('hosts:', env.hosts)
-    
+
+@task_or_dryrun
+def info():
+    print 'Info'
+    print '\tROLE:',env.ROLE
+    print '\tSITE:',env.SITE
+    print '\tdefault_site:',env.default_site
+
+@task_or_dryrun
+def shell(gui=0):
+    """
+    Opens a UNIX shell.
+    """
+    from dj import render_remote_paths
+    render_remote_paths()
+    print 'env.remote_app_dir:',env.remote_app_dir
+    env.SITE = env.SITE or env.default_site
+    env.shell_x_opt = '-X' if int(gui) else ''
+    if '@' in env.host_string:
+        env.shell_host_string = env.host_string
+    else:
+        env.shell_host_string = '%(user)s@%(host_string)s' % env
+        
+    env.shell_check_host_key_str = '-o StrictHostKeyChecking=no'
+        
+    env.shell_default_dir = env.shell_default_dir_template % env
+    env.shell_interactive_shell_str = env.shell_interactive_shell % env
+    if env.is_local:
+        cmd = '%(shell_interactive_shell_str)s' % env
+    elif env.key_filename:
+        cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
+    elif env.password:
+        cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
+#    os.system(cmd)
+    local_or_dryrun(cmd)
+
+@task_or_dryrun
+def disk():
+    """
+    Display percent of disk usage.
+    """
+    run_or_dryrun(env.disk_usage_command % env)
+
+@task_or_dryrun
+def tunnel(local_port, remote_port):
+    """
+    Creates an SSH tunnel.
+    """
+    env.tunnel_local_port = local_port
+    env.tunnel_remote_port = remote_port
+    local_or_dryrun(' ssh -i %(key_filename)s -L %(tunnel_local_port)s:localhost:%(tunnel_remote_port)s %(user)s@%(host_string)s -N' % env)

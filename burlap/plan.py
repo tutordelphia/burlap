@@ -10,12 +10,12 @@ import tempfile
 
 from fabric.api import (
     env,
-    task,
 )
 import fabric.contrib.files
 import fabric.api
 
 from burlap import common
+from burlap.decorators import task_or_dryrun
 
 # Prevent globals from being reset by duplicate imports.
 if not 'plan_init' in env:
@@ -179,7 +179,7 @@ def get_original(name):
     if hasattr(fabric.contrib.files, name):
         return getattr(fabric.contrib.files, name)
 
-@task
+@task_or_dryrun
 def create():
     """
     Instantiates a new plan and replaces the standard `run` and `sudo`
@@ -192,7 +192,7 @@ def create():
     replace(fabric.api.put, plan.put)
     replace(fabric.contrib.files.exists, plan.exists)
     
-@task
+@task_or_dryrun
 def show(csv=0):
     """
     Prints all pending commands.
@@ -202,7 +202,7 @@ def show(csv=0):
     plan = env.plan_root
     plan.pprint(as_csv=csv)
 
-@task
+@task_or_dryrun
 def execute():
     """
     Runs the commands in the currently cached plan.
@@ -210,7 +210,7 @@ def execute():
     assert env.plan_root, 'You must first run plan.create.'
     todo
     
-@task
+@task_or_dryrun
 def clear():
     """
     Deletes all commands in the current plan.

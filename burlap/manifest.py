@@ -8,17 +8,13 @@ import yaml
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    run as _run,
     settings,
-    sudo,
     cd,
-    task,
 )
 
 from burlap import common
+from burlap.decorators import task_or_dryrun
 
 env.manifest_dir = '.manifests'
 
@@ -46,7 +42,7 @@ def get_last_manifest_filename():
         if fn.startswith(prefix):
             return os.path.join(dir, fn)
 
-@task
+@task_or_dryrun
 def record():
     """
     Creates a manifest file for the current host, listing all current settings
@@ -72,7 +68,7 @@ def record():
     yaml.dump(manifest_data, open(manifest_fqfn, 'w'))
     print 'Wrote %s.' % (manifest_fqfn,)
 
-@task
+@task_or_dryrun
 def compare(component=None):
     """
     Determines what methods need to be run to make the target match
@@ -129,14 +125,14 @@ def compare(component=None):
         print '-'*80
         print 'No changes detected.'
 
-@task
-def extract(component=None, dryrun=1):
+@task_or_dryrun
+def extract(component=None):
     """
     Attempts to read or deduce the settings of the host.
     """
     todo
 
-@task
+@task_or_dryrun
 def deploy():
     """
     Makes the target host match the current settings.

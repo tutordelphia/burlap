@@ -4,20 +4,23 @@ import datetime
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    #run as _run,
-    run,
     settings,
-    sudo,
     cd,
     task,
 )
 from fabric.contrib import files
 
-from burlap.common import run, put, render_to_string, QueuedCommand
+from burlap.common import (
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
+    render_to_string,
+    QueuedCommand,
+)
 from burlap import common
+from burlap.decorators import task_or_dryrun
 
 env.iptables_enabled = True
 env.iptables_ssh_port = 22
@@ -57,37 +60,37 @@ def get_service_command(action):
     os_version = common.get_os_version()
     return env.iptables_service_commands[action][os_version.distro]
 
-@task
+@task_or_dryrun
 def enable():
     cmd = get_service_command(common.ENABLE)
     print cmd
     run(cmd)
 
-@task
+@task_or_dryrun
 def disable():
     cmd = get_service_command(common.DISABLE)
     print cmd
     run(cmd)
 
-@task
+@task_or_dryrun
 def start():
     cmd = get_service_command(common.START)
     print cmd
     run(cmd)
 
-@task
+@task_or_dryrun
 def stop():
     cmd = get_service_command(common.STOP)
     print cmd
     run(cmd)
 
-@task
+@task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
     print cmd
     run(cmd)
 
-@task
+@task_or_dryrun
 def configure():
     """
     Configures rules for IPTables.
@@ -105,7 +108,7 @@ def configure():
         disable()
         stop()
 
-@task
+@task_or_dryrun
 def record_manifest():
     """
     Called after a deployment to record any data necessary to detect changes

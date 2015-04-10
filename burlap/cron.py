@@ -5,10 +5,7 @@ import re
 from fabric.api import (
     env,
     local,
-    put as _put,
     require,
-    #run as _run,
-    run,
     settings,
     sudo,
     cd,
@@ -18,12 +15,12 @@ from fabric.api import (
 from fabric.contrib import files
 
 from burlap.common import (
-    run, put,
     run_or_dryrun,
     sudo_or_dryrun,
     put_or_dryrun,
     local_or_dryrun,
 )
+from burlap.decorators import task_or_dryrun
 from burlap import common
 from burlap.common import QueuedCommand
 
@@ -95,26 +92,26 @@ def get_service_command(action):
     os_version = common.get_os_version()
     return env.cron_service_commands[action][os_version.distro]
 
-@task
+@task_or_dryrun
 def enable():
     cmd = get_service_command(common.ENABLE)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def disable():
     cmd = get_service_command(common.DISABLE)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def start():
     with settings(warn_only=True):
         cmd = get_service_command(common.START)
         print cmd
         sudo(cmd)
 
-@task
+@task_or_dryrun
 def stop():
     # If cron service already stopped, will throw the error
     # "Instance unknown:" on Ubuntu.
@@ -123,25 +120,25 @@ def stop():
         print cmd
         sudo(cmd)
 
-@task
+@task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def status():
     cmd = get_service_command(common.STATUS)
     print cmd
     sudo(cmd)
 
-@task
-def deploy(site=None, dryrun=0):
+@task_or_dryrun
+def deploy(site=None):
     """
     Writes entire crontab to the host.
     """
     from burlap.common import get_current_hostname
-    dryrun = int(dryrun)
+    
     
     cron_crontabs = []
     hostname = get_current_hostname()
@@ -173,15 +170,15 @@ def deploy(site=None, dryrun=0):
     if dryrun:
         print env.cron_crontabs_rendered
     fn = common.write_to_file(content=env.cron_crontabs_rendered)
-    put_or_dryrun(local_path=fn, dryrun=dryrun)
-    sudo_or_dryrun('crontab -u %(cron_user)s %(put_remote_path)s' % env, dryrun=dryrun)
+    put_or_dryrun(local_path=fn)
+    sudo_or_dryrun('crontab -u %(cron_user)s %(put_remote_path)s' % env)
 
-@task
+@task_or_dryrun
 def deploy_all(**kwargs):
     kwargs['site'] = common.ALL
     return deploy(**kwargs)
 
-@task
+@task_or_dryrun
 def record_manifest(verbose=0):
     """
     Called after a deployment to record any data necessary to detect changes

@@ -20,6 +20,7 @@ no_load = int(os.environ.get('BURLAP_NO_LOAD', 0))
 
 env = None
 common = None
+debug = None
 env_default = {}
 
 try:
@@ -51,6 +52,7 @@ try:
     yaml.add_representer(types.FunctionType, _represent_function)
 
     import common
+    import debug
     
     env_default = common.save_env()
 
@@ -232,10 +234,10 @@ def populate_fabfile():
                  'Please choose a different name.') % (role_name)
             locals_[role_name] = role_func
         locals_['common'] = common
-        locals_['shell'] = common.shell
-        locals_['info'] = common.info
+        locals_['shell'] = debug.shell
+        locals_['info'] = debug.info
         #locals_['djshell'] = common.djshell
-        locals_['tunnel'] = common.tunnel
+        locals_['tunnel'] = debug.tunnel
     finally:
         del stack
 
@@ -264,6 +266,7 @@ if common and not no_load:
             _f = WrappedCallableTask(_f, name=_name)
             _cmd = "%s = _f" % (_var_name,)
             exec _cmd
+            #print('Creating role %s.' % _var_name, file=sys.stderr)
             role_commands[_var_name] = _f
 
     # Auto-import all sub-modules.
@@ -274,6 +277,7 @@ if common and not no_load:
         if module_name in locals():
             continue
         __all__.append(module_name)
+        #print('Importing: %s' % module_name, file=sys.stderr)
         module = loader.find_module(module_name).load_module(module_name)
         sub_modules[module_name] = module
 

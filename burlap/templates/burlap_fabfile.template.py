@@ -26,23 +26,29 @@ import os
 import sys
 import re
 
-from fabric.api import task, env, local, run, sudo
+from fabric.api import task, env
 
 import burlap
+from burlap.common import (
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
+)
 
 set_site = common.set_site
 
 if not env.SITE:
     set_site('{project_name}_site')
 
-@task
+@task_or_dryrun
 def collect_static():
     """
     Runs Django's collectstatic command.
     """
     local('cd src; ./manage collectstatic --noinput')
 
-@task
+@task_or_dryrun
 def push_static():
     """
     Collects and uploads all our static media.
@@ -52,7 +58,7 @@ def push_static():
 #        s3.sync(sync_set='static', auto_invalidate=True)
     apache.sync_media(sync_set='static')
 
-@task
+@task_or_dryrun
 def deploy1():
     """
     Runs all deployment tasks against the target.
@@ -83,7 +89,7 @@ def deploy1():
     service.deploy()
     service.restart()
 
-@task
+@task_or_dryrun
 def deploy2():
     """
     Uploads our application code, static media, and restarts Apache.
@@ -92,7 +98,7 @@ def deploy2():
     push_static()
     deploy3()
 
-@task
+@task_or_dryrun
 def deploy3(dodb=1):
     """
     Simply uploads our application code and restarts Apache.

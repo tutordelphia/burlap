@@ -3,15 +3,9 @@ import re
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    #run as _run,
-    run,
     settings,
-    sudo,
     cd,
-    task,
 )
 
 from fabric.contrib import files
@@ -19,14 +13,17 @@ from fabric.tasks import Task
  
 from burlap import common
 from burlap.common import (
-    run,
-    put,
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
     SITE,
     ROLE,
     render_to_file,
     find_template,
     QueuedCommand,
 )
+from burlap.decorators import task_or_dryrun
 
 env.ip_type = 'static' # |dynamic
 env.ip_interface = 'eth0'
@@ -41,7 +38,7 @@ env.ip_network_restart_command = '/etc/init.d/networking restart'
 
 IP = 'IP'
 
-@task
+@task_or_dryrun
 def static():
     """
     Configures the server to use a static IP.
@@ -53,7 +50,7 @@ def static():
     #sudo('ifup %(ip_interface)s' % env)
     sudo(env.ip_network_restart_command % env)
 
-@task
+@task_or_dryrun
 def record_manifest():
     """
     Called after a deployment to record any data necessary to detect changes

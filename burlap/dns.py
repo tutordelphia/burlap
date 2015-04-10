@@ -9,15 +9,13 @@ from burlap import common
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
     require,
-    run,
     settings,
-    sudo,
     cd,
-    task,
 )
+
+from burlap.common import run_or_dryrun, sudo_or_dryrun
+from burlap.decorators import task_or_dryrun
 
 BIND = 'BIND'
 
@@ -66,50 +64,50 @@ def get_service_command(action):
         return cmd
     return env.dns_service_commands[action][os_version.distro]
 
-@task
+@task_or_dryrun
 def enable():
     cmd = get_service_command(common.ENABLE)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def disable():
     cmd = get_service_command(common.DISABLE)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def start():
     cmd = get_service_command(common.START)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def stop():
     cmd = get_service_command(common.STOP)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def status():
     cmd = get_service_command(common.STATUS)
     print cmd
     sudo(cmd)
 
-@task
+@task_or_dryrun
 def configure():
     """
     Installs DNS configuration.
     """
     todo
 
-@task
+@task_or_dryrun
 def deploy():
     """
     Installs DNS configuration.
