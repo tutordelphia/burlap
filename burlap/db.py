@@ -728,6 +728,10 @@ def dumpload():
     else:
         raise NotImplementedError
 
+def render_fn(fn):
+    import commands
+    return commands.getoutput('echo %s' % fn)
+
 @task_or_dryrun
 @runs_once
 def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0, verbose=0):
@@ -746,7 +750,7 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0, verbose=0):
 #    print 'db.load.site:',env.SITE
 #    print 'db.load.role:',env.ROLE
     
-    env.db_dump_fn = db_dump_fn
+    env.db_dump_fn = render_fn(db_dump_fn)
     set_db(site=env.SITE, role=env.ROLE)
     
     from_local = int(from_local)
@@ -779,6 +783,7 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0, verbose=0):
     if env.db_load_command:
         cmd = env.db_load_command % env
         run_or_dryrun(cmd)
+        
     elif 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         
         set_root_login()

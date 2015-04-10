@@ -85,7 +85,7 @@ def clean_virtualenv():
     render_paths()
     with settings(warn_only=True):
         print 'Deleting old virtual environment...'
-        sudo('rm -Rf %(pip_virtual_env_dir)s' % env)
+        sudo_or_dryrun('rm -Rf %(pip_virtual_env_dir)s' % env)
     assert not files.exists(env.pip_virtual_env_dir), \
         'Unable to delete pre-existing environment.'
 
@@ -122,7 +122,7 @@ def init(clean=0, check_global=0):
     # is horribly buggy. Should use 1.3 or later.
     if int(check_global):
         print 'Ensuring the global pip install is up-to-date.'
-        sudo('pip install --upgrade pip')
+        sudo_or_dryrun('pip install --upgrade pip')
     
     print env.pip_virtual_env_dir
     #if not files.exists(env.pip_virtual_env_dir):
@@ -130,13 +130,13 @@ def init(clean=0, check_global=0):
     with settings(warn_only=True):
         cmd = 'virtualenv --no-site-packages %(pip_virtual_env_dir)s' % env
         if env.is_local:
-            run(cmd)
+            run_or_dryrun(cmd)
         else:
-            sudo(cmd)
+            sudo_or_dryrun(cmd)
         
     if not env.is_local and env.pip_check_permissions:
-        sudo('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
-        sudo('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
+        sudo_or_dryrun('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
+        sudo_or_dryrun('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
 
 def iter_pip_requirements():
     for line in open(find_template(env.pip_requirements_fn)):
@@ -243,9 +243,6 @@ def check_for_updates():
             rss_field=None,
             rss_regex=None,
         )
-#        if dep_type == versioner.GITHUB_TAG:
-#            print 'current version:',dep.get_current_version()
-#            raw_input('enter')
         try:
             if dep.is_stale():
                 stale_lines.append(dep)
@@ -404,9 +401,9 @@ def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1):
     # Clear build directory in case it wasn't properly cleaned up previously.
     cmd = 'rm -Rf %(pip_build_directory)s' % env
     if env.is_local:
-        run(cmd)
+        run_or_dryrun(cmd)
     else:
-        sudo(cmd)
+        sudo_or_dryrun(cmd)
     
     with settings(warn_only=ignore_errors):
         if package:
@@ -441,8 +438,8 @@ def upgrade_pip():
     render_remote_paths()
     if env.pip_virtual_env_dir_template:
         env.pip_virtual_env_dir = env.pip_virtual_env_dir_template % env
-    run(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade setuptools" % env)
-    run(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade distribute" % env)
+    run_or_dryrun(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade setuptools" % env)
+    run_or_dryrun(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade distribute" % env)
 
 @task_or_dryrun
 def uninstall(package):
@@ -456,9 +453,9 @@ def uninstall(package):
     
     env.pip_package = package
     if env.is_local:
-        run(env.pip_uninstall_command % env)
+        run_or_dryrun(env.pip_uninstall_command % env)
     else:
-        sudo(env.pip_uninstall_command % env)
+        sudo_or_dryrun(env.pip_uninstall_command % env)
     
 @task_or_dryrun
 def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
@@ -488,7 +485,7 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
         env.pip_cache_dir = env.pip_remote_cache_dir % env
         print 'env.host_string:',env.host_string
         print 'env.key_filename:',env.key_filename
-        run('mkdir -p %(pip_cache_dir)s' % env)
+        run_or_dryrun('mkdir -p %(pip_cache_dir)s' % env)
         
         if not env.pip_cache_dir.endswith('/'):
             env.pip_cache_dir = env.pip_cache_dir + '/'
@@ -515,13 +512,13 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
     for package in packages:
         env.pip_package = package
         if env.is_local:
-            run(env.pip_install_command % env)
+            run_or_dryrun(env.pip_install_command % env)
         else:
-            sudo(env.pip_install_command % env)
+            sudo_or_dryrun(env.pip_install_command % env)
 
     if not env.is_local:
-        sudo('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
-        sudo('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
+        sudo_or_dryrun('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
+        sudo_or_dryrun('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
 
 @task_or_dryrun
 def record_manifest():

@@ -14,7 +14,7 @@ from pprint import pprint
 from fabric.api import (
     env,
     local,
-    put as _put,
+    put as __put,
     require,
     run as _run,
     settings,
@@ -147,7 +147,7 @@ def local_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print cmd
+        print '[%s] local: %s' % (env.host_string, cmd)
     else:
         return local(*args, **kwargs)
         
@@ -157,7 +157,7 @@ def run_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print cmd
+        print '[%s] run: %s' % (env.host_string, cmd)
     else:
         return _run(*args, **kwargs)
 
@@ -167,12 +167,12 @@ def sudo_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print cmd
+        print '[%s] sudo: %s' % (env.host_string, cmd)
     else:
         return _sudo(*args, **kwargs)
 
 def put_or_dryrun(**kwargs):
-    dryrun = get_dryrun(kwargs.get('dryrun'))
+    dryrun = int(kwargs.get('dryrun', 0))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
     if dryrun:
@@ -180,9 +180,9 @@ def put_or_dryrun(**kwargs):
         remote_path = kwargs.get('remote_path', local_path)
         cmd = 'rsync %s %s' % (local_path, remote_path)
         env.put_remote_path = remote_path
-        print cmd
+        print '[%s] put: %s' % (env.host_string, cmd)
     else:
-        return put(**kwargs)
+        return _put(**kwargs)
 
 def pretty_bytes(bytes):
     """
@@ -554,6 +554,16 @@ try:
 except ImportError:
     warnings.warn('Unable to import Django settings.', ImportWarning)
 
+def _put(**kwargs):
+    local_path = kwargs['local_path']
+    fd, fn = tempfile.mkstemp()
+    if not env.is_local:
+        os.remove(fn)
+    #kwargs['remote_path'] = kwargs.get('remote_path', '/tmp/%s' % os.path.split(local_path)[-1])
+    kwargs['remote_path'] = kwargs.get('remote_path', fn)
+    env.put_remote_path = kwargs['remote_path']
+    return __put(**kwargs)
+
 def get_rc(k):
     return env._rc.get(env[ROLE], type(env)()).get(k)
 
@@ -568,16 +578,16 @@ def get_packager():
     #TODO:cache result by current env.host_string so we can handle multiple hosts with different OSes
     with settings(warn_only=True):
         with hide('running', 'stdout', 'stderr', 'warnings'):
-            ret = run('cat /etc/fedora-release')
+            ret = run_or_dryrun('cat /etc/fedora-release')
             if ret.succeeded:
                 common_packager = YUM
             else:
-                ret = run('cat /etc/lsb-release')
+                ret = run_or_dryrun('cat /etc/lsb-release')
                 if ret.succeeded:
                     common_packager = APT
                 else:
                     for pn in PACKAGERS:
-                        ret = run('which %s' % pn)
+                        ret = run_or_dryrun('which %s' % pn)
                         if ret.succeeded:
                             common_packager = pn
                             break
@@ -592,14 +602,14 @@ def get_os_version():
         return common_os_version
     with settings(warn_only=True):
         with hide('running', 'stdout', 'stderr', 'warnings'):
-            ret = run('cat /etc/fedora-release')
+            ret = run_or_dryrun('cat /etc/fedora-release')
             if ret.succeeded:
                 common_os_version = OS(
                     type = LINUX,
                     distro = FEDORA,
                     release = re.findall('release ([0-9]+)', ret)[0])
             else:
-                ret = run('cat /etc/lsb-release')
+                ret = run_or_dryrun('cat /etc/lsb-release')
                 if ret.succeeded:
                     common_os_version = OS(
                         type = LINUX,
