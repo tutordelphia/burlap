@@ -381,7 +381,7 @@ def exists(name='default', site=None, verbose=1):
         if verbose:
             print cmd
         ret = run_or_dryrun(cmd)
-        ret = 'notexists' not in ret
+        ret = 'notexists' not in (ret or 'notexists')
 
     else:
         raise NotImplementedError
@@ -487,24 +487,18 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
 #        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
 #            "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
 #        print cmd
-#        if not int(dryrun):
-#            sudo_or_dryrun(cmd)
         set_collation_mysql()
             
         # Create user.
         cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute=\"GRANT USAGE ON *.* TO %(db_user)s@'%%'; DROP USER %(db_user)s@'%%';\"" % env
-        print cmd
-        if not int(dryrun):
-            run_or_dryrun(cmd)
+        run_or_dryrun(cmd)
         
         # Grant user access to the database.
         cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s "\
             "-p'%(db_root_password)s' --execute=\"GRANT ALL PRIVILEGES "\
             "ON %(db_name)s.* TO %(db_user)s@'%%' IDENTIFIED BY "\
             "'%(db_password)s'; FLUSH PRIVILEGES;\"") % env
-        print cmd
-        if not int(dryrun):
-            run_or_dryrun(cmd)
+        run_or_dryrun(cmd)
         
         #TODO:why is this necessary? why doesn't the user@% pattern above give
         #localhost access?!
@@ -512,9 +506,7 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
             "-p'%(db_root_password)s' --execute=\"GRANT ALL PRIVILEGES "\
             "ON %(db_name)s.* TO %(db_user)s@%(db_host)s IDENTIFIED BY "\
             "'%(db_password)s'; FLUSH PRIVILEGES;\"") % env
-        print cmd
-        if not int(dryrun):
-            run_or_dryrun(cmd)
+        run_or_dryrun(cmd)
             
         # Let the primary login do so from everywhere.
 #        cmd = 'mysql -h %(db_host)s -u %()s -p'%(db_root_password)s' --execute="USE mysql; GRANT ALL ON %(db_name)s.* to %(db_user)s@\'%\' IDENTIFIED BY \'%(db_password)s\'; FLUSH PRIVILEGES;"'
@@ -523,7 +515,7 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
     else:
         raise NotImplemented
     
-    if not env.dryrun and int(post_process):
+    if not get_dryrun() and int(post_process):
         post_create(name=name, site=site)
 
 @task_or_dryrun
@@ -850,8 +842,6 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0, verbose=0):
 #        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
 #            "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
 #        print cmd
-#        if not int(dryrun):
-#            sudo_or_dryrun(cmd)
         set_collation_mysql()
         
         # Raise max packet limitation.
