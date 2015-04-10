@@ -46,6 +46,7 @@ env.db_load_command = None
 
 env.db_app_migration_order = []
 env.db_dump_dest_dir = '/tmp'
+env.db_dump_archive_dir = 'snapshots'
 
 # The login for performance administrative tasks (e.g. CREATE/DROP database).
 env.db_root_user = 'root'#DEPRECATED
@@ -570,7 +571,7 @@ def update_all(skip_databases=None, do_install_sql=0, migrate_apps=''):
 
 @task_or_dryrun
 @runs_once
-def dump(dest_dir=None, to_local=None, from_local=0):
+def dump(dest_dir=None, to_local=None, from_local=0, archive=0):
     """
     Exports the target database to a single transportable file on the localhost,
     appropriate for loading using load().
@@ -593,7 +594,7 @@ def dump(dest_dir=None, to_local=None, from_local=0):
             'Please specify the list of schemas to dump in db_schemas.'
         env.db_schemas_str = ' '.join('-n %s' % _ for _ in env.db_schemas)
         cmd = env.db_postgresql_dump_command % env
-        print 'db_host:',env.db_host
+        #print 'db_host:',env.db_host
         if env.is_local or from_local:
             local_or_dryrun(cmd)
         else:
@@ -611,6 +612,11 @@ def dump(dest_dir=None, to_local=None, from_local=0):
     if not from_local and (0 if to_local is None else int(to_local)) and not env.is_local:
         cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i %(key_filename)s" %(user)s@%(host_string)s:%(db_dump_fn)s %(db_dump_fn)s') % env
         local_or_dryrun(cmd)
+    
+    if to_local and int(archive):
+        db_fn = render_fn(env.db_dump_fn)
+        env.db_archive_fn = '%s/%s' % (env.db_dump_archive_dir, os.path.split(db_fn)[-1])
+        local_or_dryrun('mv %s %s' % (db_fn, env.db_archive_fn))
     
     return env.db_dump_fn
 
@@ -756,6 +762,7 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0, verbose=0):
         env.db_remote_dump_fn = db_dump_fn
     else:
         env.db_remote_dump_fn = '/tmp/'+os.path.split(env.db_dump_fn)[-1]
+        #env.db_remote_dump_fn = 'snapshots/'+os.path.split(env.db_dump_fn)[-1]
 #    print '~'*80
 #    print 'env.db_remote_dump_fn:',env.db_remote_dump_fn
 #    print 'env.hosts2:',env.hosts,env.host_string
@@ -1165,16 +1172,16 @@ def save_db_password(user, password):
         raise NotImplementedError
 
 @task_or_dryrun
-def write_postgres_pgpass(name=None, use_sudo=0, verbose=1):
+def write_postgres_pgpass(name=None, use_sudo=0, verbose=1, commands_only=0):
     """
     Write the file used to store login credentials for PostgreSQL.
     """
     from burlap.dj import set_db
     from burlap.file import appendline
     
-    
     use_sudo = int(use_sudo)
     verbose = int(verbose)
+    commands_only = int(commands_only)
     
     if name:
         set_db(name=name)
@@ -1200,16 +1207,17 @@ def write_postgres_pgpass(name=None, use_sudo=0, verbose=1):
         fqfn=env.db_postgresql_pgass_path,
         line=pgpass_line,
         use_sudo=use_sudo,
-        dryrun=1,
+        commands_only=1,
         verbose=0))
         
-    for cmd in cmds:
-        if verbose:
-            print(cmd)
-        if use_sudo:
-            sudo_or_dryrun(cmd)
-        else:
-            run_or_dryrun(cmd)
+    if not commands_only:
+        for cmd in cmds:
+            if verbose:
+                print(cmd)
+            if use_sudo:
+                sudo_or_dryrun(cmd)
+            else:
+                run_or_dryrun(cmd)
                 
     return cmds
 
@@ -1260,7 +1268,7 @@ def shell(name='default', user=None, password=None, root=0, verbose=1, write_pas
         
         # Set pgpass file.
         if write_password and env.db_password:
-            cmds.extend(write_postgres_pgpass(dryrun=1, verbose=0))
+            cmds.extend(write_postgres_pgpass(verbose=0, commands_only=1))
         
         if not no_db:
             env.db_name_str = ' --dbname=%(db_name)s' % env

@@ -64,21 +64,23 @@ def sync():
         sudo_or_dryrun(cmd)
 
 @task_or_dryrun
-def appendline(fqfn, line, use_sudo=0, verbose=1):
+def appendline(fqfn, line, use_sudo=0, verbose=1, commands_only=0):
     """
     Appends the given line to the given file only if the line does not already
     exist in the file.
     """
     verbose = int(verbose)
+    commands_only = int(commands_only)
     
     use_sudo = int(use_sudo)
     kwargs = dict(fqfn=fqfn, line=line)
     cmd = 'grep -qF "{line}" {fqfn} || echo "{line}" >> {fqfn}'.format(**kwargs)
     if verbose:
         print(cmd)
-    if use_sudo:
-        sudo_or_dryrun(cmd)
-    else:
-        run_or_dryrun(cmd)
+    if not commands_only:
+        if use_sudo:
+            sudo_or_dryrun(cmd)
+        else:
+            run_or_dryrun(cmd)
     return [cmd]
     
