@@ -8,7 +8,11 @@ from fabric.api import (
     cd,
 )
 
-from burlap.common import run_or_dryrun, sudo_or_dryrun
+from burlap.common import (
+    run_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
+)
 from burlap.decorators import task_or_dryrun
 
 @task_or_dryrun
@@ -188,7 +192,6 @@ def shell(gui=0):
         cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
     elif env.password:
         cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
-#    os.system(cmd)
     local_or_dryrun(cmd)
 
 @task_or_dryrun
