@@ -100,7 +100,7 @@ def configure():
         put(local_path=fn)
         
         cmd = 'iptables-restore < %(put_remote_path)s; iptables-save > /etc/iptables.up.rules' % env
-        sudo(cmd)
+        sudo_or_dryrun(cmd)
         
         enable()
         restart()

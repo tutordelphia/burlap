@@ -46,9 +46,9 @@ def static():
     fn = render_to_file('ip_interfaces_static.template')
     put(local_path=fn, remote_path=env.ip_interfaces_fn, use_sudo=True)
     
-    #sudo('ifdown %(ip_interface)s' % env)
-    #sudo('ifup %(ip_interface)s' % env)
-    sudo(env.ip_network_restart_command % env)
+    #sudo_or_dryrun('ifdown %(ip_interface)s' % env)
+    #sudo_or_dryrun('ifup %(ip_interface)s' % env)
+    sudo_or_dryrun(env.ip_network_restart_command % env)
 
 @task_or_dryrun
 def record_manifest():

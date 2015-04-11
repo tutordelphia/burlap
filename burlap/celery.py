@@ -132,37 +132,37 @@ def get_service_command(action):
 def enable():
     cmd = get_service_command(common.ENABLE)
     print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def disable():
     cmd = get_service_command(common.DISABLE)
     print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def start():
     cmd = get_service_command(common.START)
     print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def stop():
     cmd = get_service_command(common.STOP)
     print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
     print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def status():
     cmd = get_service_command(common.STATUS)
     print cmd
-    sudo(cmd)
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def purge():
@@ -170,7 +170,7 @@ def purge():
     Clears all pending tasks in the Celery queue.
     """
     render_paths()
-    sudo('export SITE=%(SITE)s; export ROLE=%(ROLE)s; %(celery_supervisor_django_manage)s celeryctl purge' % env)
+    sudo_or_dryrun('export SITE=%(SITE)s; export ROLE=%(ROLE)s; %(celery_supervisor_django_manage)s celeryctl purge' % env)
 
 @task_or_dryrun
 def force_stop():
@@ -178,10 +178,10 @@ def force_stop():
     Forcibly terminates all Celery processes.
     """
     with settings(warn_only=True):
-        #sudo(env.celery_force_stop_command % env)#fails?
+        #sudo_or_dryrun(env.celery_force_stop_command % env)#fails?
         run('sudo pkill -9 -f celery')
-    sudo('rm -f /tmp/celery*.pid')
-    #sudo('rm -f /var/log/celery*.log')
+    sudo_or_dryrun('rm -f /tmp/celery*.pid')
+    #sudo_or_dryrun('rm -f /var/log/celery*.log')
 
 @task_or_dryrun
 def set_permissions():
@@ -190,7 +190,7 @@ def set_permissions():
     """
     for path in env.celery_paths_owned:
         env.celery_path_owned = path
-        sudo('chown %(celery_daemon_user)s:%(celery_daemon_user)s %(celery_path_owned)s' % env)
+        sudo_or_dryrun('chown %(celery_daemon_user)s:%(celery_daemon_user)s %(celery_path_owned)s' % env)
 
 #@task_or_dryrun
 #def configure():

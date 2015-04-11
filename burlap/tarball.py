@@ -85,7 +85,6 @@ def deploy(clean=0):
     
     if int(clean):
         print 'Deleting old remote source...'
-        #sudo('[ -d %(remote_app_src_dir)s ] && rm -Rf  %(remote_app_src_dir)s' % env)
         sudo_or_dryrun('rm -Rf  %(remote_app_src_dir)s' % env)
         sudo_or_dryrun('mkdir -p %(remote_app_src_dir)s' % env)
     

@@ -86,38 +86,38 @@ def get_service_command(action):
 @task_or_dryrun
 def enable():
     cmd = get_service_command(common.ENABLE)
-    print cmd
-    sudo(cmd)
+    
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def disable():
     cmd = get_service_command(common.DISABLE)
-    print cmd
-    sudo(cmd)
+    
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def start():
     cmd = get_service_command(common.START)
-    print cmd
-    sudo(cmd)
+    
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def stop():
     cmd = get_service_command(common.STOP)
-    print cmd
-    sudo(cmd)
+    
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
-    print cmd
-    sudo(cmd)
+    
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def status():
     cmd = get_service_command(common.STATUS)
-    print cmd
-    sudo(cmd)
+    
+    sudo_or_dryrun(cmd)
 
 def render_paths():
     from pip import render_paths as pip_render_paths
@@ -136,15 +136,15 @@ def configure():
     fn = common.render_to_file('supervisor_daemon.template.init')
     put(local_path=fn, remote_path=env.supervisor_daemon_path, use_sudo=True)
     
-    sudo('chmod +x %(supervisor_daemon_path)s' % env)
-    sudo('update-rc.d supervisord defaults' % env)
+    sudo_or_dryrun('chmod +x %(supervisor_daemon_path)s' % env)
+    sudo_or_dryrun('update-rc.d supervisord defaults' % env)
 
 @task_or_dryrun
 def unconfigure():
     render_paths()
     stop()
-    sudo('update-rc.d supervisord remove' % env)
-    sudo('rm -Rf %(supervisor_daemon_path)s' % env)
+    sudo_or_dryrun('update-rc.d supervisord remove' % env)
+    sudo_or_dryrun('rm -Rf %(supervisor_daemon_path)s' % env)
 
 @task_or_dryrun
 def deploy_services(site=None):

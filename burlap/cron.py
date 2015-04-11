@@ -95,21 +95,21 @@ def get_service_command(action):
 @task_or_dryrun
 def enable():
     cmd = get_service_command(common.ENABLE)
-    print cmd
-    sudo(cmd)
+    
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def disable():
     cmd = get_service_command(common.DISABLE)
-    print cmd
-    sudo(cmd)
+    
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def start():
     with settings(warn_only=True):
         cmd = get_service_command(common.START)
-        print cmd
-        sudo(cmd)
+        
+        sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def stop():
@@ -117,20 +117,20 @@ def stop():
     # "Instance unknown:" on Ubuntu.
     with settings(warn_only=True):
         cmd = get_service_command(common.STOP)
-        print cmd
-        sudo(cmd)
+        
+        sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
-    print cmd
-    sudo(cmd)
+    
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def status():
     cmd = get_service_command(common.STATUS)
-    print cmd
-    sudo(cmd)
+    
+    sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def deploy(site=None):

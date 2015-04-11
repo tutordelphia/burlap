@@ -32,9 +32,9 @@ def prepare():
     """
     packager = get_packager()
     if packager == APT:
-        sudo('apt-get update')
+        sudo_or_dryrun('apt-get update')
     elif package == YUM:
-        sudo('yum update')
+        sudo_or_dryrun('yum update')
     else:
         raise Exception, 'Unknown packager: %s' % (packager,)
 
@@ -72,7 +72,7 @@ def refresh(*args, **kwargs):
         raise Exception, 'Unknown packager: %s' % (packager,)
 
 def refresh_apt():
-    sudo('apt-get update -y --fix-missing')
+    sudo_or_dryrun('apt-get update -y --fix-missing')
 
 @task_or_dryrun
 def upgrade(*args, **kwargs):
@@ -89,8 +89,8 @@ def upgrade(*args, **kwargs):
         raise Exception, 'Unknown packager: %s' % (packager,)
 
 def upgrade_apt():
-    sudo('apt-get update -y --fix-missing')
-    sudo('apt-get upgrade -y')
+    sudo_or_dryrun('apt-get update -y --fix-missing')
+    sudo_or_dryrun('apt-get upgrade -y')
 
 env.apt_fn = 'apt-requirements.txt'
 
@@ -120,8 +120,8 @@ def install_apt(fn=None, package_name=None, update=0, list_only=0):
         put(local_path=tmp_fn)
         env.apt_fqfn = env.put_remote_path
 #    if int(update):
-    sudo('apt-get update -y --fix-missing')
-    sudo('apt-get install -y `cat "%(apt_fqfn)s" | tr "\\n" " "`' % env)
+    sudo_or_dryrun('apt-get update -y --fix-missing')
+    sudo_or_dryrun('apt-get install -y `cat "%(apt_fqfn)s" | tr "\\n" " "`' % env)
 
 env.yum_fn = 'yum-requirements.txt'
 
@@ -141,14 +141,14 @@ def install_yum(fn=None, package_name=None, update=0, list_only=0):
             and (not package_name or _.strip() == package_name)
         ]
     if update:
-        sudo('yum update --assumeyes')
+        sudo_or_dryrun('yum update --assumeyes')
     if package_name:
-        sudo('yum install --assumeyes %s' % package_name)
+        sudo_or_dryrun('yum install --assumeyes %s' % package_name)
     else:
         if env.is_local:
             put(local_path=env.yum_fn)
             env.yum_fn = env.put_remote_fn
-        sudo('yum install --assumeyes $(cat %(yum_fn)s)' % env)
+        sudo_or_dryrun('yum install --assumeyes $(cat %(yum_fn)s)' % env)
 
 @task_or_dryrun
 def list_required(type=None, service=None, verbose=True):
