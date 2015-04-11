@@ -139,7 +139,6 @@ def deploy(site=None):
     """
     from burlap.common import get_current_hostname
     
-    
     cron_crontabs = []
     hostname = get_current_hostname()
     target_sites = env.available_sites_by_host.get(hostname, None)
@@ -167,8 +166,6 @@ def deploy(site=None):
     cron_crontabs = env.cron_crontab_headers + cron_crontabs
     cron_crontabs.append('\n')
     env.cron_crontabs_rendered = '\n'.join(cron_crontabs)
-    if dryrun:
-        print env.cron_crontabs_rendered
     fn = common.write_to_file(content=env.cron_crontabs_rendered)
     put_or_dryrun(local_path=fn)
     sudo_or_dryrun('crontab -u %(cron_user)s %(put_remote_path)s' % env)

@@ -23,6 +23,7 @@ from burlap.common import (
     put_or_dryrun,
     sudo_or_dryrun,
     local_or_dryrun,
+    get_dryrun,
     SITE,
     ROLE,
 )
@@ -95,7 +96,7 @@ def sync(sync_set, auto_invalidate=1):
             's3sync --recursive --verbose --progress --public-read '\
             '%(s3_local_path)s %(s3_remote_path)s') % env
         print cmd
-        if not int(dryrun):
+        if not get_dryrun():
             if is_local:
                 rets.append(local_or_dryrun(cmd, capture=True)) # can't see progress
                 #rets.append(run(cmd))

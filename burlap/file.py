@@ -47,16 +47,9 @@ def sync():
         
         env.file_dst_dir, env.file_dst_file = os.path.split(dst)
         cmd = 'mkdir -p %(file_dst_dir)s' % env
-        if dryrun:
-            print env.host_string+':', cmd
-        else:
-            sudo(cmd)
+        sudo_or_dryrun(cmd)
         
-        if dryrun:
-            #print 'put(%s, %s)' % (src, dst)
-            print 'localhost: scp -i %s %s %s@%s:%s' % (env.key_filename, src, env.user, env.host_string, dst)
-        else:
-            put(local_path=src, remote_path=dst, use_sudo=True)
+        put_or_dryrun(local_path=src, remote_path=dst, use_sudo=True)
         
         env.file_user = data.get('user', env.file_default_user)
         env.file_group = data.get('group', env.file_default_group)

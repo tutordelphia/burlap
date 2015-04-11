@@ -459,10 +459,9 @@ def install_ssl(site=ALL):
             for cert_type, local_cert_file, remote_cert_file in iter_certificates():
                 print '='*80
                 print 'Installing certificate %s...' % (remote_cert_file,)
-                if not int(dryrun):
-                    put(
-                        local_path=local_cert_file,
-                        remote_path=remote_cert_file, use_sudo=True)
+                put_or_dryrun(
+                    local_path=local_cert_file,
+                    remote_path=remote_cert_file, use_sudo=True)
     
     sudo_or_dryrun('mkdir -p %(apache_ssl_dir)s' % env)
     sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_ssl_dir)s' % env)

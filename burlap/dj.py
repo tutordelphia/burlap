@@ -160,10 +160,7 @@ def syncdb(site=None):
     render_remote_paths()
     for site, site_data in iter_unique_databases(site=site):
         cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb' % env
-        if dryrun:
-            print cmd
-        else:
-            run(cmd)
+        run_or_dryrun(cmd)
 
 @task_or_dryrun
 def migrate(app='', migration='', site=None, fake=0):
@@ -181,10 +178,7 @@ def migrate(app='', migration='', site=None, fake=0):
             env.django_migrate_app = ''
         cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(django_migrate_app)s %(django_migrate_migration)s %(django_migrate_fake_str)s' % env
         cmd = cmd.strip()
-        if dryrun:
-            print cmd
-        else:
-            run(cmd)
+        run_or_dryrun(cmd)
 
 def set_db(name=None, site=None, role=None, verbose=0):
     name = name or 'default'

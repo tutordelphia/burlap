@@ -736,8 +736,6 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0, verbose=0):
     """
     Restores a database snapshot onto the target database server.
     
-    If dryrun=1, commands will be printed but not executed.
-    
     If prep_only=1, commands for preparing the load will be generated,
     but not the command to finally load the snapshot.
     """

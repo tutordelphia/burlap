@@ -169,10 +169,7 @@ def deploy_services(site=None):
     #print env.supervisor_services_rendered
 
     fn = common.render_to_file('supervisor_daemon.template.config')
-    if dryrun:
-        print open(fn).read()
-    else:
-        put(local_path=fn, remote_path=env.supervisor_config_path, use_sudo=True)
+    put_or_dryrun(local_path=fn, remote_path=env.supervisor_config_path, use_sudo=True)
 
 @task_or_dryrun
 def deploy_all_services(**kwargs):
