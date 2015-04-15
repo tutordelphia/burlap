@@ -133,18 +133,21 @@ def status():
     sudo_or_dryrun(cmd)
 
 @task_or_dryrun
-def deploy(site=None):
+def deploy(site=None, verbose=0):
     """
     Writes entire crontab to the host.
     """
     from burlap.common import get_current_hostname
     
+    verbose = int(verbose)
     cron_crontabs = []
     hostname = get_current_hostname()
     target_sites = env.available_sites_by_host.get(hostname, None)
-    #print 'hostname: "%s"' % (hostname,) 
+    if verbose:
+        print>>sys.stderr, 'hostname: "%s"' % (hostname,) 
     for site, site_data in common.iter_sites(site=site, renderer=render_paths):
-        #print>>sys.stderr, 'site:',site
+        if verbose:
+            print>>sys.stderr, 'site:',site
         #print 'cron_crontabs_selected:',env.cron_crontabs_selected
         
         # Only load site configurations that are allowed for this host.
@@ -156,8 +159,13 @@ def deploy(site=None):
                 print>>sys.stderr, 'Skipping:', site
                 continue
         
+        if verbose:
+            print>>sys.stderr, 'env.cron_crontabs_selected:',env.cron_crontabs_selected
         for selected_crontab in env.cron_crontabs_selected:
-            for line in env.cron_crontabs_available.get(selected_crontab, []):
+            lines = env.cron_crontabs_available.get(selected_crontab, [])
+            if verbose:
+                print>>sys.stderr, 'lines:',lines
+            for line in lines:
                 cron_crontabs.append(line % env)
     
     if not cron_crontabs:

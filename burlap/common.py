@@ -602,14 +602,14 @@ def get_os_version():
         return common_os_version
     with settings(warn_only=True):
         with hide('running', 'stdout', 'stderr', 'warnings'):
-            ret = run_or_dryrun('cat /etc/fedora-release')
+            ret = _run('cat /etc/fedora-release')
             if ret.succeeded:
                 common_os_version = OS(
                     type = LINUX,
                     distro = FEDORA,
                     release = re.findall('release ([0-9]+)', ret)[0])
             else:
-                ret = run_or_dryrun('cat /etc/lsb-release')
+                ret = _run('cat /etc/lsb-release')
                 if ret.succeeded:
                     common_os_version = OS(
                         type = LINUX,

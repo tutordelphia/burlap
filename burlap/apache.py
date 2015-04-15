@@ -511,7 +511,7 @@ def install_auth_basic_user_file(site=None):
                 sudo_or_dryrun('htpasswd -b -c %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
 
 @task_or_dryrun
-def sync_media(sync_set=None):
+def sync_media(sync_set=None, clean=0):
     """
     Uploads select media to an Apache accessible directory.
     """
@@ -520,6 +520,7 @@ def sync_media(sync_set=None):
     
     render_remote_paths()
     
+    clean = int(clean)
     site_data = env.sites[env.SITE]
     env.update(site_data)
     
@@ -534,6 +535,9 @@ def sync_media(sync_set=None):
             if paths['local_path'].endswith('/') and not env.apache_sync_local_path.endswith('/'):
                 env.apache_sync_local_path += '/'
             env.apache_sync_remote_path = paths['remote_path'] % env
+            
+            if clean:
+                sudo_or_dryrun('rm -Rf %(apache_sync_remote_path)s' % env) 
             
             print 'Syncing %s to %s...' % (env.apache_sync_local_path, env.apache_sync_remote_path)
             
