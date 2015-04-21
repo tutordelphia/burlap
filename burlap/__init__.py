@@ -141,7 +141,7 @@ def _get_environ_handler(name, d):
             elif env.host_string:
                 env.is_local = 'localhost' in env.host_string or '127.0.0.1' in env.host_string
         
-        print('Loaded role %s.' % (name,))
+        print('Loaded role %s.' % (name,), file=sys.stderr)
     func.__doc__ = 'Sets enivronment variables for the "%s" role.' % (name,)
     return func
 

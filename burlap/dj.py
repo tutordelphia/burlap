@@ -28,10 +28,10 @@ if not env.dj_settings_loaded:
     env.dj_settings_loaded = True
     
     # The default django settings module import path.
-    print 'reset django settings module template!!!'
+    print>>sys.stderr, 'reset django settings module template!!!'
     if 'django_settings_module_template' in env:
-        print '!'*80
-        print 'env.django_settings_module_template:',env.django_settings_module_template
+        print>>sys.stderr,  '!'*80
+        print>>sys.stderr,  'env.django_settings_module_template:',env.django_settings_module_template
     env.django_settings_module_template = '%(app_name)s.settings.settings'
     #
     # This is the name of the executable to call to access Django's management

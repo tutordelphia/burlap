@@ -8,6 +8,7 @@ import importlib
 import warnings
 import glob
 import yaml
+import json
 from collections import namedtuple, OrderedDict
 from StringIO import StringIO
 from pprint import pprint
@@ -22,6 +23,7 @@ from fabric.api import (
     cd,
     hide,
 )
+from fabric import state
 
 import fabric.api
 
@@ -135,11 +137,25 @@ env.post_callbacks = []
 def set_dryrun(dryrun):
     global _dryrun
     _dryrun = bool(int(dryrun or 0))
+    if _dryrun:
+        state.output.running = False
+    else:
+        state.output.running = True
 
 def get_dryrun(dryrun=None):
     if dryrun is None or dryrun == '':
         return bool(int(_dryrun or 0))
     return bool(int(dryrun or 0))
+
+def render_command_prefix():
+    extra = {}
+    if env.key_filename:
+        extra['key'] = env.key_filename
+    extra_s = ''
+    if extra:
+        extra_s = json.dumps(extra)
+    s = '[%s@%s%s]' % (env.user, env.host_string, extra_s)
+    return s
 
 def local_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
@@ -147,7 +163,7 @@ def local_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print '[%s] local: %s' % (env.host_string, cmd)
+        print '%s local: %s' % (render_command_prefix(), cmd)
     else:
         return local(*args, **kwargs)
         
@@ -157,7 +173,7 @@ def run_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print '[%s] run: %s' % (env.host_string, cmd)
+        print '%s run: %s' % (render_command_prefix(), cmd)
     else:
         return _run(*args, **kwargs)
 
@@ -167,7 +183,7 @@ def sudo_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print '[%s] sudo: %s' % (env.host_string, cmd)
+        print '%s sudo: %s' % (render_command_prefix(), cmd)
     else:
         return _sudo(*args, **kwargs)
 
@@ -180,7 +196,7 @@ def put_or_dryrun(**kwargs):
         remote_path = kwargs.get('remote_path', local_path)
         cmd = 'rsync %s %s' % (local_path, remote_path)
         env.put_remote_path = remote_path
-        print '[%s] put: %s' % (env.host_string, cmd)
+        print '%s put: %s' % (render_command_prefix(), cmd)
     else:
         return _put(**kwargs)
 

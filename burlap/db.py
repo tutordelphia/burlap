@@ -34,6 +34,7 @@ from burlap.decorators import task_or_dryrun
 #from burlap.plan import run, sudo
 
 env.db_dump_fn = None
+env.db_dump_fn_default_pattern = None
 
 # This overrides the built-in load command.
 env.db_dump_command = None
@@ -731,6 +732,12 @@ def render_fn(fn):
     return commands.getoutput('echo %s' % fn)
 
 @task_or_dryrun
+def get_default_db_fn():
+    fn = env.db_dump_fn_default_pattern % env
+    fn = render_fn(fn)
+    return fn
+
+@task_or_dryrun
 @runs_once
 def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0, verbose=0):
     """
@@ -746,7 +753,11 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0, verbose=0):
 #    print 'db.load.site:',env.SITE
 #    print 'db.load.role:',env.ROLE
     
+    if not db_dump_fn:
+        db_dump_fn = get_default_db_fn()
+    
     env.db_dump_fn = render_fn(db_dump_fn)
+    
     set_db(site=env.SITE, role=env.ROLE)
     
     from_local = int(from_local)

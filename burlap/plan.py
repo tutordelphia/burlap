@@ -69,7 +69,11 @@ class Plan(object):
         self._steps = []
         
         self.verbose = verbose
-        
+    
+    @classmethod
+    def load(cls, fn):
+        todo
+    
     @property
     def steps(self):
         return list(self._steps)
@@ -140,81 +144,78 @@ class Plan(object):
             else:
                 print(step)
 
-def replace(function, mock):
-    """
-    Replaces all references to the given function with the given mock object.
-    """
-    if function.func_name in _originals:
-        return
-    _originals[function.func_name] = function
-    for obj in gc.get_referrers(function):
-        if obj is _originals:
-            # Don't replace the original.
-            continue
-        elif isinstance(obj, dict):
-            for _k, _v in obj.items():
-                if _v is function:
-                    obj[_k] = mock
-        elif isinstance(obj, types.FrameType):
-            for _k, _v in obj.f_locals.items():
-                if _v is function:
-                    obj.f_locals[_k] = mock
-        elif isinstance(obj, list):
-            for i, _v in list(enumerate(obj)):
-                if _v is function:
-                    obj[i] = mock
-        else:
-            raise NotImplementedError, type(obj)
+# def replace(function, mock):
+#     """
+#     Replaces all references to the given function with the given mock object.
+#     """
+#     if function.func_name in _originals:
+#         return
+#     _originals[function.func_name] = function
+#     for obj in gc.get_referrers(function):
+#         if obj is _originals:
+#             # Don't replace the original.
+#             continue
+#         elif isinstance(obj, dict):
+#             for _k, _v in obj.items():
+#                 if _v is function:
+#                     obj[_k] = mock
+#         elif isinstance(obj, types.FrameType):
+#             for _k, _v in obj.f_locals.items():
+#                 if _v is function:
+#                     obj.f_locals[_k] = mock
+#         elif isinstance(obj, list):
+#             for i, _v in list(enumerate(obj)):
+#                 if _v is function:
+#                     obj[i] = mock
+#         else:
+#             raise NotImplementedError, type(obj)
+# 
+# def get_original(name):
+#     """
+#     Returns a reference to the original function.
+#     """
+#     print('_originals:',_originals.keys())
+#     if name in _originals:
+#         print('using originals')
+#         return _originals[name]
+#     if hasattr(fabric.api, name):
+#         return getattr(fabric.api, name)
+#     if hasattr(fabric.contrib.files, name):
+#         return getattr(fabric.contrib.files, name)
+# 
+# @task_or_dryrun
+# def create():
+#     """
+#     Instantiates a new plan and replaces the standard `run` and `sudo`
+#     commands with mocks to log their command instead of executing.
+#     """
+#     env.plan_root = plan = Plan()
+#     replace(fabric.api.local, plan.local)
+#     replace(fabric.api.run, plan.run)
+#     replace(fabric.api.sudo, plan.sudo)
+#     replace(fabric.api.put, plan.put)
+#     replace(fabric.contrib.files.exists, plan.exists)
+#     
+# @task_or_dryrun
+# def show(csv=0):
+#     """
+#     Prints all pending commands.
+#     """
+#     assert env.plan_root, 'You must first run plan.create.'
+#     csv = int(csv)
+#     plan = env.plan_root
+#     plan.pprint(as_csv=csv)
+#     
+# @task_or_dryrun
+# def clear():
+#     """
+#     Deletes all commands in the current plan.
+#     """
+#     assert env.plan_root, 'You must first run plan.create.'
+#     env.plan_root.clear()
 
-def get_original(name):
-    """
-    Returns a reference to the original function.
-    """
-    print('_originals:',_originals.keys())
-    if name in _originals:
-        print('using originals')
-        return _originals[name]
-    if hasattr(fabric.api, name):
-        return getattr(fabric.api, name)
-    if hasattr(fabric.contrib.files, name):
-        return getattr(fabric.contrib.files, name)
-
 @task_or_dryrun
-def create():
-    """
-    Instantiates a new plan and replaces the standard `run` and `sudo`
-    commands with mocks to log their command instead of executing.
-    """
-    env.plan_root = plan = Plan()
-    replace(fabric.api.local, plan.local)
-    replace(fabric.api.run, plan.run)
-    replace(fabric.api.sudo, plan.sudo)
-    replace(fabric.api.put, plan.put)
-    replace(fabric.contrib.files.exists, plan.exists)
-    
-@task_or_dryrun
-def show(csv=0):
-    """
-    Prints all pending commands.
-    """
-    assert env.plan_root, 'You must first run plan.create.'
-    csv = int(csv)
-    plan = env.plan_root
-    plan.pprint(as_csv=csv)
-
-@task_or_dryrun
-def execute():
-    """
-    Runs the commands in the currently cached plan.
-    """
-    assert env.plan_root, 'You must first run plan.create.'
-    todo
-    
-@task_or_dryrun
-def clear():
-    """
-    Deletes all commands in the current plan.
-    """
-    assert env.plan_root, 'You must first run plan.create.'
-    env.plan_root.clear()
+def execute(fn):
+    plan = Plan.load(fn)
+    plan.execute()
     
