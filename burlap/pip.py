@@ -1,8 +1,21 @@
+from __future__ import absolute_import
+
 import os
 import sys
 import re
 import tempfile
+import traceback
 from collections import defaultdict
+
+#sys.path.insert(0, '/home/chris/git/alphabuyer/.env/local/lib/python2.7/site-packages')
+# try:
+#     sys.path.remove('')
+# except ValueError:
+#     pass
+# sys.path.remove('.')
+# import pip
+# print pip.__file__
+# print 'pip0:',dir(pip)
 
 from fabric.api import (
     env,
@@ -50,6 +63,7 @@ env.pip_local_cache_dir_template = './.pip_cache/%(ROLE)s'
 env.pip_upgrade = ''
 env.pip_install_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install %(pip_no_deps)s %(pip_upgrade_flag)s --build %(pip_build_dir)s --find-links file://%(pip_cache_dir)s --no-index %(pip_package)s; deactivate"
 env.pip_uninstall_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s uninstall %(pip_package)s; deactivate"
+env.pip_depend_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install --no-install --ignore-installed --download=/tmp --use-mirrors %(pip_package)s; deactivate"
 
 INSTALLED = 'installed'
 PENDING = 'pending'
@@ -174,6 +188,89 @@ def get_desired_package_versions(preserve_order=False):
         return versions_lst
     return versions
 
+PIP_REQ_NAME_PATTERN = re.compile('^[a-z_0-9]+', flags=re.I)
+PIP_REQ_SPEC_PATTERN = re.compile(',?([\!\>\<\=]+)([a-z0-9\.]+)', flags=re.I)
+
+@task_or_dryrun
+def update_dependency_cache(name=None):
+    import shutil, csv
+    from requirements.requirement import Requirement
+
+    # Get the real pip module.
+#     from distutils.sysconfig import get_python_lib
+#     import imp
+#     real_pip = imp.load_module('pip', *imp.find_module('pip', [get_python_lib()]))
+#     
+#     D = { d.key: d for d in pip.get_installed_distributions() }
+#     F = lambda xs: sum([ F(x) if isinstance(x, list) else [x] for x in xs ], [])
+#     R = lambda k: [k] + F([ R(r.key) for r in D[k].requires() ])
+#     print 'requires:'+(" ".join(R("mypkg") if "mypkg" in D else []))
+
+    try:
+        shutil.rmtree('./.env/build')
+    except OSError:
+        pass
+
+    dep_pattern = re.compile(
+        '^\s*Collecting\s+(?P<name>[^\(\n]+)\(from\s+(?P<from>[^,\)]+)',
+        flags=re.I|re.DOTALL|re.M)
+
+    env.pip_path_versioned = env.pip_path % env
+    
+    #depends_fn = '.pip_cache/%s/.depends' % env.ROLE
+    depends_fn = 'roles/all/pip-dependencies.txt' % env.ROLE
+    fout = open(depends_fn, 'w')
+    headers = [
+        'package_name',
+        'package_version',
+        'dependency_name',
+        'dependency_specs',
+    ]
+    writer = csv.DictWriter(fout, headers)
+    writer.writerow(dict(zip(headers, headers)))
+    
+    package_to_fqv = {}
+    for dep in pip_to_deps():
+        #print dep
+        assert dep.name not in package_to_fqv, 'Package %s specified multiple times!' % dep.name
+        package_to_fqv[dep.name] = str(dep)
+    
+    #dep_tree = defaultdict(set) # {package:set([deps])}
+    for line in iter_pip_requirements():
+        
+        if name and name not in line:
+            continue
+        
+        print line
+        
+        env.pip_package = line
+        cmd = env.pip_depend_command % env
+        ret = local_or_dryrun(cmd, capture=True)
+        matches = dep_pattern.findall(ret) # [(child,parent)]
+        for child, parent in matches:
+            try:
+                child_line = child.strip()
+                #print 'child_line:',child_line
+                #child = Requirement(child_line)
+                child_name = PIP_REQ_NAME_PATTERN.findall(child_line)[0]
+                child_specs = PIP_REQ_SPEC_PATTERN.findall(child_line)
+                #print 'child:',child_name,child_specs
+                parent = Requirement.parse_line(parent.strip())
+                #print 'parent:',parent.__dict__
+                assert parent.specs and parent.specs[0][0] == '==', 'Invalid parent: %s' % (parent,)
+                writer.writerow(dict(
+                    package_name=parent.name,
+                    package_version=parent.specs[0][1],
+                    dependency_name=child_name,
+                    dependency_specs=';'.join([''.join(_) for _ in child_specs]),
+                ))
+                fout.flush()
+            except Exception as e:
+                print>>sys.stderr, ret
+                traceback.print_exc(file=sys.stderr)
+            
+    fout.close()
+
 @task_or_dryrun
 @runs_once
 def check_report():
@@ -187,6 +284,60 @@ def check_report():
     pass
 
 GITHUB_TO_PIP_NAME_PATTERN = re.compile('^.*github.com/[^/]+/(?P<name>[^/]+)/[^/]+/(?P<tag>[^/]+)/?')
+
+def pip_line_to_package_name(line):
+    return list(pip_to_deps(lines=[line]))[0].name
+
+def pip_to_deps(lines=None):
+    if not lines:
+        lines = iter_pip_requirements()
+#     total = len(lines)
+#     i = 0
+    for line in lines:
+#         i += 1
+#         print '\rChecking requirement %i of %i...' % (i, total),
+#         sys.stdout.flush()
+        #if i > 5:break#TODO:remove
+        
+        # Extract the dependency data from the pip-requirements.txt line.
+        # e.g.
+        #type,name,uri,version,rss_field,rss_regex
+        #pip,Django,Django,1.4,,
+        parts = line.split('==')
+        if len(parts) == 2:
+            dep_type = versioner.PIP
+            name = uri = parts[0].strip()
+            version = parts[1].strip()
+        elif '>=' in line and len(line.split('>=')) == 2:
+            dep_type = versioner.PIP
+            parts = line.split('>=')
+            name = uri = parts[0].strip()
+            version = parts[1].strip()
+        elif 'github' in line.lower():
+            dep_type = versioner.GITHUB_TAG
+            matches = GITHUB_TO_PIP_NAME_PATTERN.findall(line)
+            assert matches, 'No github tag matches for line: %s' % line
+            name = matches[0][0]
+            uri = line
+            tag_name = matches[0][1].strip()
+            version = tag_name.replace(name, '')[1:].strip()
+            if version.endswith('.zip'):
+                version = version.replace('.zip', '')
+            if version.endswith('.tar.gz'):
+                version = version.replace('.tar.gz', '')
+        else:
+            raise NotImplementedError, 'Unhandled line: %s' % line
+        
+        # Create the dependency.
+        dep = versioner.Dependency(
+            type=dep_type,
+            name=name,
+            uri=uri,
+            version=version,
+            rss_field=None,
+            rss_regex=None,
+        )
+        yield dep
 
 @task_or_dryrun
 def check_for_updates():

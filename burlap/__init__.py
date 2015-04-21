@@ -1,4 +1,5 @@
 from __future__ import print_function
+from __future__ import absolute_import
 
 import copy
 import os
@@ -19,8 +20,8 @@ burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
 no_load = int(os.environ.get('BURLAP_NO_LOAD', 0))
 
 env = None
-common = None
-debug = None
+#common = None
+#debug = None
 env_default = {}
 
 try:
@@ -51,8 +52,8 @@ try:
     yaml.add_constructor(u'tag:yaml.org,2002:python/tuple', _construct_tuple)
     yaml.add_representer(types.FunctionType, _represent_function)
 
-    import common
-    import debug
+    from . import common
+    from . import debug
     
     env_default = common.save_env()
 
@@ -60,6 +61,16 @@ except ImportError as e:
     print(e, file=sys.stderr)
     pass
 
+try:
+    common
+except NameError:
+    common = None
+
+try:
+    debug
+except NameError:
+    debug = None
+    
 def _get_environ_handler(name, d):
     """
     Dynamically creates a Fabric task for each configuration role.
@@ -277,7 +288,7 @@ if common and not no_load:
         if module_name in locals():
             continue
         __all__.append(module_name)
-        #print('Importing: %s' % module_name, file=sys.stderr)
+        print('Importing: %s' % module_name, file=sys.stderr)
         module = loader.find_module(module_name).load_module(module_name)
         sub_modules[module_name] = module
 

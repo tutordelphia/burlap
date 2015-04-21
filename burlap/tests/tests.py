@@ -21,7 +21,10 @@ except ImportError as e:
 
 from fabric.api import env, execute, task, run
 
-from burlap import package, pip, tarball, service, user, common
+from burlap import (
+    package, tarball, service, user, common,
+    pip,
+)
 
 class Tests(unittest.TestCase):
     

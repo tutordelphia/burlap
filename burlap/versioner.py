@@ -88,6 +88,12 @@ class Dependency(object):
         self.rss_regex = rss_regex
         self._cache = {}
     
+    def __unicode__(self):
+        return u'%s==%s' % (self.name, self.version)
+    
+    def __str__(self):
+        return unicode(self)
+    
     def _get_current_version_pip(self):
         client = xmlrpclib.ServerProxy('http://pypi.python.org/pypi')
         v = client.package_releases(self.uri)

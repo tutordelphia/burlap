@@ -32,19 +32,31 @@ from burlap.decorators import task_or_dryrun
 env.AWS_ACCESS_KEY_ID = None
 env.AWS_SECRET_ACCESS_KEY = None
 env.s3_sync_enabled = False
-env.s3_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
+# {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
+env.s3_sync_sets = {}
 env.s3_media_postfix = ''
 
 S3SYNC = 'S3SYNC'
 
 common.required_system_packages[S3SYNC] = {
     common.FEDORA: ['ruby', 'rubygems'],
-    (common.UBUNTU, '12.04'): ['ruby', 'rubygems', 'libxml2-dev', 'libxslt-dev'],
+    (common.UBUNTU, '12.04'): [
+        'ruby', 'rubygems', 'libxml2-dev', 'libxslt-dev'
+    ],
 }
 common.required_ruby_packages[S3SYNC] = {
     common.FEDORA: ['s3sync==1.2.5'],
     common.UBUNTU: ['s3sync==1.2.5'],
 }
+
+@task_or_dryrun
+def get_or_create_bucket(name):
+    if not get_dryrun():
+        conn = boto.connect_s3()
+        bucket = conn.create_bucket(name)
+        return bucket
+    else:
+        print 'boto.connect_s3().create_bucket(%s)' % repr(name)
 
 @task_or_dryrun
 def sync(sync_set, auto_invalidate=1):
@@ -98,7 +110,8 @@ def sync(sync_set, auto_invalidate=1):
         print cmd
         if not get_dryrun():
             if is_local:
-                rets.append(local_or_dryrun(cmd, capture=True)) # can't see progress
+                # can't see progress
+                rets.append(local_or_dryrun(cmd, capture=True))
                 #rets.append(run(cmd))
             else:
                 rets.append(run(cmd))
@@ -153,8 +166,8 @@ def invalidate(*paths):
                 target_dist = dist
                 break
         if not target_dist:
-            raise Exception, \
-                'Target distribution %s could not be found in the AWS account.' \
+            raise Exception, ('Target distribution %s could not be found '
+                'in the AWS account.') \
                     % (settings.AWS_STATIC_BUCKET_NAME,)
         print 'Using distribution %s associated with origin %s.' \
             % (target_dist.id, _settings.AWS_STATIC_BUCKET_NAME)
