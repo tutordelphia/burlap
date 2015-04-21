@@ -134,6 +134,13 @@ env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk 
 
 env.post_callbacks = []
 
+env.burlap_data_dir = '.burlap'
+
+def init_burlap_data_dir():
+    d = env.burlap_data_dir
+    if not os.path.isdir(env.burlap_data_dir):
+        os.mkdir(d)
+
 def set_dryrun(dryrun):
     global _dryrun
     _dryrun = bool(int(dryrun or 0))
