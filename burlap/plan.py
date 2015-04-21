@@ -151,7 +151,7 @@ class Plan(object):
     
     def add_history(self, index, start, end):
         fout = open(self.plan_dir_history, 'a')
-        fout.write('%s,%s,%s' % (index, start, end))
+        fout.write('%s,%s,%s\n' % (index, start, end))
         fout.flush()
         fout.close()
     
@@ -207,6 +207,7 @@ class Plan(object):
     
     def execute(self, i=None, j=None):
         i = i or self.index
+        steps_ran = []
         for step_i, step in enumerate(self.steps):
             if step_i < i:
                 continue
@@ -215,6 +216,7 @@ class Plan(object):
             t0 = datetime.datetime.utcnow().isoformat()
             step.execute()
             t1 = datetime.datetime.utcnow().isoformat()
+            steps_ran.append(step)
             
             # Record success.
             if not common.get_dryrun():
@@ -223,6 +225,8 @@ class Plan(object):
             
             if j is not None and step_i >= j:
                 break
+                
+        return steps_ran
 
 @task_or_dryrun
 def execute(name, verbose=1):
@@ -232,10 +236,14 @@ def execute(name, verbose=1):
             print('Execution of plan %s is complete.' % (plan.name,), file=sys.stderr)
         else:
             print('Execution of plan %s is %.02f%% complete.' % (plan.name, plan.percent_complete), file=sys.stderr)
-    plan.execute()
+    steps = []
+    if not plan.is_complete():
+        steps = plan.execute()
+        if verbose:
+            if plan.is_complete():
+                print('Execution of plan %s is complete.' % (plan.name,), file=sys.stderr)
+            else:
+                print('Execution of plan %s is %.02f%% complete.' % (plan.name, plan.percent_complete), file=sys.stderr)
     if verbose:
-        if plan.is_complete():
-            print('Execution of plan %s is complete.' % (plan.name,), file=sys.stderr)
-        else:
-            print('Execution of plan %s is %.02f%% complete.' % (plan.name, plan.percent_complete), file=sys.stderr)
-            
+        print('Executed %i steps.' % (len(steps),), file=sys.stderr)
+
