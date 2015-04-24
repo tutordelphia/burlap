@@ -25,6 +25,7 @@ if not 'plan_init' in env:
     env.plan_originals = {}
 _originals = env.plan_originals
 
+env.plan = None
 env.plan_data_dir = '%(burlap_data_dir)s/plans'
 
 RUN = 'run'
@@ -111,11 +112,11 @@ class Plan(object):
     A sequence of steps for accomplishing a state change.
     """
     
-    def __init__(self, name, verbose=1):
+    def __init__(self, name, role=None, verbose=1):
         
         self.verbose = verbose
         
-        self.plan_dir = os.path.join(init_plan_data_dir(), env.ROLE, name)
+        self.plan_dir = os.path.join(init_plan_data_dir(), role or env.ROLE, name)
         try:
             os.makedirs(self.plan_dir)
         except OSError:
@@ -228,6 +229,11 @@ class Plan(object):
                 
         return steps_ran
 
+@task_or_dryrun
+def record(name):
+    common.set_dryrun(1)
+    env.plan = Plan(name=name)
+    
 @task_or_dryrun
 def execute(name, verbose=1):
     plan = Plan.load(name, verbose=int(verbose))

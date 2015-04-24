@@ -288,7 +288,7 @@ if common and not no_load:
         if module_name in locals():
             continue
         __all__.append(module_name)
-        print('Importing: %s' % module_name, file=sys.stderr)
+        #print('Importing: %s' % module_name, file=sys.stderr)
         module = loader.find_module(module_name).load_module(module_name)
         sub_modules[module_name] = module
 

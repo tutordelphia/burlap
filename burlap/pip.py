@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import os
 import sys
+import csv
 import re
 import tempfile
 import traceback
@@ -24,6 +25,7 @@ from fabric.api import (
     cd,
     runs_once,
     execute,
+    hide,
 )
 
 from fabric.contrib import files
@@ -188,11 +190,35 @@ def get_desired_package_versions(preserve_order=False):
         return versions_lst
     return versions
 
-PIP_REQ_NAME_PATTERN = re.compile('^[a-z_0-9]+', flags=re.I)
+PIP_REQ_NAME_PATTERN = re.compile('^[a-z_\-0-9]+', flags=re.I)
 PIP_REQ_SPEC_PATTERN = re.compile(',?([\!\>\<\=]+)([a-z0-9\.]+)', flags=re.I)
+
+PIP_DEP_PATTERN = re.compile(
+    '^\s*Collecting\s+(?P<name>[^\(\n]+)\(from\s+(?P<from>[^,\)]+)',
+    flags=re.I|re.DOTALL|re.M)
+    
+PIP_DEPENDS_HEADERS = [
+    'package_name',
+    'package_version',
+    'dependency_name',
+    'dependency_specs',
+]
+
+@task_or_dryrun
+def get_dependencies_fn(output=''):
+    #depends_fn = '.pip_cache/%s/.depends' % env.ROLE
+    if output:
+        depends_fn = output
+    else:
+        depends_fn = 'roles/all/pip-dependencies.txt'
+    return depends_fn
 
 @task_or_dryrun
 def update_dependency_cache(name=None):
+    """
+    Reads all pip package dependencies and saves them to a file for later use with organizing
+    pip-requirements.txt.
+    """
     import shutil, csv
     from requirements.requirement import Requirement
 
@@ -206,28 +232,20 @@ def update_dependency_cache(name=None):
 #     R = lambda k: [k] + F([ R(r.key) for r in D[k].requires() ])
 #     print 'requires:'+(" ".join(R("mypkg") if "mypkg" in D else []))
 
+    common.set_show(0)
+
     try:
         shutil.rmtree('./.env/build')
     except OSError:
         pass
 
-    dep_pattern = re.compile(
-        '^\s*Collecting\s+(?P<name>[^\(\n]+)\(from\s+(?P<from>[^,\)]+)',
-        flags=re.I|re.DOTALL|re.M)
-
     env.pip_path_versioned = env.pip_path % env
     
-    #depends_fn = '.pip_cache/%s/.depends' % env.ROLE
-    depends_fn = 'roles/all/pip-dependencies.txt' % env.ROLE
-    fout = open(depends_fn, 'w')
-    headers = [
-        'package_name',
-        'package_version',
-        'dependency_name',
-        'dependency_specs',
-    ]
-    writer = csv.DictWriter(fout, headers)
-    writer.writerow(dict(zip(headers, headers)))
+    #depends_fn = get_dependencies_fn(output)
+#     fout = open(depends_fn, 'w')
+    fout = sys.stdout
+    writer = csv.DictWriter(fout, PIP_DEPENDS_HEADERS)
+    writer.writerow(dict(zip(PIP_DEPENDS_HEADERS, PIP_DEPENDS_HEADERS)))
     
     package_to_fqv = {}
     for dep in pip_to_deps():
@@ -236,17 +254,26 @@ def update_dependency_cache(name=None):
         package_to_fqv[dep.name] = str(dep)
     
     #dep_tree = defaultdict(set) # {package:set([deps])}
-    for line in iter_pip_requirements():
+    reqs = list(iter_pip_requirements())
+    total = len(reqs)
+    i = 0
+    for line in reqs:
+        i += 1
         
         if name and name not in line:
             continue
         
-        print line
+        print>>sys.stderr, '%s: %i %i %.02f%%' % (line, i, total, i/float(total)*100)
         
         env.pip_package = line
         cmd = env.pip_depend_command % env
-        ret = local_or_dryrun(cmd, capture=True)
-        matches = dep_pattern.findall(ret) # [(child,parent)]
+        with hide('output', 'running', 'warnings'):
+            ret = local_or_dryrun(cmd, capture=True)
+        matches = PIP_DEP_PATTERN.findall(ret) # [(child,parent)]
+#         print '~'*80
+#         print 'matches:',matches
+#         print '~'*80
+#         return
         for child, parent in matches:
             try:
                 child_line = child.strip()
@@ -255,12 +282,23 @@ def update_dependency_cache(name=None):
                 child_name = PIP_REQ_NAME_PATTERN.findall(child_line)[0]
                 child_specs = PIP_REQ_SPEC_PATTERN.findall(child_line)
                 #print 'child:',child_name,child_specs
-                parent = Requirement.parse_line(parent.strip())
+                parent = Requirement.parse_line(parent.strip().split('->')[0])
                 #print 'parent:',parent.__dict__
-                assert parent.specs and parent.specs[0][0] == '==', 'Invalid parent: %s' % (parent,)
+#                 print 'parent.specs:',parent.specs,bool(parent.specs)
+                assert not parent.specs \
+                or (parent.specs and parent.specs[0][0] in ('==', '>=', '<=', '!=', '<', '>')), \
+                    'Invalid parent: %s (%s)' % (parent, parent.specs)
+                    
+#                 if parent.specs and parent.specs[0][0] == '==':
+#                     parent.specs[0] = list(parent.specs[0])
+#                     parent.specs[0][0] = '>='
+                parent_version = ''
+                if parent.specs:
+                    parent_version = parent.specs[0][1]
+                    
                 writer.writerow(dict(
                     package_name=parent.name,
-                    package_version=parent.specs[0][1],
+                    package_version=parent_version,
                     dependency_name=child_name,
                     dependency_specs=';'.join([''.join(_) for _ in child_specs]),
                 ))
@@ -269,7 +307,93 @@ def update_dependency_cache(name=None):
                 print>>sys.stderr, ret
                 traceback.print_exc(file=sys.stderr)
             
-    fout.close()
+    #fout.close()
+
+def topological_sort(source):
+    """perform topo sort on elements.
+
+    :arg source: list of ``(name, [list of dependancies])`` pairs
+    :returns: list of names, with dependancies listed first
+    """
+    if isinstance(source, dict):
+        source = source.items()
+    pending = sorted([(name, set(deps)) for name, deps in source]) # copy deps so we can modify set in-place       
+    emitted = []        
+    while pending:
+        next_pending = []
+        next_emitted = []
+        for entry in pending:
+            name, deps = entry
+            deps.difference_update(emitted) # remove deps we emitted last pass
+            if deps: # still has deps? recheck during next pass
+                next_pending.append(entry) 
+            else: # no more deps? time to emit
+                yield name 
+                emitted.append(name) # <-- not required, but helps preserve original ordering
+                next_emitted.append(name) # remember what we emitted for difference_update() in next pass
+        if not next_emitted: # all entries have unmet deps, one of two things is wrong...
+            raise ValueError("cyclic or missing dependancy detected: %r" % (next_pending,))
+        pending = next_pending
+        emitted = next_emitted
+
+@task_or_dryrun
+def sort_requirements():
+    
+    ignore_packages = set(['setuptools'])
+    
+    package_names_dep = set()
+    package_names_req = set()
+    package_name_to_version = {}
+    package_name_to_original = {}
+    
+    for line in open('roles/all/pip-requirements.txt').readlines():
+        line = line.strip()
+        package_name, package_version = line.split('==')
+        if package_name in ignore_packages:
+            continue
+        package_name_to_original[package_name.lower()] = package_name
+        package_names_req.add(package_name.lower())
+        package_name_to_version[package_name.lower()] = package_version
+    
+    package_to_deps = defaultdict(set) # {package:set(dependencies)}
+    
+    depends_fn = get_dependencies_fn()
+    reader = csv.DictReader(open(depends_fn))
+    for line in reader:
+        print>>sys.stderr, line
+        package_name = line['package_name'].lower()
+        if package_name in ignore_packages:
+            continue
+        dependency_name = line['dependency_name'].lower()
+        if dependency_name in ignore_packages:
+            continue
+        package_names_dep.add(package_name)
+        package_names_dep.add(dependency_name)
+        package_to_deps[package_name].add(dependency_name)
+        
+    reqs_missing_deps = set(map(str.lower, package_names_req)).difference(set(map(str.lower, package_names_dep)))
+    print>>sys.stderr, 'reqs_missing_deps:',reqs_missing_deps
+    
+    deps_missing_reqs = set(map(str.lower, package_names_dep)).difference(set(map(str.lower, package_names_req)))
+    print>>sys.stderr, 'deps_missing_reqs:',deps_missing_reqs
+    
+#     def sort_by_dep(a_name, b_name):
+#         if a_name in package_to_deps[b_name]:
+#             # b depends on a, so a should come first
+#             return -1
+#         elif b_name in package_to_deps[a_name]:
+#             # a depends on b, so a should come first
+#             return +1
+#         #else:
+#         #    return cmp(a_name, b_name)
+#         return 0
+    
+    for package_name in package_names_req:
+        package_to_deps[package_name]
+    
+    all_names = topological_sort(package_to_deps)
+    for name in all_names:
+        print '%s==%s' % (package_name_to_original[name], package_name_to_version[name])
 
 @task_or_dryrun
 @runs_once
@@ -444,12 +568,14 @@ def check(return_type=PENDING):
     
     return_type := pending|installed
     """
-    from burlap.plan import get_original
-    run0 = get_original('run')
-    import inspect
-    print 'run0:',run0, inspect.getsourcefile(run0)
+#     from burlap.plan import get_original
+#     run0 = get_original('run')
+#     import inspect
+#     print 'run0:',run0, inspect.getsourcefile(run0)
     
     assert env[ROLE]
+    
+    ignored_packages = set(['pip', 'argparse'])
     
     env.pip_path_versioned = env.pip_path % env
     init()
@@ -464,7 +590,7 @@ def check(return_type=PENDING):
     else:
         cmd_template = "%(pip_path_versioned)s freeze"
     cmd = cmd_template % env
-    result = run0(cmd)
+    result = run_or_dryrun(cmd)
     installed_package_versions = {}
     for line in result.split('\n'):
         line = line.strip()
@@ -480,6 +606,8 @@ def check(return_type=PENDING):
         if not k.strip() or not v.strip():
             continue
         print 'Installed:',k,v
+        if k.strip().lower() in ignored_packages:
+            continue
         installed_package_versions[k.strip()] = v.strip()
         
     desired_package_version = get_desired_package_versions()
@@ -497,6 +625,8 @@ def check(return_type=PENDING):
         print '!'*80
         print 'Not installed:'
         for k,(v,line) in sorted(not_installed.iteritems(), key=lambda o:o[0]):
+            if k.lower() in ignored_packages:
+                continue
             print k,v
             pending.append((line,'install'))
     else:

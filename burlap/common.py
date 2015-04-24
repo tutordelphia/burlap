@@ -78,6 +78,8 @@ DJANGO = 'DJANGO'
 SITE = 'SITE'
 ROLE = 'ROLE'
 
+LOCALHOSTS = ('localhost', '127.0.0.1')
+
 env.confirm_deployment = False
 env.is_local = None
 env.base_config_dir = '.'
@@ -90,6 +92,8 @@ env.sites = {} # {site:site_settings}
 
 # If true, prevents run() from executing its command.
 _dryrun = False
+
+_show_command_output = True
 
 env.services = []
 required_system_packages = type(env)() # {service:{os:[packages]}
@@ -154,6 +158,12 @@ def get_dryrun(dryrun=None):
         return bool(int(_dryrun or 0))
     return bool(int(dryrun or 0))
 
+def set_show(v):
+    _show_command_output = bool(int(v))
+
+def get_show():
+    return _show_command_output
+    
 def render_command_prefix():
     extra = {}
     if env.key_filename:
@@ -195,15 +205,23 @@ def sudo_or_dryrun(*args, **kwargs):
         return _sudo(*args, **kwargs)
 
 def put_or_dryrun(**kwargs):
-    dryrun = int(kwargs.get('dryrun', 0))
+    dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
     if dryrun:
         local_path = kwargs['local_path']
-        remote_path = kwargs.get('remote_path', local_path)
-        cmd = 'rsync %s %s' % (local_path, remote_path)
-        env.put_remote_path = remote_path
-        print '%s put: %s' % (render_command_prefix(), cmd)
+        remote_path = kwargs.get('remote_path', None)
+        if not remote_path:
+            remote_path = tempfile.mktemp()
+        if not remote_path.startswith('/'):
+            remote_path = '/tmp/' + remote_path
+        cmd = 'rsync --progress --verbose %s %s' % (local_path, remote_path)
+        if env.host_string not in LOCALHOSTS:
+            env.put_remote_path = remote_path
+            print '%s put: %s' % (render_command_prefix(), cmd)
+        else:
+            env.put_remote_path = local_path
+            
     else:
         return _put(**kwargs)
 

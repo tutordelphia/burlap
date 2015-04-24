@@ -15,6 +15,8 @@ from burlap.common import (
 )
 from burlap.decorators import task_or_dryrun
 
+env.shell_load_dj = True
+
 @task_or_dryrun
 def list_settings(name):
     from burlap import load_yaml_settings

@@ -1089,14 +1089,14 @@ def install_sql(name='default', site=None):
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         #print 'postgres'
         for path in get_paths('postgresql'):
-            print 'Installing PostgreSQL script %s.' % path
+            #print>>sys.stderr, 'Installing PostgreSQL script %s.' % path
             put_or_dryrun(local_path=path)
             #cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s") % env
             cmd = ("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s") % env
             run_or_dryrun(cmd)
     elif 'mysql' in env.db_engine:
         for path in get_paths('mysql'):
-            print 'Installing MySQL script %s.' % path
+            #print>>sys.stderr, 'Installing MySQL script %s.' % path
             put_or_dryrun(local_path=path)
             cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s") % env
             run_or_dryrun(cmd)

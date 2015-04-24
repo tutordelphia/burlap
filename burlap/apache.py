@@ -38,6 +38,7 @@ from burlap import common
 # your web application.
 env.apache_application_name = None
 
+env.apache_error_log = '/var/log/apache2/error.log'
 env.apache_log_level = 'warn'
 
 env.apache_auth_basic = False
@@ -551,6 +552,10 @@ def sync_media(sync_set=None, clean=0):
             local_or_dryrun(cmd)
             sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
 
+@task_or_dryrun
+def view_error_log():
+    run_or_dryrun('tail -f %(apache_error_log)s' % env)
+    
 @task_or_dryrun
 def configure_all():
     """
