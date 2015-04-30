@@ -269,7 +269,7 @@ def check_required():
         assert env[name], 'Missing %s.' % (name,)
 
 def set_apache_site_specifics(site):
-    from burlap.dj2 import get_settings
+    from burlap.dj import get_settings
     
     site_data = env.sites[site]
     
@@ -315,7 +315,7 @@ def configure(full=1, site=None, delete_old=0, verbose=0):
     from burlap.common import get_current_hostname
     from burlap import service
     
-    print 'Configuring Apache...'
+    print>>sys.stderr, 'Configuring Apache...'
     
     verbose = int(verbose)
     
@@ -333,9 +333,9 @@ def configure(full=1, site=None, delete_old=0, verbose=0):
         sudo_or_dryrun(cmd)
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
-        print '-'*80
-        print 'Site:',site
-        print '-'*80
+        print>>sys.stderr, '-'*80
+        print>>sys.stderr, 'Site:',site
+        print>>sys.stderr, '-'*80
         
         # Only load site configurations that are allowed for this host.
         if target_sites is None:
@@ -345,9 +345,9 @@ def configure(full=1, site=None, delete_old=0, verbose=0):
             if site not in target_sites:
                 continue
                 
-        print 'env.apache_ssl_domain:',env.apache_ssl_domain
-        print 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
-        print 'env.django_settings_module:',env.django_settings_module
+        print>>sys.stderr, 'env.apache_ssl_domain:',env.apache_ssl_domain
+        print>>sys.stderr, 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
+        print>>sys.stderr, 'env.django_settings_module:',env.django_settings_module
 #        raw_input('enter')
         fn = common.render_to_file('django.template.wsgi', verbose=verbose)
         remote_dir = os.path.split(env.apache_django_wsgi)[0]
@@ -432,9 +432,9 @@ def configure_modevasive():
     put(local_path=fn, remote_path='/etc/apache2/mods-available/mod-evasive.conf', use_sudo=True)
     
 def iter_certificates():
-    print 'apache_ssl_domain:',env.apache_ssl_domain
+    print>>sys.stderr, 'apache_ssl_domain:',env.apache_ssl_domain
     for cert_type, cert_file_template in env.apache_ssl_certificates_templates:
-        print 'cert_type, cert_file_template:',cert_type, cert_file_template
+        print>>sys.stderr, 'cert_type, cert_file_template:',cert_type, cert_file_template
         _local_cert_file = os.path.join(env.apache_ssl_dir_local, cert_file_template % env)
         local_cert_file = find_template(_local_cert_file)
         assert local_cert_file, 'Unable to find local certificate file: %s' % (_local_cert_file,)
