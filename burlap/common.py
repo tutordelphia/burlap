@@ -143,14 +143,17 @@ env.post_callbacks = []
 
 env.burlap_data_dir = '.burlap'
 
-def shellquote(s):
-    #return "'" + s.replace("'", "'\\''") + "'"
-    s = pipes.quote(s)
-    s = repr(s)
-    if s.startswith("u'") or s.startswith('u"'):
-        s = s[4:-4]
+def shellquote(s, singleline=True):
+    if singleline:
+        s = pipes.quote(s)
+        s = repr(s)
+        if s.startswith("u'") or s.startswith('u"'):
+            s = s[4:-4]
+        else:
+            s = s[3:-3]
+        s = '"%s"' % s
     else:
-        s = s[3:-3]
+        s = '{}'.format(pipes.quote(s))
     return s
 
 def init_burlap_data_dir():
@@ -731,7 +734,7 @@ def render_to_file(template, fn=None, verbose=True, **kwargs):
     else:
         fd, fn = tempfile.mkstemp()
         fout = os.fdopen(fd, 'wt')
-    print 'echo -e "%s" > %s' % (shellquote(content), fn)
+    print 'echo -e %s > %s' % (shellquote(content), fn)
     fout.write(content)
     fout.close()
     return fn
