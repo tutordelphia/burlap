@@ -353,7 +353,8 @@ def configure(full=1, site=None, delete_old=0, verbose=0):
         remote_dir = os.path.split(env.apache_django_wsgi)[0]
         cmd = 'mkdir -p %s' % remote_dir
         sudo_or_dryrun(cmd)
-            
+        
+        print>>sys.stderr, fn
         put_or_dryrun(local_path=fn, remote_path=env.apache_django_wsgi, use_sudo=True)
         
         if env.apache_ssl:

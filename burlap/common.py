@@ -8,6 +8,7 @@ import importlib
 import warnings
 import glob
 import yaml
+import pipes
 import json
 import getpass
 from collections import namedtuple, OrderedDict
@@ -142,6 +143,11 @@ env.post_callbacks = []
 
 env.burlap_data_dir = '.burlap'
 
+def shellquote(s):
+    #return "'" + s.replace("'", "'\\''") + "'"
+    s = pipes.quote(s)
+    return repr(s)[3:-3]
+
 def init_burlap_data_dir():
     d = env.burlap_data_dir
     if not os.path.isdir(env.burlap_data_dir):
@@ -208,6 +214,7 @@ def sudo_or_dryrun(*args, **kwargs):
 
 def put_or_dryrun(**kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
+    use_sudo = kwargs.get('use_sudo', False)
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
     if dryrun:
@@ -217,12 +224,15 @@ def put_or_dryrun(**kwargs):
             remote_path = tempfile.mktemp()
         if not remote_path.startswith('/'):
             remote_path = '/tmp/' + remote_path
-        cmd = 'rsync --progress --verbose %s %s' % (local_path, remote_path)
-        if env.host_string not in LOCALHOSTS:
+        if env.host_string in LOCALHOSTS:
+            cmd = ('sudo ' if use_sudo else '')+'rsync --progress --verbose %s %s' % (local_path, remote_path)
+            #print ('sudo ' if use_sudo else '')+'echo "%s" > %s' % (shellquote(open(local_path).read()), remote_path)
+            print '%s put: %s' % (render_command_prefix(), cmd)
+            env.put_remote_path = local_path
+        else:
+            cmd = ('sudo ' if use_sudo else '')+'rsync --progress --verbose %s %s' % (local_path, remote_path)
             env.put_remote_path = remote_path
             print '%s put: %s' % (render_command_prefix(), cmd)
-        else:
-            env.put_remote_path = local_path
             
     else:
         return _put(**kwargs)
@@ -703,18 +713,20 @@ def render_to_string(template, verbose=True):
     rendered_content = rendered_content.replace('&quot;', '"')
     return rendered_content
 
-def render_to_file(template, fn=None, verbose=True):
+def render_to_file(template, fn=None, verbose=True, **kwargs):
     """
     Returns a template to a file.
     If no filename given, a temporary filename will be generated and returned.
     """
     import tempfile
+    dryrun = get_dryrun(kwargs.get('dryrun'))
     content = render_to_string(template, verbose=verbose)
     if fn:
         fout = open(fn, 'w')
     else:
-        fd,fn = tempfile.mkstemp()
+        fd, fn = tempfile.mkstemp()
         fout = os.fdopen(fd, 'wt')
+    print 'echo "%s" > %s' % (shellquote(content), fn)
     fout.write(content)
     fout.close()
     return fn
