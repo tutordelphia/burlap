@@ -9,6 +9,7 @@ import warnings
 import glob
 import yaml
 import json
+import getpass
 from collections import namedtuple, OrderedDict
 from StringIO import StringIO
 from pprint import pprint
@@ -22,6 +23,7 @@ from fabric.api import (
     sudo as _sudo,
     cd,
     hide,
+    runs_once,
 )
 from fabric import state
 
@@ -180,7 +182,7 @@ def local_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print '%s local: %s' % (render_command_prefix(), cmd)
+        print '[%s@localhost] local: %s' % (getpass.getuser(), cmd)
     else:
         return local(*args, **kwargs)
         

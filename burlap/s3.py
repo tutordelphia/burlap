@@ -7,6 +7,7 @@ from fabric.api import (
     settings,
     cd,
     task,
+    runs_once,
 )
 
 try:
@@ -39,14 +40,17 @@ env.s3_media_postfix = ''
 S3SYNC = 'S3SYNC'
 
 common.required_system_packages[S3SYNC] = {
-    common.FEDORA: ['ruby', 'rubygems'],
+#     common.FEDORA: ['ruby', 'rubygems'],
     (common.UBUNTU, '12.04'): [
-        'ruby', 'rubygems', 'libxml2-dev', 'libxslt-dev'
+        #'ruby', 'rubygems', 'libxml2-dev', 'libxslt-dev'
+    ],
+    (common.UBUNTU, '14.04'): [
+        #'ruby', 'rubygems', 'libxml2-dev', 'libxslt-dev'
     ],
 }
 common.required_ruby_packages[S3SYNC] = {
-    common.FEDORA: ['s3sync==1.2.5'],
-    common.UBUNTU: ['s3sync==1.2.5'],
+#     common.FEDORA: ['s3sync==1.2.5'],
+#     common.UBUNTU: ['s3sync==1.2.5'],
 }
 
 @task_or_dryrun
@@ -58,15 +62,21 @@ def get_or_create_bucket(name):
     else:
         print 'boto.connect_s3().create_bucket(%s)' % repr(name)
 
+#S3SYNC_PATH_PATTERN = r'(?:Create|Update)\s+node\s+([^\n]+)'
+S3SYNC_PATH_PATTERN = r'(?:->)\s+([^\n]+)'
+
 @task_or_dryrun
-def sync(sync_set, auto_invalidate=1):
+@runs_once
+def sync(sync_set, force=0):
     """
     Uploads media to an Amazon S3 bucket using s3sync.
     
     Requires the s3sync gem: sudo gem install s3sync
     """
     from burlap.dj import get_settings, render_remote_paths
-    auto_invalidate = int(auto_invalidate)
+    force = int(force)
+    env.s3_sync_force_flag = ' --force ' if force else ''
+    
 #    print'env.SITE:',env.SITE
     _settings = get_settings(verbose=1)
     assert _settings, 'Unable to import settings.'
@@ -87,13 +97,16 @@ def sync(sync_set, auto_invalidate=1):
         is_local = paths.get('is_local', True)
         local_path = paths['local_path'] % env
         remote_path = paths['remote_path']
+        remote_path = remote_path.replace(':/', '/')
+        if not remote_path.startswith('s3://'):
+            remote_path = 's3://' + remote_path
         local_path = local_path % env
         
         if is_local:
-            local_or_dryrun('which s3sync')#, capture=True)
+            #local_or_dryrun('which s3sync')#, capture=True)
             env.s3_local_path = os.path.abspath(local_path)
         else:
-            run('which s3sync')
+            #run('which s3sync')
             env.s3_local_path = local_path
             
         if local_path.endswith('/') and not env.s3_local_path.endswith('/'):
@@ -103,29 +116,37 @@ def sync(sync_set, auto_invalidate=1):
         
         print 'Syncing %s to %s...' % (env.s3_local_path, env.s3_remote_path)
         
-        cmd = ('export AWS_ACCESS_KEY_ID=%(AWS_ACCESS_KEY_ID)s; '\
+        # Old buggy Ruby version.
+#         cmd = ('export AWS_ACCESS_KEY_ID=%(AWS_ACCESS_KEY_ID)s; '\
+#             'export AWS_SECRET_ACCESS_KEY=%(AWS_SECRET_ACCESS_KEY)s; '\
+#             's3sync --recursive --verbose --progress --public-read '\
+#             '%(s3_local_path)s %(s3_remote_path)s') % env
+        # Superior Python version.
+        if force:
+            env.s3_sync_cmd = 'put'
+        else:
+            env.s3_sync_cmd = 'sync'
+        cmd = (
+            'export AWS_ACCESS_KEY_ID=%(AWS_ACCESS_KEY_ID)s; '\
             'export AWS_SECRET_ACCESS_KEY=%(AWS_SECRET_ACCESS_KEY)s; '\
-            's3sync --recursive --verbose --progress --public-read '\
+            's3cmd %(s3_sync_cmd)s --progress --acl-public --guess-mime-type --no-mime-magic '\
+            '--delete-removed --cf-invalidate --recursive %(s3_sync_force_flag)s '\
             '%(s3_local_path)s %(s3_remote_path)s') % env
-        print cmd
-        if not get_dryrun():
-            if is_local:
-                # can't see progress
-                rets.append(local_or_dryrun(cmd, capture=True))
-                #rets.append(run(cmd))
-            else:
-                rets.append(run(cmd))
+        if is_local:
+            local_or_dryrun(cmd)
+        else:
+            run_or_dryrun(cmd)
     
-    if auto_invalidate:
-        for ret in rets:
-            print 's3sync:', ret
-            paths = re.findall(
-                '(?:Create|Update)\s+node\s+([^\n]+)',
-                ret,
-                flags=re.DOTALL|re.MULTILINE|re.IGNORECASE)
-            print 'paths:', paths
-            #TODO:handle more than 1000 paths?
-            invalidate(*paths)
+#     if auto_invalidate:
+#         for ret in rets:
+#             print 's3sync:', ret
+#             paths = re.findall(
+#                 S3SYNC_PATH_PATTERN,
+#                 ret,
+#                 flags=re.DOTALL|re.MULTILINE|re.IGNORECASE)
+#             print 'paths:', paths
+#             #TODO:handle more than 1000 paths?
+#             invalidate(*paths)
 
 @task_or_dryrun
 def invalidate(*paths):

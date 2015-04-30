@@ -6,6 +6,7 @@ from fabric.api import (
     require,
     settings,
     cd,
+    runs_once,
 )
 
 from burlap.common import (
@@ -170,6 +171,7 @@ def info():
     print '\tdefault_site:',env.default_site
 
 @task_or_dryrun
+@runs_once
 def shell(gui=0):
     """
     Opens a UNIX shell.

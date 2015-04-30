@@ -363,8 +363,8 @@ def exists(name='default', site=None, verbose=1):
         if verbose:
             print cmd
         ret = run_or_dryrun(cmd)
-        #print('ret:',ret)
-        ret = int(ret) >= 1
+        if ret is not None:
+            ret = int(ret) >= 1
             
     elif 'mysql' in env.db_engine:
         
@@ -383,7 +383,8 @@ def exists(name='default', site=None, verbose=1):
         if verbose:
             print cmd
         ret = run_or_dryrun(cmd)
-        ret = 'notexists' not in (ret or 'notexists')
+        if ret is not None:
+            ret = 'notexists' not in (ret or 'notexists')
 
     else:
         raise NotImplementedError
