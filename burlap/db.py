@@ -148,64 +148,6 @@ def test():
     run_or_dryrun('who -b')
     sudo_or_dryrun('ls /etc/apache/sites-available')
 
-class Database(Migratable):
-    
-    # True means we're responsible for created and deleting it.
-    # False means it exists outside of our realm and we're just tenants.
-    managed = True
-    
-    users = []
-    
-    owner = None
-    
-    encoding = UTF8
-    
-    # postgresql/mysql
-    engine = None
-    
-    class Meta:
-        abstract = True
-    
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def create(self):
-        args = dict(
-            name=self.name,
-            owner=self.owner,
-            encoding=self.encoding,
-        )
-        if self.engine in (POSTGRESQL, POSTGIS):
-            cmd = "CREATE DATABASE {name} WITH {owner} ENCODING {encoding};".format(**args)
-        elif self.engine in (MYSQL,):
-            raise NotImplementedError
-        else:
-            raise NotImplementedError
-            
-class User(Migratable):
-    
-    username = None
-    
-    password = None
-    
-    class Meta:
-        abstract = True
-        
-    def __init__(self, *args, **kwargs):
-        pass
-    
-    def create(self, db):
-        args = dict(
-            username=self.username,
-            password=self.password,
-        )
-        if db.engine in (POSTGRESQL,):
-            cmd = "CREATE USER {username} PASSWORD '{password}';".format(**args)
-        elif db.engine in (MYSQL,):
-            raise NotImplementedError
-        else:
-            raise NotImplementedError
-
 def set_collation_mysql(name=None, site=None):
     from burlap.dj import set_db
     
@@ -420,6 +362,7 @@ def set_root_login(db_type=None, db_host=None):
     db_host = db_host or env.db_host
     
     key = '%s-%s' % (db_type, db_host)
+    print 'key:',key
     if key in env.db_root_logins:
         data = env.db_root_logins[key]
         if 'username' in data:
@@ -563,8 +506,15 @@ def update_all(skip_databases=None, do_install_sql=0, migrate_apps=''):
     Runs the Django migrate command for all unique databases
     for all available sites.
     """
+    from burlap.common import get_current_hostname
+    hostname = get_current_hostname()
     
-    for site in env.available_sites:
+    if env.available_sites_by_host:
+        sites = env.available_sites_by_host.get(hostname, [])
+    else:
+        sites = env.available_sites
+    
+    for site in sites:
         update(
             site=site,
             skip_databases=skip_databases,

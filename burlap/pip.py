@@ -7,6 +7,7 @@ import re
 import tempfile
 import traceback
 from collections import defaultdict
+import shutil, csv
 
 #sys.path.insert(0, '/home/chris/git/alphabuyer/.env/local/lib/python2.7/site-packages')
 # try:
@@ -45,6 +46,8 @@ from burlap.common import (
 from burlap.decorators import task_or_dryrun
 from burlap import versioner
 
+from requirements.requirement import Requirement
+
 env.pip_build_directory = '/tmp/pip-build-root/pip'
 env.pip_check_permissions = True
 env.pip_user = 'www-data'
@@ -63,9 +66,10 @@ env.pip_update_command = '%(pip_path_versioned)s install --use-mirrors --timeout
 env.pip_remote_cache_dir = '/tmp/pip_cache'
 env.pip_local_cache_dir_template = './.pip_cache/%(ROLE)s'
 env.pip_upgrade = ''
+env.pip_download_dir = '/tmp'
 env.pip_install_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install %(pip_no_deps)s %(pip_upgrade_flag)s --build %(pip_build_dir)s --find-links file://%(pip_cache_dir)s --no-index %(pip_package)s; deactivate"
 env.pip_uninstall_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s uninstall %(pip_package)s; deactivate"
-env.pip_depend_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install --no-install --ignore-installed --download=/tmp --use-mirrors %(pip_package)s; deactivate"
+env.pip_depend_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install --no-install --ignore-installed --download=%(pip_download_dir)s --use-mirrors %(pip_package)s; deactivate"
 
 INSTALLED = 'installed'
 PENDING = 'pending'
@@ -194,7 +198,7 @@ PIP_REQ_NAME_PATTERN = re.compile('^[a-z_\-0-9]+', flags=re.I)
 PIP_REQ_SPEC_PATTERN = re.compile(',?([\!\>\<\=]+)([a-z0-9\.]+)', flags=re.I)
 
 PIP_DEP_PATTERN = re.compile(
-    '^\s*Collecting\s+(?P<name>[^\(\n]+)\(from\s+(?P<from>[^,\)]+)',
+    '^\s*(?:Collecting|Downloading/unpacking)\s+(?P<name>[^\(\n]+)\(from\s+(?P<from>[^,\)]+)',
     flags=re.I|re.DOTALL|re.M)
     
 PIP_DEPENDS_HEADERS = [
@@ -214,23 +218,13 @@ def get_dependencies_fn(output=''):
     return depends_fn
 
 @task_or_dryrun
-def update_dependency_cache(name=None):
+def update_dependency_cache(name=None, output=None):
     """
     Reads all pip package dependencies and saves them to a file for later use with organizing
     pip-requirements.txt.
+    
+    Outputs CSV to stdout.
     """
-    import shutil, csv
-    from requirements.requirement import Requirement
-
-    # Get the real pip module.
-#     from distutils.sysconfig import get_python_lib
-#     import imp
-#     real_pip = imp.load_module('pip', *imp.find_module('pip', [get_python_lib()]))
-#     
-#     D = { d.key: d for d in pip.get_installed_distributions() }
-#     F = lambda xs: sum([ F(x) if isinstance(x, list) else [x] for x in xs ], [])
-#     R = lambda k: [k] + F([ R(r.key) for r in D[k].requires() ])
-#     print 'requires:'+(" ".join(R("mypkg") if "mypkg" in D else []))
 
     common.set_show(0)
 
@@ -242,8 +236,8 @@ def update_dependency_cache(name=None):
     env.pip_path_versioned = env.pip_path % env
     
     #depends_fn = get_dependencies_fn(output)
-#     fout = open(depends_fn, 'w')
-    fout = sys.stdout
+    fout = open(output, 'w')
+    #fout = sys.stdout
     writer = csv.DictWriter(fout, PIP_DEPENDS_HEADERS)
     writer.writerow(dict(zip(PIP_DEPENDS_HEADERS, PIP_DEPENDS_HEADERS)))
     
@@ -263,15 +257,17 @@ def update_dependency_cache(name=None):
         if name and name not in line:
             continue
         
-        print>>sys.stderr, '%s: %i %i %.02f%%' % (line, i, total, i/float(total)*100)
+        print>>sys.stderr, 'line %s: %i %i %.02f%%' % (line, i, total, i/float(total)*100)
         
         env.pip_package = line
+        env.pip_download_dir = tempfile.mkdtemp()
         cmd = env.pip_depend_command % env
-        with hide('output', 'running', 'warnings'):
-            ret = local_or_dryrun(cmd, capture=True)
+        #with hide('output', 'running', 'warnings'):
+        ret = local_or_dryrun(cmd, capture=True)
+        print 'ret:',ret
         matches = PIP_DEP_PATTERN.findall(ret) # [(child,parent)]
 #         print '~'*80
-#         print 'matches:',matches
+        print 'matches:',matches
 #         print '~'*80
 #         return
         for child, parent in matches:
@@ -304,8 +300,10 @@ def update_dependency_cache(name=None):
                 ))
                 fout.flush()
             except Exception as e:
-                print>>sys.stderr, ret
+                print>>sys.stderr, 'Error: %s' % e
+                print>>sys.stderr, e
                 traceback.print_exc(file=sys.stderr)
+                raise
             
     #fout.close()
 
@@ -337,7 +335,10 @@ def topological_sort(source):
         emitted = next_emitted
 
 @task_or_dryrun
-def sort_requirements():
+def sort_requirements(fn=None):
+    """
+    Prints to stdout the current pip-requirements.txt sorted by dependency.
+    """
     
     ignore_packages = set(['setuptools'])
     
@@ -346,14 +347,24 @@ def sort_requirements():
     package_name_to_version = {}
     package_name_to_original = {}
     
-    for line in open('roles/all/pip-requirements.txt').readlines():
-        line = line.strip()
-        package_name, package_version = line.split('==')
-        if package_name in ignore_packages:
-            continue
-        package_name_to_original[package_name.lower()] = package_name
-        package_names_req.add(package_name.lower())
-        package_name_to_version[package_name.lower()] = package_version
+    fn = fn or 'roles/all/pip-requirements.txt'
+    
+    i = 0
+    for line in open(fn).readlines():
+        i += 1
+        try:
+            line = line.strip()
+            parent = Requirement.parse_line(line)
+            print parent.specs,parent.__dict__
+            package_name, package_version = line.split('==')
+            if package_name in ignore_packages:
+                continue
+            package_name_to_original[package_name.lower()] = package_name
+            package_names_req.add(package_name.lower())
+            package_name_to_version[package_name.lower()] = package_version
+        except Exception as e:
+            print>>sys.stderr, 'Error on line %i.' % i
+            raise
     
     package_to_deps = defaultdict(set) # {package:set(dependencies)}
     
@@ -661,6 +672,7 @@ def check(return_type=PENDING):
     return pending
 
 @task_or_dryrun
+@runs_once
 def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1):
     """
     Updates the local cache of pip packages.

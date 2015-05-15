@@ -13,11 +13,11 @@ BURLAP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
 VAGRANT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(BURLAP_DIR)
 
-try:
-    import vagrant
-except ImportError as e:
-    print>>sys.stderr, \
-        'Warning: Optional vagrant not installed. Tests disabled.'
+# try:
+#     import vagrant
+# except ImportError as e:
+#     print>>sys.stderr, \
+#         'Warning: Optional vagrant not installed. Tests disabled.'
 
 from fabric.api import env, execute, task, run
 

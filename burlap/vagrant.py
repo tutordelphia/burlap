@@ -1,6 +1,8 @@
+import re
 
 from fabric.api import (
     env,
+    local as _local
 )
 
 import burlap
@@ -19,14 +21,15 @@ env.vagrant_provider = '?'
 env.vagrant_shell_command = 'vagrant ssh'
 
 @task_or_dryrun
-def vagrant():
-    env.user = 'vagrant'
-    env.hosts = ['127.0.0.1:2222']
-    result = local('vagrant ssh-config | grep IdentityFile', capture=True)
-    env.key_filename = result.split()[1]
-    env.is_local = True
-    env.shell_load_dj = False
-    env.shell_interactive_shell_str = env.vagrant_shell_command
+def set():
+    result = _local('vagrant ssh-config', capture=True)
+    
+    hostname = re.findall(r'HostName\s+([^\n]+)', result)[0]
+    port = re.findall(r'Port\s+([^\n]+)', result)[0]
+    env.hosts = ['%s:%s' % (hostname, port)]
+    
+    env.user = re.findall(r'User\s+([^\n]+)', result)[0]
+    env.key_filename = re.findall(r'IdentityFile\s+([^\n]+)', result)[0]
     
 @task_or_dryrun
 def init():
@@ -38,6 +41,7 @@ def up():
     
 @task_or_dryrun
 def shell():
+    set()
     local_or_dryrun(env.vagrant_shell_command)
     
 @task_or_dryrun

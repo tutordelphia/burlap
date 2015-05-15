@@ -487,18 +487,18 @@ def install_auth_basic_user_file(site=None):
     """
     Installs users for basic httpd auth.
     """
-    print 'env.apache_auth_basic0:',env.apache_auth_basic
+    print>>sys.stderr, 'env.apache_auth_basic0:',env.apache_auth_basic
     apache_specifics = set_apache_specifics()
-    print 'env.apache_auth_basic1:',env.apache_auth_basic
+    print>>sys.stderr, 'env.apache_auth_basic1:',env.apache_auth_basic
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
-        print '~'*80
-        print 'Site:',site
+        print>>sys.stderr, '~'*80
+        print>>sys.stderr, 'Site:',site
         #env.update(env_default)
         #env.update(env.sites[site])
         #set_apache_site_specifics(site)
         
-        print 'env.apache_auth_basic:',env.apache_auth_basic
+        print>>sys.stderr, 'env.apache_auth_basic:',env.apache_auth_basic
         if not env.apache_auth_basic:
             continue
         
@@ -512,6 +512,10 @@ def install_auth_basic_user_file(site=None):
             else:
                 sudo_or_dryrun('htpasswd -b -c %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
 
+@task_or_dryrun
+def install_auth_basic_user_file_all():
+    install_auth_basic_user_file(site='all')
+    
 @task_or_dryrun
 def sync_media(sync_set=None, clean=0):
     """

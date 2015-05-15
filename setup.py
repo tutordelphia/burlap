@@ -18,6 +18,7 @@ def get_reqs(test=0):
         'pytz>=2014.4',
         'python-dateutil>=2.2',
         'lockfile>=0.9.1',
+        'requirements-parser>=0.1.0',
     ]
     try:
         import argparse

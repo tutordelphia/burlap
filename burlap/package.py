@@ -117,7 +117,7 @@ def install_apt(fn=None, package_name=None, update=0, list_only=0):
     fout.close()
     env.apt_fqfn = tmp_fn
     if not env.is_local:
-        put(local_path=tmp_fn)
+        put_or_dryrun(local_path=tmp_fn)
         env.apt_fqfn = env.put_remote_path
 #    if int(update):
     sudo_or_dryrun('apt-get update -y --fix-missing')
@@ -146,7 +146,7 @@ def install_yum(fn=None, package_name=None, update=0, list_only=0):
         sudo_or_dryrun('yum install --assumeyes %s' % package_name)
     else:
         if env.is_local:
-            put(local_path=env.yum_fn)
+            put_or_dryrun(local_path=env.yum_fn)
             env.yum_fn = env.put_remote_fn
         sudo_or_dryrun('yum install --assumeyes $(cat %(yum_fn)s)' % env)
 
