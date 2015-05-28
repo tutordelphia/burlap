@@ -18,6 +18,7 @@ from fabric.api import (
     env,
     local,
     put as __put,
+    get as __get,
     require,
     run as _run,
     settings,
@@ -244,6 +245,31 @@ def put_or_dryrun(**kwargs):
             
     else:
         return _put(**kwargs)
+
+def get_or_dryrun(**kwargs):
+    dryrun = get_dryrun(kwargs.get('dryrun'))
+    use_sudo = kwargs.get('use_sudo', False)
+    if 'dryrun' in kwargs:
+        del kwargs['dryrun']
+    if dryrun:
+        local_path = kwargs['local_path']
+        remote_path = kwargs.get('remote_path', None)
+        if not local_path:
+            local_path = tempfile.mktemp()
+        if not local_path.startswith('/'):
+            local_path = '/tmp/' + local_path
+        cmd = ('sudo ' if use_sudo else '')+'rsync --progress --verbose %s@%s:%s %s' % (env.user, env.host_string, remote_path, local_path)
+        #print ('sudo ' if use_sudo else '')+'echo "%s" > %s' % (shellquote(open(local_path).read()), remote_path)
+        print '[localhost] get: %s' % (cmd,)
+        env.get_local_path = local_path
+        
+    else:
+        return _get(**kwargs)
+
+def _get(*args, **kwargs):
+    ret = __get(*args, **kwargs)
+    env.get_local_path = ret
+    return ret
 
 def pretty_bytes(bytes):
     """
