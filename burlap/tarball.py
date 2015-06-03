@@ -139,9 +139,12 @@ def record_manifest(verbose=0):
     """    
     get_tarball_path()
     fn = env.tarball_absolute_src_dir
+    print 'tarball.fn:',fn
     data = common.get_last_modified_timestamp(fn)
     if int(verbose):
         print data
     return data
 
 common.manifest_recorder[TARBALL] = record_manifest
+
+common.add_deployer('tarball', 'tarball.deploy', before=['package', 'apache2', 'pip'])

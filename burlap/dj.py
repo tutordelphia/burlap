@@ -382,3 +382,8 @@ common.manifest_recorder[DJANGO_MIGRATIONS] = record_manifest_migrations
 
 # DJANGO_SYNCDB = 'DJANGO_SYNCDB'
 # DJANGO_MIGRATIONS = 'DJANGO_MIGRATIONS'
+
+common.add_deployer('django_media', 'apache.sync_media', before=['package', 'apache2', 'pip', 'tarball'])
+common.add_deployer('django_migrations', 'db.update_all_from_diff',
+    before=['package', 'apache2', 'pip', 'tarball', 'django_media'],
+    takes_diff=True)

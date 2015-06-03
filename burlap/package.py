@@ -239,3 +239,5 @@ def record_manifest(verbose=0):
     return data
 
 common.manifest_recorder[PACKAGER] = record_manifest
+
+common.add_deployer('packager', 'package.install')

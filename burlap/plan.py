@@ -76,7 +76,7 @@ def iter_plan_names(role=None):
 def get_thumbprint_path(role, name):
     d = get_plan_dir(role=role, name=name)
     d = os.path.join(d, 'thumbprints')
-    print('d:',d)
+#     print('d:',d)
     if not os.path.isdir(d):
         os.makedirs(d)
     return d
@@ -264,6 +264,8 @@ class Plan(object):
         Creates a thumbprint file for the current host in the current role and name.
         """
         data = get_current_thumbnail(role=self.role, name=self.name)
+        print('Recording thumbprint for host %s with deployment %s on %s.' \
+            % (env.host_string, self.name, self.role))
         self.thumbprint = data
     
     @property
@@ -397,8 +399,9 @@ def get_last_completed_plan():
     """
     Returns the last plan completed.
     """
-    for _name in reversed(list(iter_plan_names())):
+    for _name in reversed(sorted(list(iter_plan_names()))):
         plan = Plan.load(_name)
+#         print('plan:',plan.name,'completed:',plan.is_complete())
         if plan.is_complete():
             return plan
             
@@ -406,7 +409,7 @@ def get_last_plan(role=None):
     """
     Returns the last plan created.
     """
-    for _name in reversed(list(iter_plan_names(role=role))):
+    for _name in reversed(sorted(list(iter_plan_names(role=role)))):
         plan = Plan.load(_name, role=role)
         return plan
 
@@ -415,9 +418,9 @@ def has_outstanding_plans():
     Returns true if there are plans for this role that have not been executed.
     """
     last_completed = get_last_completed_plan()
-#     print('last_completed:',last_completed)
+#     print('last_completed plan:',last_completed)
     last = get_last_plan()
-#     print('last:',last)
+#     print('last plan:',last)
 #     print('eq:',last == last_completed)
     return last != last_completed
 
@@ -453,8 +456,10 @@ def get_current_thumbnail(role=None, name=None):
         
     return manifest_data
 
+@task_or_dryrun
 def get_last_thumbnail():
     plan = get_last_completed_plan()
+#     print('last completed plan:',plan.name)
     last_thumbprint = plan.thumbprint
     return last_thumbprint
 
@@ -463,6 +468,7 @@ def iter_thumbnail_differences():
     current = get_current_thumbnail()
     for k in current:
         if current[k] != last.get(k):
+#             print('k:',k,current[k],last.get(k))
             yield k, last, current
 
 @task_or_dryrun
@@ -566,8 +572,9 @@ def auto(fake=0, preview=0):
 @task_or_dryrun
 #@runs_once
 def deploy(*args, **kwargs):
+    from burlap import service, notifier
     service.pre_deploy()
     auto(*args, **kwargs)
     service.post_deploy()
-    notify_post_deployment()
+    notifier.notify_post_deployment()
     

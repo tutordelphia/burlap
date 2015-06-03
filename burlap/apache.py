@@ -625,3 +625,5 @@ common.service_post_deployers[APACHE2] = [reload]
 
 common.manifest_recorder[APACHE2] = record_manifest
 common.manifest_comparer[APACHE2] = compare_manifest
+
+common.add_deployer('apache2', 'apache.configure_all', before=['package'])

@@ -820,3 +820,5 @@ def record_manifest(verbose=1):
     return data
 
 common.manifest_recorder[PIP] = record_manifest
+
+common.add_deployer('pip', 'pip.update_install', before=['package'])

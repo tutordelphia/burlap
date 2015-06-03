@@ -330,7 +330,9 @@ def get_last_modified_timestamp(path):
     import commands
     cmd = 'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
     ret = commands.getoutput(cmd)
-    ret = float(ret)
+    # Note, we round now to avoid rounding errors later on where some formatters
+    # use different decimal contexts. 
+    ret = round(float(ret), 2)
     return ret
 
 def check_settings_for_differences(old, new, as_bool=False, as_tri=False):
