@@ -263,7 +263,7 @@ class Plan(object):
         """
         Creates a thumbprint file for the current host in the current role and name.
         """
-        data = get_current_thumbnail(role=self.role, name=self.name)
+        data = get_current_thumbprint(role=self.role, name=self.name)
         print('Recording thumbprint for host %s with deployment %s on %s.' \
             % (env.host_string, self.name, self.role))
         self.thumbprint = data
@@ -443,7 +443,7 @@ def status(name=None, verbose=0):
             output = ongoing(output)
         print(output)
 
-def get_current_thumbnail(role=None, name=None):
+def get_current_thumbprint(role=None, name=None):
     if name == INITIAL:
         name = '0'*env.plan_digits
         
@@ -457,15 +457,18 @@ def get_current_thumbnail(role=None, name=None):
     return manifest_data
 
 @task_or_dryrun
-def get_last_thumbnail():
+def get_last_thumbprint():
+    """
+    Returns thumbprint from the last complete deployment.
+    """
     plan = get_last_completed_plan()
 #     print('last completed plan:',plan.name)
     last_thumbprint = plan.thumbprint
     return last_thumbprint
 
-def iter_thumbnail_differences():
-    last = get_last_thumbnail()
-    current = get_current_thumbnail()
+def iter_thumbprint_differences():
+    last = get_last_thumbprint()
+    current = get_current_thumbprint()
     for k in current:
         if current[k] != last.get(k):
 #             print('k:',k,current[k],last.get(k))
@@ -493,7 +496,7 @@ def preview():
     auto(preview=1)
     
 @task_or_dryrun
-def auto(fake=0, preview=0):
+def auto(fake=0, preview=0, check_outstanding=1):
     """
     Generates a plan based on the components that have changed since the last deployment.
     
@@ -510,15 +513,16 @@ def auto(fake=0, preview=0):
     
     fake = int(fake)
     preview = int(preview)
+    check_outstanding = int(check_outstanding)
     
     last_plan = get_last_completed_plan()
-    if has_outstanding_plans():
+    if check_outstanding and has_outstanding_plans():
         print(fail((
             'There are outstanding plans pending execution! '
             'Run `fab %s plan.status` for details.') % env.ROLE))
         sys.exit(1)
         
-    diffs = list(iter_thumbnail_differences())
+    diffs = list(iter_thumbprint_differences())
     if not diffs:
         print('No differences detected.')
         return
@@ -570,11 +574,10 @@ def auto(fake=0, preview=0):
     plan.record_thumbprint()
 
 @task_or_dryrun
-#@runs_once
 def deploy(*args, **kwargs):
     from burlap import service, notifier
     service.pre_deploy()
-    auto(*args, **kwargs)
+    auto(check_outstanding=0, *args, **kwargs)
     service.post_deploy()
     notifier.notify_post_deployment()
     

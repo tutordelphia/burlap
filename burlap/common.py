@@ -123,7 +123,8 @@ def add_deployer(event, func, before=[], takes_diff=False):
     event = event.strip().upper()
     
     manifest_deployers.setdefault(event, [])
-    manifest_deployers[event].append(func)
+    if func not in manifest_deployers[event]:
+        manifest_deployers[event].append(func)
     
     manifest_deployers_befores.setdefault(event, [])
     manifest_deployers_befores[event].extend(map(str.upper, before))
