@@ -8,9 +8,10 @@ import datetime
 import glob
 import tempfile
 import json
+import yaml
 
 from fabric.api import (
-    env,
+    env, runs_once,
 )
 import fabric.contrib.files
 import fabric.api
@@ -27,6 +28,7 @@ _originals = env.plan_originals
 
 env.plan = None
 env.plan_data_dir = '%(burlap_data_dir)s/plans'
+env.plan_digits = 3
 
 RUN = 'run'
 SUDO = 'sudo'
@@ -34,12 +36,53 @@ LOCAL = 'local'
 PUT = 'put'
 PLAN_METHODS = [RUN, SUDO, LOCAL, PUT]
 
+INITIAL = 'initial'
+
 def init_plan_data_dir():
     common.init_burlap_data_dir()
     d = env.plan_data_dir % env
     if not os.path.isdir(d):
-        os.mkdir(d)
+        os.makedirs(d)
     return d
+
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def fail(s):
+    return Colors.FAIL + str(s) + Colors.ENDC
+
+def success(s):
+    return Colors.OKGREEN + str(s) + Colors.ENDC
+
+def ongoing(s):
+    return Colors.WARNING + str(s) + Colors.ENDC
+
+def iter_plan_names(role=None):
+    d = get_plan_dir(role=role)
+    assert os.path.isdir(d)
+    for name in os.listdir(d):
+        fqfn = os.path.join(d, name)
+        if not os.path.isdir(fqfn):
+            continue
+        yield name
+
+def get_thumbprint_path(role, name):
+    d = get_plan_dir(role=role, name=name)
+    d = os.path.join(d, 'thumbprints')
+    print('d:',d)
+    if not os.path.isdir(d):
+        os.makedirs(d)
+    return d
+
+def get_thumbprint_filename():
+    return 'thumbprint'
         
 class Step(object):
     """
@@ -107,6 +150,15 @@ class Step(object):
 
 HISTORY_HEADERS = ['step', 'start', 'end']
 
+def get_plan_dir(role, name=None):
+    if name:
+        d = os.path.join(init_plan_data_dir(), role or env.ROLE, name)
+    else:
+        d = os.path.join(init_plan_data_dir(), role or env.ROLE)
+    if not os.path.isdir(d):
+        os.makedirs(d)
+    return d
+
 class Plan(object):
     """
     A sequence of steps for accomplishing a state change.
@@ -116,7 +168,11 @@ class Plan(object):
         
         self.verbose = verbose
         
-        self.plan_dir = os.path.join(init_plan_data_dir(), role or env.ROLE, name)
+        self.name = name
+        
+        self.role = role or env.ROLE
+        
+        self.plan_dir = get_plan_dir(role, name)
         try:
             os.makedirs(self.plan_dir)
         except OSError:
@@ -138,13 +194,77 @@ class Plan(object):
             open(self.plan_dir_steps, 'w').write('')
         self.load_steps()
         
-        self.name = name
+        self.plan_dir_hosts = os.path.join(self.plan_dir, 'hosts')
+        if self.role == env.ROLE and not os.path.isfile(self.plan_dir_hosts):
+            open(self.plan_dir_hosts, 'w').write('\n'.join(sorted(env.hosts)))
+        self.load_hosts()
+        
+        #self.plan_thumbprint_fn = os.path.join(self.plan_dir, 'thumbprint')
+    
+    def __cmp__(self, other):
+        if not isinstance(other, Plan):
+            return NotImplemented
+        return cmp((self.name, self.role), (other.name, other.role))
+    
+    def __unicode__(self):
+        return unicode(self.name)
+    
+    def __repr__(self):
+        return u'<%s: %s>' % (type(self).__name__, unicode(self))
     
     def is_complete(self):
-        return self.index == len(self._steps)
+        #return self.percent_complete == 100
+        return self.all_hosts_thumbprinted and self.index == len(self._steps)
+    
+    @property
+    def number(self):
+        return int(re.findall('^[0-9]+', self.name)[0])
+    
+    def failed(self):
+        return False #TODO
+    
+    def load_hosts(self):
+        self.hosts = [
+            _.strip()
+            for _ in open(self.plan_dir_hosts, 'r').readlines()
+            if _.strip()]
+    
+    @property
+    def all_hosts_thumbprinted(self):
+        for host in self.hosts:
+            fn = self.get_thumbprint_filename(host)
+            if not os.path.isfile(fn):
+                return False
+        return True
     
     def load_history(self):
         pass
+    
+    def get_thumbprint_filename(self, host_string):
+        d = os.path.join(self.plan_dir, 'thumbprints')
+        if not os.path.isdir(d):
+            os.makedirs(d)
+        fn = os.path.join(d, env.host_string)
+        return fn
+    
+    @property
+    def thumbprint(self):
+        fn = self.get_thumbprint_filename(env.host_string)
+        return yaml.load(open(fn))
+    
+    @thumbprint.setter
+    def thumbprint(self, data):
+        assert isinstance(data, dict)
+        if not common.get_dryrun():
+            fout = open(self.get_thumbprint_filename(env.host_string), 'w')
+            yaml.dump(data, fout, default_flow_style=False, indent=4)
+    
+    def record_thumbprint(self):
+        """
+        Creates a thumbprint file for the current host in the current role and name.
+        """
+        data = get_current_thumbnail(role=self.role, name=self.name)
+        self.thumbprint = data
     
     @property
     def remaining_step_count(self):
@@ -163,8 +283,15 @@ class Plan(object):
     def index(self):
         return self._index
     
+    def is_initial(self):
+        return set(self.name) == set(['0'])
+    
     @property
     def percent_complete(self):
+        if self.is_initial():
+            return 100
+        if not self._steps:
+            return 100
         return self.index/float(len(self._steps))*100
     
     @index.setter
@@ -188,10 +315,23 @@ class Plan(object):
                 continue
             s = Step.from_line(line)
             self.add_step(s)
-    
+
     @classmethod
-    def load(cls, name, verbose=1):
-        plan = cls(name, verbose=verbose)
+    def get_or_create_next(cls, role=None, last_plan=None):
+        role = role or env.ROLE
+        last_plan = last_plan or get_last_plan(role=role)
+        if last_plan:
+            number = last_plan.number + 1
+        else:
+            number = 0
+        assert len(str(number)) <= env.plan_digits, \
+            'Too many deployments. Truncate existing or increase `plan_digits`.'
+        plan = Plan(role=role, name=('%0'+str(env.plan_digits)+'i') % number)
+        return plan
+
+    @classmethod
+    def load(cls, name, role=None, verbose=1):
+        plan = cls(name, role=role, verbose=verbose)
         return plan
     
     def add_step(self, s):
@@ -233,7 +373,7 @@ class Plan(object):
 def record(name):
     common.set_dryrun(1)
     env.plan = Plan(name=name)
-    
+
 @task_or_dryrun
 def execute(name, verbose=1):
     plan = Plan.load(name, verbose=int(verbose))
@@ -253,3 +393,181 @@ def execute(name, verbose=1):
     if verbose:
         print('Executed %i steps.' % (len(steps),), file=sys.stderr)
 
+def get_last_completed_plan():
+    """
+    Returns the last plan completed.
+    """
+    for _name in reversed(list(iter_plan_names())):
+        plan = Plan.load(_name)
+        if plan.is_complete():
+            return plan
+            
+def get_last_plan(role=None):
+    """
+    Returns the last plan created.
+    """
+    for _name in reversed(list(iter_plan_names(role=role))):
+        plan = Plan.load(_name, role=role)
+        return plan
+
+def has_outstanding_plans():
+    """
+    Returns true if there are plans for this role that have not been executed.
+    """
+    last_completed = get_last_completed_plan()
+#     print('last_completed:',last_completed)
+    last = get_last_plan()
+#     print('last:',last)
+#     print('eq:',last == last_completed)
+    return last != last_completed
+
+@task_or_dryrun
+@runs_once
+def status(name=None, verbose=0):
+    """
+    Reports the status of any pending plans for the current role.
+    """
+    print('plan,complete,percent')
+    for _name in iter_plan_names():
+        #print(_name)
+        plan = Plan.load(_name, verbose=int(verbose))
+        output = '%s,%s,%s' % (_name, int(plan.is_complete()), plan.percent_complete)
+        if plan.is_complete():
+            output = success(output)
+        elif plan.failed:
+            output = fail(output)
+        else:
+            output = ongoing(output)
+        print(output)
+
+def get_current_thumbnail(role=None, name=None):
+    if name == INITIAL:
+        name = '0'*env.plan_digits
+        
+    data = {} # {component:data}
+    manifest_data = {}
+    for component_name, func in common.manifest_recorder.iteritems():
+        component_name = component_name.upper()
+        #print('component_name:',component_name)
+        manifest_data[component_name] = func()
+        
+    return manifest_data
+
+def get_last_thumbnail():
+    plan = get_last_completed_plan()
+    last_thumbprint = plan.thumbprint
+    return last_thumbprint
+
+def iter_thumbnail_differences():
+    last = get_last_thumbnail()
+    current = get_current_thumbnail()
+    for k in current:
+        if current[k] != last.get(k):
+            yield k, last, current
+
+@task_or_dryrun
+def thumbprint(name=None):
+    """
+    Creates a manifest file for the current host, listing all current settings
+    so that a future deployment can use it as a reference to perform an
+    idempotent deployment.
+    """
+    if name:
+        plan = Plan.load(name=name)
+    else:
+        plan = get_last_plan()
+    plan.record_thumbprint()
+    
+@task_or_dryrun
+@runs_once
+def preview():
+    """
+    Lists the likely pending deployment steps.
+    """
+    auto(preview=1)
+    
+@task_or_dryrun
+def auto(fake=0, preview=0):
+    """
+    Generates a plan based on the components that have changed since the last deployment.
+    
+    The overall steps ran for each host:
+    
+        1. create plan
+        2. run plan
+        3. create thumbprint
+    
+    fake := If true, generates the plan and records the run as successful, but does not apply any
+        changes to the hosts.
+    
+    """
+    
+    fake = int(fake)
+    preview = int(preview)
+    
+    last_plan = get_last_completed_plan()
+    if has_outstanding_plans():
+        print(fail((
+            'There are outstanding plans pending execution! '
+            'Run `fab %s plan.status` for details.') % env.ROLE))
+        sys.exit(1)
+        
+    diffs = list(iter_thumbnail_differences())
+    if not diffs:
+        print('No differences detected.')
+        return
+
+    # Create plan.
+    components = set()
+    component_thumbprints = {}
+    for component, last, current in diffs:
+        component_thumbprints[component] = last, current
+        components.add(component)
+    component_dependences = dict(
+        (_c, set(common.manifest_deployers_befores.get(_c, [])).intersection(components))
+        for _c in components)
+#     print('component_dependences:',component_dependences)
+    components = list(common.topological_sort(component_dependences.items()))
+    #print('components:',components)
+    if components:
+        if preview:
+            print('These components have changed:\n')
+            for component in sorted(components):
+                print((' '*4)+component)
+            print('\nDeployment plan:\n')
+    else:
+        print('Nothing to do!')
+        return
+    
+    # Execute plan.
+    for component in components:
+        funcs = common.manifest_deployers.get(component, [])
+        for func_name in funcs:
+            takes_diff = common.manifest_deployers_takes_diff.get(func_name, False)
+            #print(func_name, takes_diff)
+            if preview:
+                print(success((' '*4)+func_name))
+                continue
+            func = common.resolve_deployer(func_name)
+            last, current = component_thumbprints[component]
+            if not fake:
+                if takes_diff:
+                    func(last=last, current=current)
+                else:
+                    func()
+    if preview:
+        print('\nTo execute this plan on all hosts run:\n\n    fab %s plan.deploy' % env.ROLE)
+        return
+    
+    # Create thumbprint.
+    plan = Plan.get_or_create_next(last_plan=last_plan)
+    plan.record_thumbprint()
+
+@task_or_dryrun
+#@runs_once
+def deploy(*args, **kwargs):
+    service.pre_deploy()
+    auto(*args, **kwargs)
+    service.post_deploy()
+    notify_post_deployment()
+    

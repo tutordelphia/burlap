@@ -9,7 +9,6 @@ import traceback
 from collections import defaultdict
 import shutil, csv
 
-#sys.path.insert(0, '/home/chris/git/alphabuyer/.env/local/lib/python2.7/site-packages')
 # try:
 #     sys.path.remove('')
 # except ValueError:
@@ -307,33 +306,6 @@ def update_dependency_cache(name=None, output=None):
             
     #fout.close()
 
-def topological_sort(source):
-    """perform topo sort on elements.
-
-    :arg source: list of ``(name, [list of dependancies])`` pairs
-    :returns: list of names, with dependancies listed first
-    """
-    if isinstance(source, dict):
-        source = source.items()
-    pending = sorted([(name, set(deps)) for name, deps in source]) # copy deps so we can modify set in-place       
-    emitted = []        
-    while pending:
-        next_pending = []
-        next_emitted = []
-        for entry in pending:
-            name, deps = entry
-            deps.difference_update(emitted) # remove deps we emitted last pass
-            if deps: # still has deps? recheck during next pass
-                next_pending.append(entry) 
-            else: # no more deps? time to emit
-                yield name 
-                emitted.append(name) # <-- not required, but helps preserve original ordering
-                next_emitted.append(name) # remember what we emitted for difference_update() in next pass
-        if not next_emitted: # all entries have unmet deps, one of two things is wrong...
-            raise ValueError("cyclic or missing dependancy detected: %r" % (next_pending,))
-        pending = next_pending
-        emitted = next_emitted
-
 @task_or_dryrun
 def sort_requirements(fn=None):
     """
@@ -402,7 +374,7 @@ def sort_requirements(fn=None):
     for package_name in package_names_req:
         package_to_deps[package_name]
     
-    all_names = topological_sort(package_to_deps)
+    all_names = common.topological_sort(package_to_deps)
     for name in all_names:
         print '%s==%s' % (package_name_to_original[name], package_name_to_version[name])
 
@@ -751,6 +723,23 @@ def uninstall(package):
         sudo_or_dryrun(env.pip_uninstall_command % env)
     
 @task_or_dryrun
+def update_install():
+    from burlap.dj import render_remote_paths
+    
+    req_fn = find_template(env.pip_requirements_fn)
+    print('req_fn:',req_fn)
+    env.pip_remote_requirements_fn = '/tmp/pip-requirements.txt'
+    put_or_dryrun(local_path=req_fn, remote_path=env.pip_remote_requirements_fn)
+
+    render_remote_paths()
+    
+    env.pip_update_install_command = ". %(remote_app_dir)s/.env/bin/activate; pip install -r %(pip_remote_requirements_fn)s; deactivate"
+    if env.is_local:
+        run_or_dryrun(env.pip_update_install_command % env)
+    else:
+        sudo_or_dryrun(env.pip_update_install_command % env)
+    
+@task_or_dryrun
 def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
     """
     Installs the local cache of pip packages.
@@ -814,7 +803,7 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
         sudo_or_dryrun('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
 
 @task_or_dryrun
-def record_manifest():
+def record_manifest(verbose=1):
     """
     Called after a deployment to record any data necessary to detect changes
     for a future deployment.
@@ -825,47 +814,9 @@ def record_manifest():
     #data = check(return_type=INSTALLED)
     
     desired = get_desired_package_versions(preserve_order=True)
-    data = [[_n, _v, _raw] for _n, (_v, _raw) in desired]
-    
+    data = sorted(_raw for _n, (_v, _raw) in desired)
+    if int(verbose):
+        print data
     return data
 
-def compare_manifest(data=None):
-    """
-    Called before a deployment, given the data returned by record_manifest(),
-    for determining what, if any, tasks need to be run to make the target
-    server reflect the current settings within the current context.
-    """
-#    pending = check(return_type=PENDING)
-#    if pending:
-#        return [update, install]
-
-    pre = ['package', 'user']
-    update_methods = []
-    install_methods = []
-    uninstall_methods = []
-    old = data or []
-    
-    old_packages = set(tuple(_) for _ in old)
-    old_package_names = set(tuple(_[0]) for _ in old)
-    
-    new_packages_ordered = get_desired_package_versions(preserve_order=True)
-    new_packages = set((_n, _v, _raw) for _n, (_v, _raw) in new_packages_ordered)
-    new_package_names = set(_n for _n, (_v, _raw) in new_packages_ordered)
-    
-    #print 'new_package_names:',new_package_names
-    
-    added = [_ for _ in new_packages if _ not in old_packages]
-    #print 'added:',added
-    for _name, _version, _line in added:
-        update_methods.append(QueuedCommand('pip.update', kwargs=dict(package=_line), pre=pre))
-        install_methods.append(QueuedCommand('pip.install', kwargs=dict(package=_line), pre=pre))
-    
-    removed = [(_name, _version, _line) for _name, _version, _line in old_packages if _name not in new_package_names]
-    #print 'removed:',removed
-    for _name, _version, _line in removed:
-        uninstall_methods.append(QueuedCommand('pip.uninstall', kwargs=dict(package=_line), pre=pre))
-    
-    return update_methods + uninstall_methods + install_methods
-
 common.manifest_recorder[PIP] = record_manifest
-common.manifest_comparer[PIP] = compare_manifest

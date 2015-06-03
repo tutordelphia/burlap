@@ -5,6 +5,7 @@ import os
 import sys
 import importlib
 import traceback
+import commands
 from StringIO import StringIO
 
 from fabric.api import (
@@ -56,6 +57,9 @@ if not env.dj_settings_loaded:
     env.django_migrate_fakeouts = [] # [{database:<database>, app:<app>}]
 
 DJANGO = 'DJANGO'
+DJANGO_MEDIA = 'DJANGO_MEDIA'
+DJANGO_SYNCDB = 'DJANGO_SYNCDB'
+DJANGO_MIGRATIONS = 'DJANGO_MIGRATIONS'
 
 @task_or_dryrun
 def check_remote_paths(verbose=1):
@@ -91,10 +95,37 @@ def render_remote_paths(verbose=0):
         print 'remote_app_src_package_dir:',env.remote_app_src_package_dir
         print 'remote_manage_dir:',env.remote_manage_dir
 
-def iter_app_directories(ignore_import_error=False):
-    #from django.utils.importlib import import_module
-    from importlib import import_module
+def load_django_settings():
+    """
+    Loads Django settings for the current site and sets them so Django internals can be run.
+    """
+
+    #TODO:remove this once bug in django-celery has been fixed
+    os.environ['ALLOW_CELERY'] = '0'
+    
+    # Load Django settings.
     settings = get_settings()
+    from django.contrib import staticfiles
+    from django.conf import settings as _settings
+    for k,v in settings.__dict__.iteritems():
+        setattr(_settings, k, v)
+        
+    return settings
+
+def iter_static_paths(ignore_import_error=False):
+
+    load_django_settings()
+
+    from django.contrib.staticfiles import finders, storage
+    for finder in finders.get_finders():
+        for _n,_s in finder.storages.iteritems():
+            yield _s.location
+
+def iter_app_directories(ignore_import_error=False):
+    from importlib import import_module
+    
+    settings = load_django_settings()
+    
     for app in settings.INSTALLED_APPS:
         try:
             mod = import_module(app)
@@ -112,7 +143,7 @@ def iter_south_directories(*args, **kwargs):
             continue
         yield app_name, migrations_dir
 
-def iter_south_migrations(dir, *args, **kwargs):
+def iter_migrations(dir, *args, **kwargs):
     for fn in sorted(os.listdir(dir)):
         if fn.startswith('_') or not fn.endswith('.py'):
             continue
@@ -323,94 +354,31 @@ def loaddata(path, site=None):
             pass
 
 @task_or_dryrun
-def record_manifest():
-    """
-    Called after a deployment to record any data necessary to detect changes
-    for a future deployment.
-    """
-    data = {}
-    
-    settings = get_settings()
-    
-    # Record apps.
-    data['installed_apps'] = settings.INSTALLED_APPS
-    
-    # Record database migrations.
-    data['south'] = {}
-    for south_app_name, dir in iter_south_directories(ignore_import_error=True):
-        #print 'south:',dir
-        data['south'][south_app_name] = []
-        for fn in iter_south_migrations(dir):
-            #print '\t',fn
-            data['south'][south_app_name].append(fn)
-    
-    #TODO: Record hashes of all files in all app static directories.
-    
-    return data
+def record_manifest_media(verbose=0):
+    latest_timestamp = -1e9999999999999999
+    for path in iter_static_paths():
+        latest_timestamp = max(
+            latest_timestamp,
+            common.get_last_modified_timestamp(path) or latest_timestamp)
+    if int(verbose):
+        print latest_timestamp
+    return latest_timestamp
 
 @task_or_dryrun
-def compare_manifest(data=None):
-    """
-    Called before a deployment, given the data returned by record_manifest(),
-    for determining what, if any, tasks need to be run to make the target
-    server reflect the current settings within the current context.
-    """
+def record_manifest_migrations(verbose=0):
+    data = {} # {app: latest_migration_name}
+    for app_name, _dir in iter_app_directories():
+        migration_dir = os.path.join(_dir, 'migrations')
+        if not os.path.isdir(migration_dir):
+            continue
+        for migration_name in iter_migrations(migration_dir):
+            data[app_name] = migration_name
+    if int(verbose):
+        print data
+    return data
     
-    old = data or {}
-    
-    pre = ['tarball', 'pip', 'packager']
-    
-    methods = []
-    
-    old.setdefault('south', {})
-    
-    settings = get_settings()
+common.manifest_recorder[DJANGO_MEDIA] = record_manifest_media
+common.manifest_recorder[DJANGO_MIGRATIONS] = record_manifest_migrations
 
-    # Check installed apps and run syncdb for all that aren't managed by South.
-    current_south_apps = set(
-        _n for _n, _ in iter_south_directories(ignore_import_error=True)
-    )
-    old_apps = set(old.get('installed_apps', []))
-    syncdb = False
-    for app_name in settings.INSTALLED_APPS:
-        if app_name in current_south_apps:
-            pass
-        else:
-            if app_name not in old_apps and app_name not in old['south']:
-                methods.append(QueuedCommand('dj.syncdb', kwargs=dict(site=ALL), pre=pre))
-                syncdb = True
-                break
-
-    # Check South migrations.
-    # We assume all inter-migration dependencies are appropriately documented
-    # in the migrations. You know what those are, right?
-    for south_app_name, dir in iter_south_directories(ignore_import_error=True):
-        #print 'south:',south_app_name, dir
-        #data['south'].setdefault(app_name, [])
-        migrations = list(iter_south_migrations(dir))
-        
-        if south_app_name in old.get('installed_apps', []) and south_app_name not in old['south']:
-            # A special case.
-            # Somewhat rare, but very frustrating when it occurs.
-            # The app was previously installed but not under South control,
-            # but the author has since converted it to South.
-            # This means the models exist in the database, but in order
-            # to apply the new migrations, we must fake the initial migration
-            # then apply the rest normally.
-            methods.append(QueuedCommand('dj.migrate', kwargs=dict(site=ALL, app=south_app_name, migration='0001', fake=True), pre=pre))
-            methods.append(QueuedCommand('dj.migrate', kwargs=dict(site=ALL, app=south_app_name), pre=pre))
-        else:
-            # Otherwise, find which migrations haven't been applied since the
-            # last deployment and register a migrate command if any exist.
-            old['south'].setdefault(south_app_name, [])
-            new_migrations = set(migrations)
-            old_migrations = set(old['south'][south_app_name])
-            if new_migrations != old_migrations:
-                methods.append(QueuedCommand('dj.migrate', kwargs=dict(site=ALL, app=south_app_name), pre=pre))
-    
-    #TODO: Compare hashes of all files in all app static directories.
-    
-    return methods
-    
-common.manifest_recorder[DJANGO] = record_manifest
-common.manifest_comparer[DJANGO] = compare_manifest
+# DJANGO_SYNCDB = 'DJANGO_SYNCDB'
+# DJANGO_MIGRATIONS = 'DJANGO_MIGRATIONS'

@@ -29,7 +29,6 @@ from burlap.common import (
     FEDORA,
     UBUNTU,
     QueuedCommand,
-    Migratable,
 )
 from burlap.decorators import task_or_dryrun
 from burlap import common
@@ -139,11 +138,6 @@ env.apache_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_
 
 # This will be appended to the custom Apache configuration file.
 env.apache_httpd_conf_append = []
-
-class Apache2(Migratable):
-    
-    class Meta:
-        abstract = True
 
 def set_apache_specifics():
     os_version = common.get_os_version()

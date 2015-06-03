@@ -27,7 +27,6 @@ from burlap.common import (
     ROLE,
     ALL,
     QueuedCommand,
-    Migratable,
     get_dryrun,
 )
 from burlap.decorators import task_or_dryrun
@@ -520,6 +519,14 @@ def update_all(skip_databases=None, do_install_sql=0, migrate_apps=''):
             skip_databases=skip_databases,
             do_install_sql=do_install_sql,
             migrate_apps=migrate_apps)
+
+@task_or_dryrun
+def update_all_from_diff(last, current):
+    migrate_apps = []
+    for app_name in current:
+        if current[app_name] != last.get(app_name):
+            migrate_apps.append(app_name)
+    return update_all(migrate_apps=','.join(migrate_apps))
 
 @task_or_dryrun
 @runs_once

@@ -40,7 +40,7 @@ def prepare():
 
 @task_or_dryrun
 def install(**kwargs):
-    install_required(type='system', **kwargs)
+    install_required(type=common.SYSTEM, **kwargs)
     install_custom(**kwargs)
     
 @task_or_dryrun
@@ -98,7 +98,7 @@ def install_apt(fn=None, package_name=None, update=0, list_only=0):
     """
     Installs system packages listed in apt-requirements.txt.
     """
-    print 'Installing apt requirements...'
+    #print 'Installing apt requirements...'
     assert env[ROLE]
     env.apt_fqfn = fn or find_template(env.apt_fn)
     if not env.apt_fqfn:
@@ -129,7 +129,7 @@ def install_yum(fn=None, package_name=None, update=0, list_only=0):
     """
     Installs system packages listed in yum-requirements.txt.
     """
-    print 'Installing yum requirements...'
+    #print 'Installing yum requirements...'
     assert env[ROLE]
     env.yum_fn = fn or find_template(env.yum_fn)
     assert os.path.isfile(env.yum_fn)
@@ -177,9 +177,9 @@ def list_required(type=None, service=None, verbose=True):
         if not type or type == common.RUBY:
             _new.extend(common.required_ruby_packages.get(
                 _service, {}).get((version.distro, version.release), []))
-        if not _new and verbose:
-            print>>sys.stderr, \
-                'Warning: no packages found for service "%s"' % (_service,)
+#         if not _new and verbose:
+#             print>>sys.stderr, \
+#                 'Warning: no packages found for service "%s"' % (_service,)
         for _ in _new:
             if _ in packages_set:
                 continue
@@ -191,14 +191,16 @@ def list_required(type=None, service=None, verbose=True):
     return packages
 
 @task_or_dryrun
-def install_required(type=None, service=None, list_only=0, **kwargs):
+def install_required(type=None, service=None, list_only=0, verbose=0, **kwargs):
     """
     Installs system packages listed as required by services this host uses.
     """
+    verbose = int(verbose)
     list_only = int(list_only)
     type = (type or '').lower().strip()
     assert not type or type in common.PACKAGE_TYPES, \
         'Unknown package type: %s' % (type,)
+    lst = []
     if type:
         types = [type]
     else:
@@ -207,8 +209,10 @@ def install_required(type=None, service=None, list_only=0, **kwargs):
         if type == common.SYSTEM:
             content = '\n'.join(list_required(type=type, service=service))
             if list_only:
-                print content
-                return
+                lst.extend(_ for _ in content.split('\n') if _.strip())
+                if verbose:
+                    print content
+                break
             fd, fn = tempfile.mkstemp()
             fout = open(fn, 'w')
             fout.write(content)
@@ -216,65 +220,22 @@ def install_required(type=None, service=None, list_only=0, **kwargs):
             install_custom(fn=fn)
         else:
             raise NotImplementedError
+    return lst
             
 @task_or_dryrun
-def record_manifest():
+def record_manifest(verbose=0):
     """
     Called after a deployment to record any data necessary to detect changes
     for a future deployment.
     """
-    data = {}
-    data['system1'] = install(list_only=True) or []
-    data['system2'] = list_required(type=common.SYSTEM, verbose=False) or []
-    #TODO:link to the pip and ruby modules?
-#    data['python'] = list_required(type=common.PYTHON, verbose=False)
-#    data['ruby'] = list_required(type=common.RUBY, verbose=False)
+    data = []
+    
+    data.extend(install_required(type=common.SYSTEM, verbose=False, list_only=True))
+    data.extend(install_custom(list_only=True))
+    
+    data.sort()
+    if int(verbose):
+        print data
     return data
 
-def compare_manifest(data=None):
-    """
-    Called before a deployment, given the data returned by record_manifest(),
-    for determining what, if any, tasks need to be run to make the target
-    server reflect the current settings within the current context.
-    """
-    methods = []
-    pre = ['user']
-    old = data or {}
-    
-    old_system = old.get('system1', []) or []
-    #print 'old_system:',old_system
-    new_system = install(list_only=True) or []
-    #print 'new_system:',new_system
-    to_add_system1 = sorted(set(new_system).difference(old_system), key=lambda o: new_system.index(o))
-    #print 'to_add_system1:',to_add_system1
-    
-    old_system = old.get('system2', [])
-    new_system = list_required(type=common.SYSTEM, verbose=False)
-    to_add_system2 = sorted(set(new_system).difference(old_system), key=lambda o: new_system.index(o))
-    #print 'to_add_system2:',to_add_system2
-    
-    to_add_system = to_add_system1 + to_add_system2
-    for name in to_add_system:
-        methods.append(QueuedCommand('package.install', kwargs=dict(package_name=name), pre=pre))
-    #print 'to_add_system:',to_add_system
-    
-    #TODO:link to the pip and ruby modules?
-#    old_python = old.get('python', [])
-#    new_python = list_required(type=common.PYTHON, verbose=False)
-#    to_add_python = sorted(set(new_python).difference(old_python), key=lambda o: new_python.index(o))
-#    for name in to_add_python:
-#        methods.append(QueuedCommand('pip.install', kwargs=dict(package=name)))
-    #print 'to_add_python:',to_add_python
-    
-#    old_ruby = old.get('ruby', [])
-#    new_ruby = list_required(type=common.RUBY, verbose=False)
-#    to_add_ruby = sorted(set(new_ruby).difference(old_ruby), key=lambda o: new_ruby.index(o))
-#    for name in to_add_ruby:
-#        raise NotImplementedError
-        #methods.append(QueuedCommand('ruby.install', (name,)))
-    #print 'to_add_ruby:',to_add_ruby
-    
-    return methods
-
 common.manifest_recorder[PACKAGER] = record_manifest
-common.manifest_comparer[PACKAGER] = compare_manifest

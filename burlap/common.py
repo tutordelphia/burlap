@@ -115,6 +115,30 @@ service_stoppers = type(env)() # {service:[func]}
 
 manifest_recorder = type(env)() #{component:[func]}
 manifest_comparer = type(env)() #{component:[func]}
+manifest_deployers = type(env)() #{component:[func]}
+manifest_deployers_befores = type(env)() #{component:[pending components that must be run first]}
+manifest_deployers_takes_diff = type(env)()
+
+def add_deployer(event, func, before=[], takes_diff=False):
+    event = event.strip().upper()
+    
+    manifest_deployers.setdefault(event, [])
+    manifest_deployers[event].append(func)
+    
+    manifest_deployers_befores.setdefault(event, [])
+    manifest_deployers_befores[event].extend(map(str.upper, before))
+    
+    manifest_deployers_takes_diff[func] = takes_diff
+
+def resolve_deployer(func_name):
+#     print('func:',func_name)
+    if '.' in func_name:
+        mod_name, func_name = func_name.split('.')
+    else:
+        mod_name = 'fabfile'
+    ret = getattr(importlib.import_module(mod_name), func_name)
+#     print('ret:',ret)
+    return ret
 
 env.hosts_retriever = None
 env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,
@@ -143,6 +167,8 @@ env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk 
 env.post_callbacks = []
 
 env.burlap_data_dir = '.burlap'
+
+
 
 def shellquote(s, singleline=True):
     if singleline:
@@ -300,6 +326,13 @@ def get_component_settings(prefixes=[]):
                 data[k] = env[k]
     return data
 
+def get_last_modified_timestamp(path):
+    import commands
+    cmd = 'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
+    ret = commands.getoutput(cmd)
+    ret = float(ret)
+    return ret
+
 def check_settings_for_differences(old, new, as_bool=False, as_tri=False):
     """
     Returns a subset of the env dictionary keys that differ,
@@ -366,62 +399,6 @@ def get_app_package(name):
     assert name in INSTALLED_APPS, 'Unknown or uninstalled app: %s' % (name,)
     return importlib.import_module('arch.%s' % name)
 
-class Role(object):
-    
-    def __init__(self):
-        pass
-
-    @classmethod
-    def to_dict(cls):
-        return (cls.__name__,) #TODO:add vars
-
-class Meta(object):
-    
-    def __init__(self, **kwargs):
-        self.abstract = False
-        self.__dict__.update(kwargs)
-
-class MigratableMetaclass(type):
-    
-    def __new__(cls, clsname, bases, dct):
-#        print '-'*80
-#        print 'MigratableMetaclass:',cls, clsname, bases, dct
-        local_meta = dct.get('Meta')
-#        print 'local meta:',local_meta and local_meta.abstract
-        if local_meta:
-            dct['_meta'] = Meta(**local_meta.__dict__)
-        else:
-            dct['_meta'] = Meta(abstract=False)
-#        print '_meta:',dct['_meta'].abstract
-        return type.__new__(cls, clsname, bases, dct)
-
-class Migratable(object):
-    
-    __metaclass__ = MigratableMetaclass
-    
-    class Meta:
-        abstract = False
-    
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def to_dict(cls):
-        return {}
-    
-class BaseMigration(object):
-    
-    components = {}
-    
-    def __init__(self):
-        pass
-    
-    def forwards(self):
-        pass
-    
-    def backwards(self):
-        pass
-
 def to_dict(obj):
     if isinstance(obj, (tuple, list)):
         return [to_dict(_) for _ in obj]
@@ -433,103 +410,6 @@ def to_dict(obj):
         return obj.to_dict()
     else:
         raise Exception, 'Unknown type: %s %s' % (obj, type(obj))
-
-class AppHandler(object):
-    
-    def __init__(self, name):
-        self.name = name
-        self.package = get_app_package(name)
-
-    @property
-    def base_dir(self):
-        return os.path.split(self.package.__file__)[0]
-
-    @property
-    def migrations_dir(self):
-        return os.path.join(self.base_dir, 'migrations')
-
-    def init_migrations(self):
-        migrations_dir = self.migrations_dir
-        if not os.path.isdir(migrations_dir):
-            os.makedirs(migrations_dir)
-        f = os.path.join(migrations_dir, '__init__.py')
-        if not os.path.isfile(f):
-            open(f, 'w').write('')
-
-    def get_migrations(self):
-        migrations = importlib.import_module('arch.%s.migrations' % (self.name,))
-        return get_submodules(migrations)
-
-    def to_dict(self, migratable):
-        d = {}
-        d['Meta'] = {} #TODO:load ._meta
-        for _name in dir(migratable):
-            if _name.startswith('__') or _name == 'Meta' or _name == '_meta':
-                continue
-            value = getattr(migratable, _name)
-            if callable(value):
-                continue
-            d[_name] = to_dict(value)
-        return d
-
-    def create_initial_migration(self):
-        template = [
-            '# -*- coding: utf-8 -*-',
-            'from burlap.common import BaseMigration',
-            '',
-            'class Migration(BaseMigration):',
-            '',
-            '    def forwards(self):',
-            '        pass',
-            '',
-            '    def backwards(self):',
-            '        pass',
-            '',
-        ]
-    
-#        print 'initial'
-#        print dir(self.package)
-        components = importlib.import_module('arch.%s.components' % self.name)
-        components_dict = {}
-        for _name in dir(components):
-            cls = getattr(components, _name)
-            try:
-                if issubclass(cls, Migratable):
-                    if cls._meta.abstract:
-                        continue
-#                    print cls
-#                    print dir(cls)
-#                    print 'dict:',self.to_dict(cls)
-                    components_dict[cls.__name__] = self.to_dict(cls)
-            except TypeError:
-                pass
-            
-        fout = StringIO()
-        pprint(components_dict, stream=fout, indent=4)
-            
-        template.extend([
-            '    components = {',
-            '\n'.join((' '*8)+_ for _ in fout.getvalue().split('\n')),
-            '    }',
-        ])
-        template_str = '\n'.join(template)
-        print template_str
-
-    def create_migration(self, initial=False):
-        self.init_migrations()
-        migrations = self.get_migrations()
-        if initial:
-            if migrations:
-                raise Exception, 'Unable to create initial migration because migrations already exist.'
-            self.create_initial_migration()
-        elif migrations:
-            # Compare last migration state to current state.
-            todo
-        else:
-            raise Exception, 'No existing migrations. Run with --initial to create first migration.'
-        
-    def migrate(self):
-        todo
 
 class QueuedCommand(object):
     """
@@ -665,11 +545,11 @@ def get_packager():
     #TODO:cache result by current env.host_string so we can handle multiple hosts with different OSes
     with settings(warn_only=True):
         with hide('running', 'stdout', 'stderr', 'warnings'):
-            ret = run_or_dryrun('cat /etc/fedora-release')
+            ret = _run('cat /etc/fedora-release')
             if ret.succeeded:
                 common_packager = YUM
             else:
-                ret = run_or_dryrun('cat /etc/lsb-release')
+                ret = _run('cat /etc/lsb-release')
                 if ret.succeeded:
                     common_packager = APT
                 else:
@@ -841,6 +721,34 @@ def get_current_hostname():
 #        translator = getattr(importlib.import_module(module_name), func_name)
     ret = run_or_dryrun('hostname')#)
     return str(ret)
+
+#http://stackoverflow.com/questions/11557241/python-sorting-a-dependency-list
+def topological_sort(source):
+    """perform topo sort on elements.
+
+    :arg source: list of ``(name, [list of dependancies])`` pairs
+    :returns: list of names, with dependancies listed first
+    """
+    if isinstance(source, dict):
+        source = source.items()
+    pending = sorted([(name, set(deps)) for name, deps in source]) # copy deps so we can modify set in-place       
+    emitted = []        
+    while pending:
+        next_pending = []
+        next_emitted = []
+        for entry in pending:
+            name, deps = entry
+            deps.difference_update(emitted) # remove deps we emitted last pass
+            if deps: # still has deps? recheck during next pass
+                next_pending.append(entry) 
+            else: # no more deps? time to emit
+                yield name 
+                emitted.append(name) # <-- not required, but helps preserve original ordering
+                next_emitted.append(name) # remember what we emitted for difference_update() in next pass
+        if not next_emitted: # all entries have unmet deps, one of two things is wrong...
+            raise ValueError("cyclic or missing dependancy detected: %r" % (next_pending,))
+        pending = next_pending
+        emitted = next_emitted
 
 def represent_ordereddict(dumper, data):
     value = []

@@ -22,7 +22,8 @@ from burlap.common import (
 from burlap import common
 from burlap.decorators import task_or_dryrun
 
-env.tarball_gzip = True
+env.tarball_clean = 1
+env.tarball_gzip = 1
 env.tarball_exclusions = [
     '*_local.py',
     '*.pyc',
@@ -43,7 +44,7 @@ def get_tarball_path():
         env.tarball_ext = 'tgz'
     if not os.path.isdir(env.tarball_dir):
         os.makedirs(env.tarball_dir)
-    env.absolute_src_dir = os.path.abspath(env.src_dir)
+    env.tarball_absolute_src_dir = os.path.abspath(env.src_dir)
     env.tarball_path = os.path.abspath('%(tarball_dir)s/code-%(ROLE)s-%(SITE)s-%(host_string)s.%(tarball_ext)s' % env)
     return env.tarball_path
 
@@ -60,19 +61,27 @@ def create(gzip=1):
     print 'Creating tarball...'
     env.tarball_exclusions_str = ' '.join(
         "--exclude='%s'" % _ for _ in env.tarball_exclusions)
-    cmd = ("cd %(absolute_src_dir)s; " \
+    cmd = ("cd %(tarball_absolute_src_dir)s; " \
         "tar %(tarball_exclusions_str)s --exclude-vcs %(tarball_gzip_flag)s " \
         "--create --verbose --dereference --file %(tarball_path)s *") % env
     local_or_dryrun(cmd)
 
 @task_or_dryrun
-def deploy(clean=0):
+def deploy(clean=None, refresh=1):
     """
     Copies the tarball to the target server.
     
     Note, clean=1 will delete any dynamically generated files not included
     in the tarball.
     """
+    
+    if clean is None:
+        clean = env.tarball_clean
+    clean = int(clean)
+    
+    # Generate fresh tarball.
+    if int(refresh):
+        create()
     
     tarball_path = get_tarball_path()
     assert os.path.isfile(tarball_path), \
@@ -123,33 +132,16 @@ def get_tarball_hash(fn=None, refresh=1, verbose=0):
     return tarball_hash
 
 @task_or_dryrun
-def record_manifest():
+def record_manifest(verbose=0):
     """
     Called after a deployment to record any data necessary to detect changes
     for a future deployment.
-    """
-    
-    # Record tarball hash.
-    data = {'tarball_hash': get_tarball_hash()}
-    
+    """    
+    get_tarball_path()
+    fn = env.tarball_absolute_src_dir
+    data = common.get_last_modified_timestamp(fn)
+    if int(verbose):
+        print data
     return data
 
-def compare_manifest(data=None):
-    """
-    Called before a deployment, given the data returned by record_manifest(),
-    for determining what, if any, tasks need to be run to make the target
-    server reflect the current settings within the current context.
-    """
-    data = data or {}
-    pre = ['user', 'package', 'pip']
-    new_hash = get_tarball_hash()
-#    print 'old:',data.get('tarball_hash')
-#    print 'new:',new_hash
-    if data.get('tarball_hash') != new_hash:
-        return [
-            QueuedCommand('tarball.create', pre=pre),
-            QueuedCommand('tarball.deploy', pre=pre),
-        ]
-
 common.manifest_recorder[TARBALL] = record_manifest
-common.manifest_comparer[TARBALL] = compare_manifest
