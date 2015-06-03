@@ -566,7 +566,7 @@ def auto(fake=0, preview=0, check_outstanding=1):
                 else:
                     func()
     if preview:
-        print('\nTo execute this plan on all hosts run:\n\n    fab %s plan.deploy' % env.ROLE)
+        print('\nTo execute this plan on all hosts run:\n\n    fab %s deploy.run' % env.ROLE)
         return
     
     # Create thumbprint.
