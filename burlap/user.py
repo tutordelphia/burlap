@@ -55,6 +55,7 @@ def togroups(user=None, groups=None):
     for group in groups:
         env.user_username = user
         env.user_group = group
+        sudo_or_dryrun('groupadd --force %(user_group)s' % env)
         sudo_or_dryrun('adduser %(user_username)s %(user_group)s' % env)
 
 @task_or_dryrun
