@@ -117,9 +117,10 @@ manifest_recorder = type(env)() #{component:[func]}
 manifest_comparer = type(env)() #{component:[func]}
 manifest_deployers = type(env)() #{component:[func]}
 manifest_deployers_befores = type(env)() #{component:[pending components that must be run first]}
+#manifest_deployers_afters = type(env)() #{component:[pending components that must be run last]}
 manifest_deployers_takes_diff = type(env)()
 
-def add_deployer(event, func, before=[], takes_diff=False):
+def add_deployer(event, func, before=[], after=[], takes_diff=False):
     event = event.strip().upper()
     
     manifest_deployers.setdefault(event, [])
@@ -128,6 +129,11 @@ def add_deployer(event, func, before=[], takes_diff=False):
     
     manifest_deployers_befores.setdefault(event, [])
     manifest_deployers_befores[event].extend(map(str.upper, before))
+    
+    for _c in after:
+        _c = _c.strip().upper()
+        manifest_deployers_befores.setdefault(_c, [])
+        manifest_deployers_befores[_c].append(event)
     
     manifest_deployers_takes_diff[func] = takes_diff
 
@@ -328,12 +334,18 @@ def get_component_settings(prefixes=[]):
     return data
 
 def get_last_modified_timestamp(path):
+    """
+    Recursively finds the most recent timestamp in the given directory.
+    """
     import commands
     cmd = 'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
     ret = commands.getoutput(cmd)
     # Note, we round now to avoid rounding errors later on where some formatters
-    # use different decimal contexts. 
-    ret = round(float(ret), 2)
+    # use different decimal contexts.
+    try: 
+        ret = round(float(ret), 2)
+    except ValueError:
+        return
     return ret
 
 def check_settings_for_differences(old, new, as_bool=False, as_tri=False):

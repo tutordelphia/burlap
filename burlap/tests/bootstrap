@@ -1,3 +1,0 @@
-#!/bin/bash
-virtualenv .env
-.env/bin/pip install -r roles/all/pip-requirements.txt

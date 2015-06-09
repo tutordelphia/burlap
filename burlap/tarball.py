@@ -31,7 +31,7 @@ env.tarball_exclusions = [
     '*.tar.gz',
     #'static',
 ]
-env.tarball_dir = '.tarball_cache'
+env.tarball_dir = '.burlap/tarball_cache'
 env.tarball_extra_dirs = []
 
 TARBALL = 'TARBALL'
@@ -147,4 +147,4 @@ def record_manifest(verbose=0):
 
 common.manifest_recorder[TARBALL] = record_manifest
 
-common.add_deployer('tarball', 'tarball.deploy', before=['package', 'apache2', 'pip'])
+common.add_deployer(TARBALL, 'tarball.deploy', before=['package', 'apache2', 'pip', 'user'])

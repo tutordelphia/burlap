@@ -102,7 +102,16 @@ def load_django_settings():
 
     #TODO:remove this once bug in django-celery has been fixed
     os.environ['ALLOW_CELERY'] = '0'
-    
+
+    #os.environ.setdefault("DJANGO_SETTINGS_MODULE", "dryden_site.settings")
+
+    # In Django >= 1.7, fixes the error AppRegistryNotReady: Apps aren't loaded yet
+    try:
+        from django.core.wsgi import get_wsgi_application
+        application = get_wsgi_application()
+    except ImportError:
+        pass
+
     # Load Django settings.
     settings = get_settings()
     from django.contrib import staticfiles
@@ -383,7 +392,6 @@ common.manifest_recorder[DJANGO_MIGRATIONS] = record_manifest_migrations
 # DJANGO_SYNCDB = 'DJANGO_SYNCDB'
 # DJANGO_MIGRATIONS = 'DJANGO_MIGRATIONS'
 
-common.add_deployer('django_media', 'apache.sync_media', before=['package', 'apache2', 'pip', 'tarball'])
-common.add_deployer('django_migrations', 'db.update_all_from_diff',
-    before=['package', 'apache2', 'pip', 'tarball', 'django_media'],
+common.add_deployer(DJANGO_MIGRATIONS, 'db.update_all_from_diff',
+    before=['packager', 'apache', 'apache2', 'pip', 'tarball', 'django_media'],
     takes_diff=True)

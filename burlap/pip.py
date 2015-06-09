@@ -23,6 +23,7 @@ from fabric.api import (
     require,
     settings,
     cd,
+    run as _run,
     runs_once,
     execute,
     hide,
@@ -109,11 +110,19 @@ def clean_virtualenv():
         'Unable to delete pre-existing environment.'
 
 @task_or_dryrun
+def has_pip():
+    with settings(warn_only=True):
+        ret = _run('which pip').strip()
+        return bool(ret)
+    
+@task_or_dryrun
 def bootstrap():
     """
     Installs all the necessary packages necessary for managing virtual
     environments with pip.
     """
+    if has_pip():
+        return
     env.pip_path_versioned = env.pip_path % env
     run_or_dryrun('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py')
     #sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env))
@@ -123,6 +132,19 @@ def bootstrap():
     sudo_or_dryrun('{pip_path_versioned} install --upgrade setuptools'.format(**env))
     sudo_or_dryrun('{pip_path_versioned} install --upgrade distribute'.format(**env))
     sudo_or_dryrun('{pip_path_versioned} install --upgrade virtualenv'.format(**env))
+    sudo_or_dryrun('{pip_path_versioned} install --upgrade pip'.format(**env))
+
+@task_or_dryrun
+def virtualenv_exists():
+    
+    render_paths()
+    
+    base_dir = os.path.split(env.pip_virtual_env_dir)[0]
+    
+    with settings(warn_only=True):
+        ret = _run('ls %s' % base_dir) or ''
+        ret = 'cannot access' not in ret.strip().lower()
+        return ret
 
 @task_or_dryrun
 def init(clean=0, check_global=0):
@@ -136,6 +158,10 @@ def init(clean=0, check_global=0):
     # Delete any pre-existing environment.
     if int(clean):
         clean_virtualenv()
+    
+    if virtualenv_exists():
+#         print 'virtualenv exists'
+        return
     
     # Important. Default Ubuntu 12.04 package uses Pip 1.0, which
     # is horribly buggy. Should use 1.3 or later.
@@ -726,8 +752,12 @@ def uninstall(package):
 def update_install():
     from burlap.dj import render_remote_paths
     
+    bootstrap()
+    
+    init()
+    
     req_fn = find_template(env.pip_requirements_fn)
-    print('req_fn:',req_fn)
+#     print('req_fn:',req_fn)
     env.pip_remote_requirements_fn = '/tmp/pip-requirements.txt'
     put_or_dryrun(local_path=req_fn, remote_path=env.pip_remote_requirements_fn)
 
@@ -821,4 +851,4 @@ def record_manifest(verbose=1):
 
 common.manifest_recorder[PIP] = record_manifest
 
-common.add_deployer('pip', 'pip.update_install', before=['package'])
+common.add_deployer(PIP, 'pip.update_install', before=['package', 'user'])

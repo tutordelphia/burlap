@@ -147,3 +147,5 @@ def compare_manifest(old):
     
 common.manifest_recorder[USER] = record_manifest
 common.manifest_comparer[USER] = compare_manifest
+
+common.add_deployer(USER, 'user.togroups', before=[])

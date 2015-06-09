@@ -58,6 +58,9 @@ env.db_root_logins = {} # {(type,host):{user:?, password:?}}
 # share the same server.
 env.db_allow_remote_connections = False
 
+# Should be set to False for Django >= 1.7.
+env.db_check_ghost_migrations = True
+
 #env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s | gzip -c > %(db_dump_fn)s'
 env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s > %(db_dump_fn)s'
 env.db_postgresql_createlangs = ['plpgsql'] # plpythonu
@@ -521,11 +524,14 @@ def update_all(skip_databases=None, do_install_sql=0, migrate_apps=''):
             migrate_apps=migrate_apps)
 
 @task_or_dryrun
-def update_all_from_diff(last, current):
+def update_all_from_diff(last=None, current=None):
     migrate_apps = []
-    for app_name in current:
-        if current[app_name] != last.get(app_name):
-            migrate_apps.append(app_name)
+    if last and current:
+        last = last['DJANGO_MIGRATIONS']
+        current = current['DJANGO_MIGRATIONS']
+        for app_name in current:
+            if current[app_name] != last.get(app_name):
+                migrate_apps.append(app_name)
     return update_all(migrate_apps=','.join(migrate_apps))
 
 @task_or_dryrun
@@ -892,6 +898,11 @@ def migrate(app_name='', site=None, fake=0, skip_databases=None, do_fake=1, do_r
     if isinstance(skip_databases, basestring):
         skip_databases = [_.strip() for _ in skip_databases.split(',') if _.strip()]
     
+    if env.db_check_ghost_migrations:
+        env.db_check_ghost_migrations_flag = '--delete-ghost-migrations'
+    else:
+        env.db_check_ghost_migrations_flag = ''
+    
     # Since South doesn't properly support multi-database applications, we have
     # to fake app migrations on every database except the one where they exist.
     #TODO:remove this when South fixes this or gets merged into Django core.
@@ -904,34 +915,34 @@ def migrate(app_name='', site=None, fake=0, skip_databases=None, do_fake=1, do_r
             if env.db_database_name in skip_databases:
                 continue
             if do_fake:
-                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations --fake --traceback' % env
+                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput %(db_check_ghost_migrations_flag)s --fake --traceback' % env
                 run_or_dryrun(cmd)
             if do_real and has_database(name=env.db_database_name, site=site):
 #                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --database=%(db_database_name)s --traceback' % env
 #                run_or_dryrun(cmd)
-                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --database=%(db_database_name)s --noinput --delete-ghost-migrations --traceback' % env
+                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --database=%(db_database_name)s --noinput %(db_check_ghost_migrations_flag)s --traceback' % env
                 run_or_dryrun(cmd)
     
     env.db_migrate_fake = '--fake' if int(fake) else ''
     if migrate_apps:
         for app_name in migrate_apps:
             env.db_app_name = app_name
-            cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations %(db_migrate_fake)s --traceback' % env
+            cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput %(db_check_ghost_migrations_flag)s %(db_migrate_fake)s --traceback' % env
             run_or_dryrun(cmd)
     elif app_name:
         env.db_app_name = app_name
-        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput --delete-ghost-migrations %(db_migrate_fake)s --traceback' % env
+        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput %(db_check_ghost_migrations_flag)s %(db_migrate_fake)s --traceback' % env
         run_or_dryrun(cmd)
     else:
         
         # First migrate apps in a specific order if given.
         for app_name in env.db_app_migration_order:
             env.db_app_name = app_name
-            cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s %(db_app_name)s --traceback' % env
+            cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput %(db_check_ghost_migrations_flag)s %(db_migrate_fake)s %(db_app_name)s --traceback' % env
             run_or_dryrun(cmd)
             
         # Then migrate everything else remaining.
-        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput --delete-ghost-migrations %(db_migrate_fake)s --traceback' % env
+        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput %(db_check_ghost_migrations_flag)s %(db_migrate_fake)s --traceback' % env
         run_or_dryrun(cmd)
 
 @task_or_dryrun

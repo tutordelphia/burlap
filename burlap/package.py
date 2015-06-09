@@ -40,6 +40,7 @@ def prepare():
 
 @task_or_dryrun
 def install(**kwargs):
+    refresh()
     install_required(type=common.SYSTEM, **kwargs)
     install_custom(**kwargs)
     
@@ -240,4 +241,4 @@ def record_manifest(verbose=0):
 
 common.manifest_recorder[PACKAGER] = record_manifest
 
-common.add_deployer('packager', 'package.install')
+common.add_deployer(PACKAGER, 'package.install', before=['user'])

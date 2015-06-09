@@ -1,6 +1,7 @@
 import os
 import sys
 import datetime
+from pprint import pprint
 
 from fabric.api import (
     env,
@@ -139,7 +140,44 @@ env.apache_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_
 # This will be appended to the custom Apache configuration file.
 env.apache_httpd_conf_append = []
 
+env._apache_settings = None
+
+ignore_keys = [
+    'apache_site_conf_fqfn',
+    'apache_domain_without_sub',
+    'apache_server_name',
+    'apache_domain_with_sub',
+    'apache_site_conf',
+    'apache_mod_enabled',
+    'apache_tmp_chmod',
+    'apache_sync_local_path',
+    'apache_sync_remote_path',
+    'apache_site',
+    'apache_auth_basic_authuserfile',
+    'apache_domain',
+    'apache_ssl_domain',
+    'apache_domain_without_sub_template',
+    'apache_django_wsgi',
+    'apache_domain_template',
+    'apache_server_aliases_template',
+    'apache_enforce_subdomain',
+    'apache_domain_with_sub_template',
+    'apache_server_aliases',
+]
+
+def get_apache_settings():
+    if not env._apache_settings:
+        set_apache_specifics()
+    return env._apache_settings
+
 def set_apache_specifics():
+    
+    if not env._apache_settings:
+        env._apache_settings = type(env)()
+        for _k, _v in env.iteritems():
+            if _k.startswith('apache_'):
+                env._apache_settings[_k] = _v
+    
     os_version = common.get_os_version()
     apache_specifics = env.apache_specifics[os_version.type][os_version.distro]
     
@@ -193,6 +231,7 @@ APACHE2 = 'APACHE2'
 APACHE2_MODEVASIVE = 'APACHE2_MODEVASIVE'
 APACHE2_MODSECURITY = 'APACHE2_MODSECURITY'
 APACHE2_VISITORS = 'APACHE2_VISITORS'
+APACHE2_MEDIA = 'APACHE2_MEDIA'
 
 common.required_system_packages[APACHE2] = {
     common.FEDORA: ['httpd'],
@@ -285,6 +324,7 @@ def set_apache_site_specifics(site):
     env.apache_server_name = env.apache_domain
     env.apache_wsgi_python_path = env.apache_wsgi_python_path_template % env
     env.apache_django_wsgi = env.apache_django_wsgi_template % env
+    env.apache_django_wsgi = env.apache_django_wsgi.replace('-', '_')
     env.apache_server_aliases = env.apache_server_aliases_template % env
     env.apache_ssl_domain = env.apache_ssl_domain_template % env
     env.apache_auth_basic_authuserfile = env.apache_auth_basic_authuserfile_template % env
@@ -511,7 +551,7 @@ def install_auth_basic_user_file_all():
     install_auth_basic_user_file(site='all')
     
 @task_or_dryrun
-def sync_media(sync_set=None, clean=0):
+def sync_media(sync_set=None, clean=0, iter_local_paths=0):
     """
     Uploads select media to an Apache accessible directory.
     """
@@ -528,12 +568,18 @@ def sync_media(sync_set=None, clean=0):
     if sync_set:
         sync_sets = [sync_set]
     
+    ret_paths = []
     for sync_set in sync_sets:
         for paths in env.apache_sync_sets[sync_set]:
-            print 'paths:',paths
+            #print 'paths:',paths
             env.apache_sync_local_path = os.path.abspath(paths['local_path'] % env)
             if paths['local_path'].endswith('/') and not env.apache_sync_local_path.endswith('/'):
                 env.apache_sync_local_path += '/'
+                
+            if iter_local_paths:
+                ret_paths.append(env.apache_sync_local_path)
+                continue
+                
             env.apache_sync_remote_path = paths['remote_path'] % env
             
             if clean:
@@ -550,6 +596,9 @@ def sync_media(sync_set=None, clean=0):
 #            print cmd
             local_or_dryrun(cmd)
             sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
+            
+    if iter_local_paths:
+        return ret_paths
 
 @task_or_dryrun
 def view_error_log():
@@ -569,29 +618,24 @@ def record_manifest(verbose=0):
     Called after a deployment to record any data necessary to detect changes
     for a future deployment.
     """
-    data = common.get_component_settings(prefixes=[APACHE, APACHE2])
+    data = get_apache_settings()
+    if int(verbose):
+        pprint(data, indent=4)
+    return data
+
+@task_or_dryrun
+def record_manifest_sync_media(verbose=0):
+    """
+    Called after a deployment to record any data necessary to detect changes
+    for a future deployment.
+    """
+    data = 0
+    for path in sync_media(iter_local_paths=1):
+        data = min(data, common.get_last_modified_timestamp(path) or data)
     #TODO:hash media names and content
     if int(verbose):
         print data
     return data
-
-def compare_manifest(old):
-    """
-    Compares the current settings to previous manifests and returns the methods
-    to be executed to make the target match current settings.
-    """
-    old = old or {}
-    methods = []
-    pre = ['user','packages']
-    #TODO:sites and server conf
-    #TODO:basic auth
-    #TODO:ssl certs
-    #TODO:sync_media
-#    new = common.get_component_settings(CRON)
-#    has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
-#    if has_diffs:
-#        methods.append(QueuedCommand('cron.deploy_all'))
-    return methods
 
 # These tasks are run when the service.configure task is run.
 common.service_configurators[APACHE2] = [
@@ -624,6 +668,7 @@ common.service_pre_deployers[APACHE2] = []
 common.service_post_deployers[APACHE2] = [reload]
 
 common.manifest_recorder[APACHE2] = record_manifest
-common.manifest_comparer[APACHE2] = compare_manifest
+common.manifest_recorder[APACHE2_MEDIA] = record_manifest_sync_media
 
-common.add_deployer('apache2', 'apache.configure_all', before=['package'])
+common.add_deployer(APACHE2, 'apache.configure_all', before=['packager', 'user'])
+common.add_deployer(APACHE2_MEDIA, 'apache.sync_media', before=['packager', APACHE, APACHE2, 'pip', 'tarball'])

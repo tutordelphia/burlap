@@ -9,6 +9,7 @@ import glob
 import tempfile
 import json
 import yaml
+import shutil
 
 from fabric.api import (
     env, runs_once,
@@ -17,6 +18,9 @@ import fabric.contrib.files
 import fabric.api
 
 from burlap import common
+from burlap.common import (
+    local_or_dryrun,
+)
 from burlap.decorators import task_or_dryrun
 
 # Prevent globals from being reset by duplicate imports.
@@ -371,11 +375,13 @@ class Plan(object):
                 
         return steps_ran
 
+#DEPRECATED
 @task_or_dryrun
 def record(name):
     common.set_dryrun(1)
     env.plan = Plan(name=name)
 
+#DEPRECATED
 @task_or_dryrun
 def execute(name, verbose=1):
     plan = Plan.load(name, verbose=int(verbose))
@@ -444,6 +450,9 @@ def status(name=None, verbose=0):
         print(output)
 
 def get_current_thumbprint(role=None, name=None):
+    """
+    Retrieves a snapshot of the current code state.
+    """
     if name == INITIAL:
         name = '0'*env.plan_digits
         
@@ -463,7 +472,7 @@ def get_last_thumbprint():
     """
     plan = get_last_completed_plan()
 #     print('last completed plan:',plan.name)
-    last_thumbprint = plan.thumbprint
+    last_thumbprint = (plan and plan.thumbprint) or {}
     return last_thumbprint
 
 def iter_thumbprint_differences():
@@ -473,6 +482,38 @@ def iter_thumbprint_differences():
         if current[k] != last.get(k):
 #             print('k:',k,current[k],last.get(k))
             yield k, last, current
+
+@task_or_dryrun
+def show_diff(only=None):
+    """
+    Inspects differences between the last deployment and the current code state.
+    """
+    for k, last, current in iter_thumbprint_differences():
+        if only and k.lower() != only.lower():
+            continue
+        print('Component %s has changed.' % k)
+        last = last.get(k)
+        current = current.get(k)
+        if isinstance(last, dict) and isinstance(current, dict):
+            for _k in set(last).union(current):
+                _a = last.get(_k)
+                _b = current.get(_k)
+                if _a != _b:
+                    print('DIFF: %s =' % _k, _a, _b)
+        else:
+            print('DIFF:', last, current)
+
+@task_or_dryrun
+@runs_once
+def truncate():
+    """
+    Compacts all deployment records into a single initial deployment.
+    """
+    d = os.path.join(init_plan_data_dir(), env.ROLE)
+    local_or_dryrun('rm -Rf "%s"' % d)
+    local_or_dryrun('mkdir -p "%s"' % d)
+    if not common.get_dryrun():
+        fabric.api.execute(thumbprint, hosts=env.hosts)
 
 @task_or_dryrun
 def thumbprint(name=None):
@@ -485,6 +526,8 @@ def thumbprint(name=None):
         plan = Plan.load(name=name)
     else:
         plan = get_last_plan()
+        if not plan:
+            plan = Plan.get_or_create_next()
     plan.record_thumbprint()
     
 @task_or_dryrun
@@ -533,10 +576,23 @@ def auto(fake=0, preview=0, check_outstanding=1):
     for component, last, current in diffs:
         component_thumbprints[component] = last, current
         components.add(component)
-    component_dependences = dict(
-        (_c, set(common.manifest_deployers_befores.get(_c, [])).intersection(components))
-        for _c in components)
+    component_dependences = {}
+#     dict(
+#         (_c, set(common.manifest_deployers_befores.get(_c, [])).intersection(components))
+#         for _c in components)
 #     print('component_dependences:',component_dependences)
+    print('manifest_deployers_befores:',common.manifest_deployers_befores.keys())
+    print('all components:',components)
+    for _c in components:
+        print('checking:',_c)
+        deps = set(common.manifest_deployers_befores.get(_c, []))
+        print('deps0:',deps)
+        deps = deps.intersection(components)
+        print('deps1:',deps)
+        component_dependences[_c] = deps
+    print('dependencies:')
+    for _c in component_dependences:
+        print(_c, component_dependences[_c])
     components = list(common.topological_sort(component_dependences.items()))
     #print('components:',components)
     if components:
@@ -575,6 +631,9 @@ def auto(fake=0, preview=0, check_outstanding=1):
 
 @task_or_dryrun
 def run(*args, **kwargs):
+    """
+    Performs a full deployment.
+    """
     from burlap import service, notifier
     service.pre_deploy()
     auto(check_outstanding=0, *args, **kwargs)
