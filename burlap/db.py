@@ -812,7 +812,11 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0, verbose=0):
             "create %(db_name)s") % env
         run_or_dryrun(cmd)
         
-        #TODO:create user
+        # Create user
+        with settings(warn_only=True):
+            cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
+                "--execute='CREATE USER '%(db_user)s'@'%%' IDENTIFIED BY '%(db_password)s'; GRANT ALL PRIVILEGES ON *.* TO '%(db_user)s'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES;'") % env
+            run_or_dryrun(cmd)
 #        DROP USER '<username>'@'%';
 #        CREATE USER '<username>'@'%' IDENTIFIED BY '<password>';
 #        GRANT ALL PRIVILEGES ON *.* TO '<username>'@'%' WITH GRANT OPTION;
