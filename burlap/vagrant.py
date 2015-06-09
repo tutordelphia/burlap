@@ -47,3 +47,8 @@ def shell():
 @task_or_dryrun
 def destroy():
     local_or_dryrun('vagrant destroy' % env)
+
+@task_or_dryrun
+def upload(src, dst=None):
+    put_or_dryrun(local_path=src, remote_path=dst)
+    
