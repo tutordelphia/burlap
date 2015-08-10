@@ -14,6 +14,7 @@ import getpass
 from collections import namedtuple, OrderedDict
 from StringIO import StringIO
 from pprint import pprint
+from datetime import date
 from fabric.api import (
     env,
     local,
@@ -97,6 +98,9 @@ env.sites = {} # {site:site_settings}
 # If true, prevents run() from executing its command.
 _dryrun = False
 
+# If true, causes output of more debugging info.
+_verbose = False
+
 _show_command_output = True
 
 env.services = []
@@ -175,7 +179,15 @@ env.post_callbacks = []
 
 env.burlap_data_dir = '.burlap'
 
-
+def get_hosts_retriever(s=None):
+    """
+    Given the function name, looks up the method for dynamically retrieving host data.
+    """
+    s = s or env.hosts_retriever
+    module_name = '.'.join(s.split('.')[:-1])
+    func_name = s.split('.')[-1]
+    retriever = getattr(importlib.import_module(module_name), func_name)
+    return retriever
 
 def shellquote(s, singleline=True):
     if singleline:
@@ -207,6 +219,15 @@ def get_dryrun(dryrun=None):
     if dryrun is None or dryrun == '':
         return bool(int(_dryrun or 0))
     return bool(int(dryrun or 0))
+
+def set_verbose(verbose):
+    global _verbose
+    _verbose = bool(int(verbose or 0))
+
+def get_verbose(verbose=None):
+    if verbose is None or verbose == '':
+        return bool(int(_verbose or 0))
+    return bool(int(verbose or 0))
 
 def set_show(v):
     _show_command_output = bool(int(v))
@@ -257,24 +278,36 @@ def sudo_or_dryrun(*args, **kwargs):
 def put_or_dryrun(**kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
     use_sudo = kwargs.get('use_sudo', False)
+    real_remote_path = None
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
     if dryrun:
         local_path = kwargs['local_path']
         remote_path = kwargs.get('remote_path', None)
+        
         if not remote_path:
-            remote_path = tempfile.mktemp()
+            _, remote_path = tempfile.mkstemp()
+            
         if not remote_path.startswith('/'):
             remote_path = '/tmp/' + remote_path
+        
+        if use_sudo:
+            real_remote_path = remote_path
+            _, remote_path = tempfile.mkstemp()
+        
         if env.host_string in LOCALHOSTS:
-            cmd = ('sudo ' if use_sudo else '')+'rsync --progress --verbose %s %s' % (local_path, remote_path)
+            cmd = 'rsync --progress --verbose %s %s' % (local_path, remote_path)
             #print ('sudo ' if use_sudo else '')+'echo "%s" > %s' % (shellquote(open(local_path).read()), remote_path)
             print '%s put: %s' % (render_command_prefix(), cmd)
             env.put_remote_path = local_path
         else:
-            cmd = ('sudo ' if use_sudo else '')+'rsync --progress --verbose %s %s' % (local_path, remote_path)
+            cmd = 'rsync --progress --verbose %s %s' % (local_path, remote_path)
             env.put_remote_path = remote_path
             print '%s put: %s' % (render_command_prefix(), cmd)
+            
+        if real_remote_path and use_sudo:
+            sudo_or_dryrun('mv %s %s' % (remote_path, real_remote_path))
+            env.put_remote_path = real_remote_path
             
     else:
         return _put(**kwargs)
@@ -604,7 +637,8 @@ def get_os_version():
     set_rc('common_os_version', common_os_version)
     return common_os_version
 
-def find_template(template, verbose=False):
+def find_template(template):
+    verbose = get_verbose()
     final_fqfn = None
     for path in get_template_dirs():
         fqfn = os.path.abspath(os.path.join(path, template))
@@ -618,7 +652,7 @@ def find_template(template, verbose=False):
                 print>>sys.stderr, 'Template not found: %s' % (fqfn,)
     return final_fqfn
 
-def render_to_string(template, verbose=True):
+def render_to_string(template):
     """
     Renders the given template to a string.
     """
@@ -626,7 +660,7 @@ def render_to_string(template, verbose=True):
     from django.template import Context, Template
     from django.template.loader import render_to_string
     
-    final_fqfn = find_template(template, verbose=verbose)
+    final_fqfn = find_template(template)
     assert final_fqfn, 'Template not found: %s' % template
     from django.conf import settings
     try:
@@ -642,14 +676,14 @@ def render_to_string(template, verbose=True):
     rendered_content = rendered_content.replace('&quot;', '"')
     return rendered_content
 
-def render_to_file(template, fn=None, verbose=True, **kwargs):
+def render_to_file(template, fn=None, **kwargs):
     """
     Returns a template to a file.
     If no filename given, a temporary filename will be generated and returned.
     """
     import tempfile
     dryrun = get_dryrun(kwargs.get('dryrun'))
-    content = render_to_string(template, verbose=verbose)
+    content = render_to_string(template)
     if fn:
         fout = open(fn, 'w')
     else:
@@ -734,7 +768,8 @@ def get_current_hostname():
 #        module_name = '.'.join(env.hostname_translator.split('.')[:-1])
 #        func_name = env.hostname_translator.split('.')[-1]
 #        translator = getattr(importlib.import_module(module_name), func_name)
-    ret = run_or_dryrun('hostname')#)
+    #ret = run_or_dryrun('hostname')#)
+    ret = _run('hostname')#)
     return str(ret)
 
 #http://stackoverflow.com/questions/11557241/python-sorting-a-dependency-list

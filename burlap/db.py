@@ -4,6 +4,7 @@ import sys
 import datetime
 import glob
 import tempfile
+from collections import defaultdict
 
 from fabric.api import (
     env,
@@ -260,23 +261,25 @@ def configure(name='default', site=None, _role=None):
         print 'No database parameters found.'
 
 @task_or_dryrun
-def load_db_set(name, verbose=0):
+def load_db_set(name):
     """
     Loads database parameters from a specific named set.
     """
-    verbose = int(verbose)
+    verbose = common.get_verbose()
     db_set = env.db_sets.get(name, {})
     env.update(db_set)
 
 @task_or_dryrun
-def exists(name='default', site=None, verbose=1):
+def exists(name='default', site=None):
     """
     Returns true if the database exists. False otherwise.
     """
     from burlap.dj import set_db, render_remote_paths
     
-    
-    verbose = int(verbose)
+    verbose = common.get_verbose()
+    if verbose:
+        print '!'*80
+        print 'db.exists:', name
     
     if name:
         set_db(name=name, site=site, verbose=verbose)
@@ -297,7 +300,7 @@ def exists(name='default', site=None, verbose=1):
         
         # Set pgpass file.
         if env.db_password:
-            write_postgres_pgpass(verbose=verbose)
+            write_postgres_pgpass(verbose=verbose, name=name)
         
 #        cmd = ('psql --username={db_user} --no-password -l '\
 #            '--host={db_host} --dbname={db_name}'\
@@ -413,14 +416,16 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
         # Create role/user.
         with settings(warn_only=True):
             cmd = 'psql --user={db_postgresql_postgres_user} --no-password --command="CREATE USER {db_user} WITH PASSWORD \'{db_password}\';"'.format(**env)
-            sudo_or_dryrun(cmd)
+            run_or_dryrun(cmd)
             
         cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --command="CREATE DATABASE %(db_name)s WITH OWNER=%(db_user)s ENCODING=\'%(db_postgresql_encoding)s\'"' % env
-        sudo_or_dryrun(cmd)
+        run_or_dryrun(cmd)
+        
         #run_or_dryrun('psql --user=postgres -d %(db_name)s -c "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %(db_user)s_ro CASCADE; DROP ROLE IF EXISTS %(db_user)s_ro; DROP USER IF EXISTS %(db_user)s_ro; CREATE USER %(db_user)s_ro WITH PASSWORD \'readonly\'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO %(db_user)s_ro;"')
         with settings(warn_only=True):
             cmd = 'createlang -U postgres plpgsql %(db_name)s' % env
-            sudo_or_dryrun(cmd)
+            run_or_dryrun(cmd)
+            
     elif 'mysql' in env.db_engine:
         
         set_root_login()
@@ -586,7 +591,7 @@ def dump(dest_dir=None, to_local=None, from_local=0, archive=0):
     return env.db_dump_fn
 
 @task_or_dryrun
-def get_free_space(verbose=0):
+def get_free_space():
     """
     Return free space in bytes.
     """
@@ -600,7 +605,7 @@ def get_free_space(verbose=0):
     return free_space
 
 @task_or_dryrun
-def get_size(verbose=0):
+def get_size():
     """
     Retrieves the size of the database in bytes.
     """
@@ -619,7 +624,7 @@ def get_size(verbose=0):
         raise NotImplementedError
 
 @task_or_dryrun
-def loadable(src, dst, verbose=0):
+def loadable(src, dst):
     """
     Determines if there's enough space to load the target database.
     """
@@ -703,14 +708,14 @@ def get_default_db_fn():
 
 @task_or_dryrun
 @runs_once
-def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0, verbose=0):
+def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0):
     """
     Restores a database snapshot onto the target database server.
     
     If prep_only=1, commands for preparing the load will be generated,
     but not the command to finally load the snapshot.
     """
-    verbose = int(verbose)
+    verbose = common.get_verbose()
     from burlap.dj import set_db
     from burlap.common import get_dryrun
 #    print '!'*80
@@ -1059,20 +1064,38 @@ def install_sql(name='default', site=None):
         for d in sorted(data, cmp=cmp_paths):
             yield d[0]
     
+    def run_paths(paths, cmd_template, max_retries=3):
+        paths = list(paths)
+        error_counts = defaultdict(int) # {path:count}
+        terminal = set()
+        while paths:
+            path = paths.pop(0)
+            with settings(warn_only=True):
+                put_or_dryrun(local_path=path)
+                cmd = cmd_template % env
+                error_code = run_or_dryrun(cmd)
+                if error_code:
+                    error_counts[path] += 1
+                    if error_counts[path] < max_retries:
+                        paths.append(path)
+                    else:
+                        terminal.add(path)
+        if terminal:
+            print>>sys.stderr, '%i files could not be loaded.' % len(terminal)
+            for path in sorted(list(terminal)):
+                print>>sys.stderr, path
+            print>>sys.stderr
+    
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-        #print 'postgres'
-        for path in get_paths('postgresql'):
-            #print>>sys.stderr, 'Installing PostgreSQL script %s.' % path
-            put_or_dryrun(local_path=path)
-            #cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s") % env
-            cmd = ("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s") % env
-            run_or_dryrun(cmd)
+        run_paths(
+            paths=get_paths('postgresql'),
+            cmd_template="psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s")
+                    
     elif 'mysql' in env.db_engine:
-        for path in get_paths('mysql'):
-            #print>>sys.stderr, 'Installing MySQL script %s.' % path
-            put_or_dryrun(local_path=path)
-            cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s") % env
-            run_or_dryrun(cmd)
+        run_paths(
+            paths=get_paths('mysql'),
+            cmd_template="mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s")
+            
     else:
         raise NotImplementedError
 
@@ -1162,7 +1185,7 @@ def write_postgres_pgpass(name=None, use_sudo=0, verbose=1, commands_only=0):
     from burlap.file import appendline
     
     use_sudo = int(use_sudo)
-    verbose = int(verbose)
+    verbose = common.get_verbose()
     commands_only = int(commands_only)
     
     if name:
@@ -1211,7 +1234,7 @@ def shell(name='default', user=None, password=None, root=0, verbose=1, write_pas
     """
     from burlap.dj import set_db
     
-    verbose = int(verbose)
+    verbose = common.get_verbose()
     
     root = int(root)
     write_password = int(write_password)
@@ -1250,7 +1273,7 @@ def shell(name='default', user=None, password=None, root=0, verbose=1, write_pas
         
         # Set pgpass file.
         if write_password and env.db_password:
-            cmds.extend(write_postgres_pgpass(verbose=0, commands_only=1))
+            cmds.extend(write_postgres_pgpass(verbose=0, commands_only=1, name=name))
         
         if not no_db:
             env.db_name_str = ' --dbname=%(db_name)s' % env

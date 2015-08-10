@@ -31,7 +31,7 @@ def list_env(key=None):
     for k,v in sorted(env.iteritems(), key=lambda o:o[0]):
         if key and k != key:
             continue
-        print k,
+        print '%s ' % (k,),
         pprint(v, indent=4)
 
 @task_or_dryrun
@@ -176,9 +176,14 @@ def shell(gui=0):
     """
     Opens a UNIX shell.
     """
-    from dj import render_remote_paths
-    render_remote_paths()
-    print 'env.remote_app_dir:',env.remote_app_dir
+    
+    try:
+        from dj import render_remote_paths
+        render_remote_paths()
+    except Exception:
+        pass
+    
+    #print 'env.remote_app_dir:',env.remote_app_dir
     env.SITE = env.SITE or env.default_site
     env.shell_x_opt = '-X' if int(gui) else ''
     if '@' in env.host_string:

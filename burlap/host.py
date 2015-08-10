@@ -25,19 +25,47 @@ from burlap.common import (
 )
 from burlap.decorators import task_or_dryrun
 
-env.host_hostname = None
-env.media_mount_dirs = []
+if 'host_hostname' not in env:
+    
+    env.host_hostname = None
+    env.host_os_type = None # Linux/Windows/etc
+    env.host_os_distro = None # Ubuntu/Fedora/etc
+    env.host_os_release = None # 12.04/14.04/etc
+    
+    env.media_mount_dirs = []
 
 @task_or_dryrun
-def set_hostname(name=None):
+def set_hostname(name=None, verbose=0):
     """
     Assigns a name to the server accessible from user space.
     
     Note, we add the name to /etc/hosts since not all programs use
     /etc/hostname to reliably identify the server hostname.
     """
-    assert not env.hosts or len(env.hosts) == 1, 'Too many hosts.'
-    env.host_hostname = name or env.host_hostname or env.host_string or env.hosts[0]
+    from burlap.common import get_hosts_retriever
+    
+    verbose = int(verbose)
+    
+    retriever = get_hosts_retriever()
+    
+    hosts = list(retriever(verbose=verbose, extended=1))
+#     print 'hosts:',hosts
+    
+    #assert not env.hosts or len(env.hosts) == 1, 'Too many hosts.'
+    
+    hostname = name
+    if not hostname:
+        for _hostname, _data in hosts:
+            if _data.ip == env.host_string:
+                hostname = _hostname
+                break
+            elif _data.public_dns_name == env.host_string:
+                hostname = _hostname
+                break
+    
+    #env.host_hostname = name or env.host_hostname or env.host_string or env.hosts[0]
+    env.host_hostname = hostname
+    
     sudo_or_dryrun('echo "%(host_hostname)s" > /etc/hostname' % env)
     sudo_or_dryrun('echo "127.0.0.1 %(host_hostname)s" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts' % env)
     sudo_or_dryrun('service hostname restart; sleep 3')

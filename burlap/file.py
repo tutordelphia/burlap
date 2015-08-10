@@ -76,4 +76,14 @@ def appendline(fqfn, line, use_sudo=0, verbose=1, commands_only=0):
         else:
             run_or_dryrun(cmd)
     return [cmd]
+
+@task_or_dryrun
+def backup(fn, ext='bak'):
+    """
+    Makes a timestamped copy of a file in the same directory.
+    """
+    today = date.today()
+    fn_bak = '%s.%04i%02i%02i.%s' % (fn, today.year, today.month, today.day, ext)
+    sudo_or_dryrun('cp "%s" "%s"' % (fn, fn_bak))
+    return fn_bak
     

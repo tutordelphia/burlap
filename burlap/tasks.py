@@ -1,7 +1,7 @@
 
 from fabric.tasks import WrappedCallableTask as _WrappedCallableTask
 
-from burlap.common import get_dryrun, set_dryrun
+from burlap.common import get_dryrun, set_dryrun, get_verbose, set_verbose
 
 class WrappedCallableTask(_WrappedCallableTask):
     """
@@ -16,11 +16,17 @@ class WrappedCallableTask(_WrappedCallableTask):
         if 'dryrun' in kwargs:
             set_dryrun(kwargs['dryrun'])
             del kwargs['dryrun']
+        if 'verbose' in kwargs:
+            set_verbose(kwargs['verbose'])
+            del kwargs['verbose']
         return self.run(*args, **kwargs)
 
     def run(self, *args, **kwargs):
         if 'dryrun' in kwargs:
             set_dryrun(kwargs['dryrun'])
             del kwargs['dryrun']
+        if 'verbose' in kwargs:
+            set_verbose(kwargs['verbose'])
+            del kwargs['verbose']
         return self.wrapped(*args, **kwargs)
         

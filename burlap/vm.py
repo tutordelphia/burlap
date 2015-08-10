@@ -4,7 +4,7 @@ import os
 import sys
 import datetime
 import socket
-import pprint
+from pprint import pprint
 import time
 import yaml
 
@@ -39,51 +39,67 @@ EC2 = 'ec2'
 #env.vm_type = None
 #env.vm_group = None
 
-env.vm_name_tag = 'Name'
-env.vm_group_tag = 'Group'
-env.vm_release_tag = 'Release'
+if 'vm_name_tag' not in env:
+    
+    env.vm_name_tag = 'Name'
+    env.vm_group_tag = 'Group'
+    env.vm_release_tag = 'Release'
+    
+    env.vm_type = None
+    
+    # If a name is not given, one will be auto-generated based on this pattern.
+    env.vm_name_template = 'web{index}'
+    
+    # A release tag given to the instance when created to distinquish it from
+    # future upgrades to the same instance name.
+    env.vm_release = None
+    
+    env.vm_ec2_account_id = None
+    # https://help.ubuntu.com/community/EC2StartersGuide#Official_Ubuntu_Cloud_Guest_Amazon_Machine_Images_.28AMIs.29
+    env.vm_ec2_ami = None # e.g. 'ami-a29943cb'
+    env.vm_ec2_instance_type = None # e.g. 'm1.small'
+    env.vm_ec2_ebs = None
+    env.vm_ec2_region = None # e.g. 'us-east-1'
+    env.vm_ec2_zone = None # e.g. 'us-east-1b'
+    env.vm_ec2_available_security_groups = {} # {(name,desc):[(protocol, port, port, ip_range)]
+    env.vm_ec2_selected_security_groups = []
+    env.vm_ec2_aws_access_key_id = None
+    env.vm_ec2_aws_secret_access_key = None
+    env.vm_ec2_volume = '/dev/sdh1'
+    env.vm_ec2_keypair_name = None
+    env.vm_ec2_use_elastic_ip = False
+    env.vm_ec2_subnet_id = None
+    env.vm_ec2_allocate_address_domain = None
+    
+    # If true, we will attempt to add or delete group rules.
+    env.vm_ec2_security_group_owner = False
+    
+    # Stores dynamically allocated EIP for each host, {hostname: ip}.
+    # Usually stored in a shelf file.
+    env.vm_elastic_ip_mappings = None
 
-env.vm_type = None
-
-# If a name is not given, one will be auto-generated based on this pattern.
-env.vm_name_template = 'web{index}'
-
-# A release tag given to the instance when created to distinquish it from
-# future upgrades to the same instance name.
-env.vm_release = None
-
-env.vm_ec2_account_id = None
-# https://help.ubuntu.com/community/EC2StartersGuide#Official_Ubuntu_Cloud_Guest_Amazon_Machine_Images_.28AMIs.29
-env.vm_ec2_ami = None # e.g. 'ami-a29943cb'
-env.vm_ec2_instance_type = None # e.g. 'm1.small'
-env.vm_ec2_ebs = None
-env.vm_ec2_region = None # e.g. 'us-east-1'
-env.vm_ec2_zone = None # e.g. 'us-east-1b'
-env.vm_ec2_available_security_groups = {} # {(name,desc):[(protocol, port, port, ip_range)]
-env.vm_ec2_selected_security_groups = []
-env.vm_ec2_aws_access_key_id = None
-env.vm_ec2_aws_secret_access_key = None
-env.vm_ec2_volume = '/dev/sdh1'
-env.vm_ec2_keypair_name = None
-env.vm_ec2_use_elastic_ip = False
-env.vm_ec2_subnet_id = None
-env.vm_ec2_allocate_address_domain = None
-
-# If true, we will attempt to add or delete group rules.
-env.vm_ec2_security_group_owner = False
-
-def retrieve_ec2_hosts(verbose=0):
+def retrieve_ec2_hosts(verbose=0, extended=0):
+    verbose = int(verbose)
+    extended = int(extended)
     for name, data in list_instances(show=0, verbose=verbose).iteritems():
-        yield data.public_dns_name
+        if verbose:
+            print(name)
+            pprint(data, indent=4)
+        if extended:
+            yield (name, data)
+        elif data.public_dns_name:
+            yield data.public_dns_name
+        else:
+            yield data.ip
 
-env.hosts_retrievers['ec2'] = retrieve_ec2_hosts
+env.hosts_retrievers[EC2] = retrieve_ec2_hosts
 
 def translate_ec2_hostname(hostname, verbose=0):
     for name, data in list_instances(show=0, verbose=verbose).iteritems():
         if name == hostname:
             return data.public_dns_name
 
-env.hostname_translators['ec2'] = translate_ec2_hostname
+env.hostname_translators[EC2] = translate_ec2_hostname
 
 def get_ec2_connection():
     conn = boto.ec2.connect_to_region(
@@ -109,6 +125,8 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
     """
     Retrieves all virtual machines instances in the current environment.
     """
+    from burlap.common import shelf, OrderedDict
+    
     verbose = int(verbose)
     require('vm_type', 'vm_group')
     assert env.vm_type, 'No VM type specified.'
@@ -118,6 +136,9 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
     _release = release
     if verbose:
         print('name=%s, group=%s, release=%s' % (_name, _group, _release))
+        
+    env.vm_elastic_ip_mappings = shelf.get('vm_elastic_ip_mappings')
+        
     data = type(env)()
     if env.vm_type == EC2:
         for instance in get_all_running_ec2_instances():
@@ -156,9 +177,16 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
             data.setdefault(name, type(env)())
             data[name]['id'] = instance.id
             data[name]['public_dns_name'] = instance.public_dns_name
-            data[name]['ip'] = socket.gethostbyname(instance.public_dns_name)
+            if verbose:
+                print('Public DNS: %s' % instance.public_dns_name)
+            
+            if name in env.vm_elastic_ip_mappings:
+                data[name]['ip'] = env.vm_elastic_ip_mappings[name]
+            else:
+                data[name]['ip'] = socket.gethostbyname(instance.public_dns_name)
+                
         if int(show):
-            pprint.pprint(data, indent=4)
+            pprint(data, indent=4)
         return data
     elif env.vm_type == KVM:
         #virsh list

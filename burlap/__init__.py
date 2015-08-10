@@ -13,7 +13,7 @@ import warnings
 
 from pprint import pprint
 
-VERSION = (0, 4, 5)
+VERSION = (0, 4, 6)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -97,9 +97,12 @@ def _get_environ_handler(name, d):
         retriever = None
         if env.hosts_retriever:
             # Dynamically retrieve hosts.
-            module_name = '.'.join(env.hosts_retriever.split('.')[:-1])
-            func_name = env.hosts_retriever.split('.')[-1]
-            retriever = getattr(importlib.import_module(module_name), func_name)
+#             module_name = '.'.join(env.hosts_retriever.split('.')[:-1])
+#             func_name = env.hosts_retriever.split('.')[-1]
+#             retriever = getattr(importlib.import_module(module_name), func_name)
+            retriever = common.get_hosts_retriever()
+            if verbose:
+                print('Using retriever:', env.hosts_retriever, retriever)
         
         # Load host translator.
         translator = None
@@ -124,6 +127,9 @@ def _get_environ_handler(name, d):
             if verbose:
                 print('Building host list...')
             env.hosts = list(retriever(verbose=verbose))
+            if verbose:
+                print('Found hosts:')
+                print(env.hosts)
 
         # Filter hosts list by a specific host name.
         #env.hostname = hostname
@@ -245,10 +251,15 @@ def populate_fabfile():
                  'Please choose a different name.') % (role_name)
             locals_[role_name] = role_func
         locals_['common'] = common
-        locals_['shell'] = debug.shell
-        locals_['info'] = debug.info
-        #locals_['djshell'] = common.djshell
-        locals_['tunnel'] = debug.tunnel
+        
+        # Put all debug commands into the global namespace.
+        for _debug_name in dir(debug):
+            locals_[_debug_name] = getattr(debug, _debug_name)
+            
+#         locals_['shell'] = debug.shell
+#         locals_['info'] = debug.info
+#         #locals_['djshell'] = common.djshell
+#         locals_['tunnel'] = debug.tunnel
     finally:
         del stack
 

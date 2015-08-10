@@ -53,9 +53,12 @@ def send_email(subject, message, from_email=None, recipient_list=[]):
 
 @task_or_dryrun
 #@runs_once
-def notify_post_deployment():
-    if env.notifier_email_enabled and env.host_string == env.hosts[-1]:
+def notify_post_deployment(subject=None, message=None, force=0):
+    force = int(force)
+    subject = subject or '%s Deployment Complete' % env.ROLE.title()
+    message = message or 'Deployment to %s is complete.' % env.ROLE
+    if force or (env.notifier_email_enabled and env.host_string == env.hosts[-1]):
         send_email(
-            subject='%s Deployment Complete' % env.ROLE.title(),
-            message='Deployment to %s is complete.' % env.ROLE,
+            subject=subject,
+            message=message,
             recipient_list=env.notifier_email_recipient_list)

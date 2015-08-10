@@ -29,7 +29,7 @@ if not env.dj_settings_loaded:
     env.dj_settings_loaded = True
     
     # The default django settings module import path.
-    print>>sys.stderr, 'reset django settings module template!!!'
+    #print>>sys.stderr, 'reset django settings module template!!!'
     if 'django_settings_module_template' in env:
         print>>sys.stderr,  '!'*80
         print>>sys.stderr,  'env.django_settings_module_template:',env.django_settings_module_template
@@ -199,9 +199,30 @@ def syncdb(site=None):
     
     render_remote_paths()
     for site, site_data in iter_unique_databases(site=site):
-        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb' % env
+        cmd = (
+            'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
+            '%(django_manage)s syncdb') % env
         run_or_dryrun(cmd)
 
+@task_or_dryrun
+def manage(cmd, *args, **kwargs):
+    """
+    A generic wrapper around Django's manage command.
+    """
+    
+    render_remote_paths()
+
+    env.dj_cmd = cmd
+    env.dj_args = ' '.join(map(str, args))
+    env.dj_kwargs = ' '.join(
+        ('--%s' % _k if _v is True else '--%s=%s' % (_k, _v))
+        for _k, _v in kwargs.iteritems())
+
+    cmd = (
+        'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
+        '%(django_manage)s %(dj_cmd)s %(dj_args)s %(dj_kwargs)s') % env
+    run_or_dryrun(cmd)
+    
 @task_or_dryrun
 def migrate(app='', migration='', site=None, fake=0):
     """
@@ -216,7 +237,10 @@ def migrate(app='', migration='', site=None, fake=0):
             env.django_migrate_app = app
         else:
             env.django_migrate_app = ''
-        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(django_migrate_app)s %(django_migrate_migration)s %(django_migrate_fake_str)s' % env
+        cmd = (
+            'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
+            '%(django_manage)s migrate %(django_migrate_app)s %(django_migrate_migration)s '
+            '%(django_migrate_fake_str)s') % env
         cmd = cmd.strip()
         run_or_dryrun(cmd)
 

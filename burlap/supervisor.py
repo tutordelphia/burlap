@@ -43,27 +43,27 @@ def register_callback(f):
 env.supervisor_service_commands = {
     common.START:{
         common.FEDORA: 'systemctl start supervisord.service',
-        common.UBUNTU: 'service supervisord start',
+        common.UBUNTU: 'service supervisor start',
     },
     common.STOP:{
         common.FEDORA: 'systemctl stop supervisor.service',
-        common.UBUNTU: 'service supervisord stop',
+        common.UBUNTU: 'service supervisor stop',
     },
     common.DISABLE:{
         common.FEDORA: 'systemctl disable httpd.service',
-        common.UBUNTU: 'chkconfig supervisord off',
+        common.UBUNTU: 'chkconfig supervisor off',
     },
     common.ENABLE:{
         common.FEDORA: 'systemctl enable httpd.service',
-        common.UBUNTU: 'chkconfig supervisord on',
+        common.UBUNTU: 'chkconfig supervisor on',
     },
     common.RESTART:{
         common.FEDORA: 'systemctl restart supervisord.service',
-        common.UBUNTU: 'service supervisord restart; sleep 5',
+        common.UBUNTU: 'service supervisor restart; sleep 5',
     },
     common.STATUS:{
         common.FEDORA: 'systemctl status supervisord.service',
-        common.UBUNTU: 'service supervisord status',
+        common.UBUNTU: 'service supervisor status',
     },
 }
 
