@@ -10,9 +10,13 @@ import tempfile
 import json
 import yaml
 import shutil
+from collections import defaultdict
+from pprint import pprint
+
+from StringIO import StringIO
 
 from fabric.api import (
-    env, runs_once,
+    env, runs_once, sudo as _sudo, get as _get,
 )
 import fabric.contrib.files
 import fabric.api
@@ -20,14 +24,27 @@ import fabric.api
 from burlap import common
 from burlap.common import (
     local_or_dryrun,
+    get_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
 )
 from burlap.decorators import task_or_dryrun
+
+STORAGE_LOCAL = 'local'
+STORAGE_REMOTE = 'remote'
+STORAGES = (
+    STORAGE_LOCAL,
+    STORAGE_REMOTE,
+)
+
+default_remote_path = '/var/local/burlap'
 
 # Prevent globals from being reset by duplicate imports.
 if not 'plan_init' in env:
     env.plan_init = True
     env.plan_root = None
     env.plan_originals = {}
+    env.plan_storage = STORAGE_REMOTE
 _originals = env.plan_originals
 
 env.plan = None
@@ -42,11 +59,187 @@ PLAN_METHODS = [RUN, SUDO, LOCAL, PUT]
 
 INITIAL = 'initial'
 
+_fs_cache = defaultdict(dict) # {func_name:{path:ret}}
+
+def make_dir(d):
+    if d not in _fs_cache['make_dir']:
+        if env.plan_storage == STORAGE_REMOTE:
+            sudo_or_dryrun('mkdir -p "%s"' % d)
+        else:
+            if not os.path.isdir(d):
+                os.makedirs(d)
+        _fs_cache['make_dir'][d] = True
+    return _fs_cache['make_dir'][d]
+
+@task_or_dryrun
+def list_dir(d):
+    if d not in _fs_cache['list_dir']:
+        verbose = common.get_verbose()
+        if env.plan_storage == STORAGE_REMOTE:
+            #output = sudo_or_dryrun('ls "%s"' % d)
+            output = _sudo('ls "%s"' % d)
+            output = output.split()
+            if verbose:
+                print('output:', output)
+            ret = output
+        else:
+            ret = os.listdir(d)
+        _fs_cache['list_dir'][d] = ret
+    return _fs_cache['list_dir'][d]
+
+@task_or_dryrun
+def is_dir(d):
+    if d not in _fs_cache['is_dir']:
+        verbose = common.get_verbose()
+        if env.plan_storage == STORAGE_REMOTE:
+            cmd = 'if [ -d "%s" ]; then echo 1; else echo 0; fi' % d
+            output = _sudo(cmd)
+            if verbose:
+                print('output:', output)
+            ret = int(output)
+        else:
+            ret = os.path.isdir(fqfn)
+        _fs_cache['is_dir'][d] = ret
+    return _fs_cache['is_dir'][d]
+
+@task_or_dryrun
+def is_file(fqfn):
+    if fqfn not in _fs_cache['is_file']:
+        verbose = common.get_verbose()
+        if env.plan_storage == STORAGE_REMOTE:
+            cmd = 'if [ -f "%s" ]; then echo 1; else echo 0; fi' % fqfn
+            output = _sudo(cmd)
+            if verbose:
+                print('output:', output)
+            ret = int(output)
+        else:
+            ret = os.path.isfile(fqfn)
+        _fs_cache['is_file'][fqfn] = ret
+    return _fs_cache['is_file'][fqfn]
+
+# class Singleton(type):
+#     def __init__(cls, name, bases, dict):
+#         print('singleton.init')
+#         super(Singleton, cls).__init__(name, bases, dict)
+#         cls.instance = None
+#  
+#     def __call__(cls, *args, **kw):
+#         print('singleton.call')
+#         return super(Singleton, cls).__call__(*args, **kw)
+#         if cls.instance is None:
+#             cls.instance = super(Singleton, cls).__call__(*args, **kw)
+#         return cls.instance
+
+class RemoteFile(object):
+    """
+    A helper class for allowing a remote file to be read and written locally
+    while still ultimately being saved remotely.
+    """
+    
+#     __metaclass__ = Singleton
+    
+    _file_cache = {} # {fqfn, obj}
+    
+    #TODO:use meta-class instead?
+    #http://stackoverflow.com/questions/31875/is-there-a-simple-elegant-way-to-define-singletons-in-python/33201#33201
+    
+    def __new__(cls, fqfn, *args, **kwargs):
+        # Remember and cache every class instance per unique file name.
+        if fqfn not in cls._file_cache:
+#             print('creating new instance:', fqfn)
+            cls._file_cache[fqfn] = super(RemoteFile, cls).__new__(cls, fqfn, *args, **kwargs)
+#         else:
+#             print('using cache:', fqfn)
+        return cls._file_cache[fqfn]
+    
+    def __init__(self, fqfn, mode='r'):
+        super(RemoteFile, self).__init__() # causes instantiation error?
+        
+        assert mode in ('r', 'w', 'a'), 'Invalid mode: %s' % mode
+        
+        self.mode = mode
+            
+        # Due to the singleton-nature of __new__, this may be called multiple times,
+        # so we check for and avoid duplicate calls.
+        if not hasattr(self, 'fqfn'):
+            
+            self.fqfn = fqfn
+            self.content = ''
+            self.fresh = True
+            
+            if mode in 'ra':
+    #             fin = StringIO()
+    #             _get(remote_path=fqfn, local_path=fin, use_sudo=True)
+    #             self.content = fin.getvalue()
+    
+                _, tmp_fn = tempfile.mkstemp()
+                os.remove(tmp_fn)
+                ret = _get(remote_path=fqfn, local_path=tmp_fn, use_sudo=True)
+                #ret = get_or_dryrun(remote_path=fqfn, local_path=tmp_fn, use_sudo=True)
+#                 print('ret:', ret)
+                _fn = ret[0]
+#                 print('reading:', _fn)
+                fin = open(_fn, 'rb')
+#                 print('reading2:', _fn)
+                self.content = fin.read()
+#                 print('closing')
+                fin.close()
+                #print('removing:', tmp_fn)
+                os.remove(tmp_fn)#TODO:memory leak?
+#                 print('done init load')
+                
+            if mode in 'wa':
+                
+                # Update file system cache.
+                _fs_cache['is_file'][fqfn] = True
+                
+#         print('done init all')
+
+    def write(self, s):
+        assert self.mode in 'wa', 'File must be in write-mode.'
+        self.content += s
+        self.fresh = False
+        # Note, flush() must to be called to actually write this.
+
+    def read(self, *args, **kwargs):
+        return self.content
+    
+    def readlines(self):
+        return self.content.split('\n')
+    
+    def flush(self):
+        if self.fresh:
+            return
+            
+        _, tmp_fn = tempfile.mkstemp()
+        os.remove(tmp_fn)
+        fout = open(tmp_fn, 'w')
+        fout.write(self.content)
+        fout.close()
+        put_or_dryrun(
+            local_path=tmp_fn,
+            remote_path=self.fqfn,
+            use_sudo=True)
+        os.remove(tmp_fn)#TODO:memory leak?
+        self.fresh = True
+        
+        # Update file system cache.
+        _fs_cache['is_file'][self.fqfn] = True
+        
+    def close(self):
+        self.flush()
+
+def open_file(fqfn, mode='r'):
+    verbose = common.get_verbose()
+    if env.plan_storage == STORAGE_REMOTE:
+        return RemoteFile(fqfn, mode)
+    else:
+        return open(fqfn, mode)
+
 def init_plan_data_dir():
     common.init_burlap_data_dir()
     d = env.plan_data_dir % env
-    if not os.path.isdir(d):
-        os.makedirs(d)
+    make_dir(d)
     return d
 
 class Colors:
@@ -70,19 +263,17 @@ def ongoing(s):
 
 def iter_plan_names(role=None):
     d = get_plan_dir(role=role)
-    assert os.path.isdir(d)
-    for name in os.listdir(d):
+    assert is_dir(d)
+    for name in list_dir(d):
         fqfn = os.path.join(d, name)
-        if not os.path.isdir(fqfn):
+        if not is_dir(fqfn):
             continue
         yield name
 
 def get_thumbprint_path(role, name):
     d = get_plan_dir(role=role, name=name)
     d = os.path.join(d, 'thumbprints')
-#     print('d:',d)
-    if not os.path.isdir(d):
-        os.makedirs(d)
+    make_dir(d)
     return d
 
 def get_thumbprint_filename():
@@ -159,8 +350,7 @@ def get_plan_dir(role, name=None):
         d = os.path.join(init_plan_data_dir(), role or env.ROLE, name)
     else:
         d = os.path.join(init_plan_data_dir(), role or env.ROLE)
-    if not os.path.isdir(d):
-        os.makedirs(d)
+    make_dir(d)
     return d
 
 class Plan(object):
@@ -168,42 +358,58 @@ class Plan(object):
     A sequence of steps for accomplishing a state change.
     """
     
-    def __init__(self, name, role=None, verbose=1):
+    def __init__(self, name, role=None):
         
-        self.verbose = verbose
+        self.verbose = verbose = common.get_verbose()
         
         self.name = name
         
         self.role = role or env.ROLE
         
+        if verbose: print('init plan dir')
         self.plan_dir = get_plan_dir(role, name)
-        try:
-            os.makedirs(self.plan_dir)
-        except OSError:
-            pass
-        assert os.path.isdir(self.plan_dir)
+        make_dir(self.plan_dir)
+        assert is_dir(self.plan_dir)
         
+        if verbose: print('init plan history dir')
         self.plan_dir_history = os.path.join(self.plan_dir, 'history')
-        if not os.path.isfile(self.plan_dir_history):
-            open(self.plan_dir_history, 'w').write(','.join(HISTORY_HEADERS))
+        if not is_file(self.plan_dir_history):
+            fout = open_file(self.plan_dir_history, 'w')
+            fout.write(','.join(HISTORY_HEADERS))
+            fout.close()
+        if verbose: print('loading plan history')
         self.load_history()
         
+        if verbose: print('init plan index')
         self.plan_dir_index = os.path.join(self.plan_dir, 'index')
-        if not os.path.isfile(self.plan_dir_index):
-            open(self.plan_dir_index, 'w').write(str(0))
+        if not is_file(self.plan_dir_index):
+            fout = open_file(self.plan_dir_index, 'w')
+            fout.write(str(0))
+            fout.close()
+        if verbose: print('loading plan index')
         self.load_index()
         
+        if verbose: print('init plan steps')
         self.plan_dir_steps = os.path.join(self.plan_dir, 'steps')
-        if not os.path.isfile(self.plan_dir_steps):
-            open(self.plan_dir_steps, 'w').write('')
+        if not is_file(self.plan_dir_steps):
+            fout = open_file(self.plan_dir_steps, 'w')
+            fout.write('')
+            fout.close()
+        if verbose: print('loading plan steps')
         self.load_steps()
         
+        if verbose: print('init plan hosts')
         self.plan_dir_hosts = os.path.join(self.plan_dir, 'hosts')
-        if self.role == env.ROLE and not os.path.isfile(self.plan_dir_hosts):
-            open(self.plan_dir_hosts, 'w').write('\n'.join(sorted(env.hosts)))
+        if self.role == env.ROLE and not is_file(self.plan_dir_hosts):
+            fout = open_file(self.plan_dir_hosts, 'w')
+            fout.write('\n'.join(sorted(env.hosts)))
+            fout.close()
+        if verbose: print('loading plan hosts')
         self.load_hosts()
         
         #self.plan_thumbprint_fn = os.path.join(self.plan_dir, 'thumbprint')
+        
+        if verbose: print('plan init done')
     
     def __cmp__(self, other):
         if not isinstance(other, Plan):
@@ -228,16 +434,23 @@ class Plan(object):
         return False #TODO
     
     def load_hosts(self):
-        self.hosts = [
-            _.strip()
-            for _ in open(self.plan_dir_hosts, 'r').readlines()
-            if _.strip()]
+        self.hosts = []
+        if self.verbose: print('loading hosts, opening')
+        fin = open_file(self.plan_dir_hosts, 'r')
+        if self.verbose: print('loading hosts, readlines')
+        lines = fin.readlines()
+        if self.verbose: print('loading hosts, lines:', lines)
+        for line in lines:
+            if not line.strip():
+                continue
+            self.hosts.append(line.strip())
+        if self.verbose: print('loading hosts, done')
     
     @property
     def all_hosts_thumbprinted(self):
         for host in self.hosts:
             fn = self.get_thumbprint_filename(host)
-            if not os.path.isfile(fn):
+            if not is_file(fn):
                 return False
         return True
     
@@ -246,22 +459,29 @@ class Plan(object):
     
     def get_thumbprint_filename(self, host_string):
         d = os.path.join(self.plan_dir, 'thumbprints')
-        if not os.path.isdir(d):
-            os.makedirs(d)
+        make_dir(d)
         fn = os.path.join(d, env.host_string)
         return fn
     
     @property
     def thumbprint(self):
+        verbose = common.get_verbose()
+        if verbose: print('plan.thumbprint')
         fn = self.get_thumbprint_filename(env.host_string)
-        return yaml.load(open(fn))
+        if verbose: print('plan.thumbprint.fn:', fn)
+        content = open_file(fn).read()
+        if verbose: print('plan.thumbprint.yaml.raw:', content)
+        data = yaml.load(content)
+        if verbose: print('plan.thumbprint.yaml.data:', data)
+        return data
     
     @thumbprint.setter
     def thumbprint(self, data):
         assert isinstance(data, dict)
         if not common.get_dryrun():
-            fout = open(self.get_thumbprint_filename(env.host_string), 'w')
+            fout = open_file(self.get_thumbprint_filename(env.host_string), 'w')
             yaml.dump(data, fout, default_flow_style=False, indent=4)
+            fout.flush()
     
     def record_thumbprint(self):
         """
@@ -277,13 +497,13 @@ class Plan(object):
         return len(self._steps) - self.index
     
     def add_history(self, index, start, end):
-        fout = open(self.plan_dir_history, 'a')
+        fout = open_file(self.plan_dir_history, 'a')
         fout.write('%s,%s,%s\n' % (index, start, end))
         fout.flush()
         fout.close()
     
     def load_index(self):
-        self._index = int(open(self.plan_dir_index).read().strip())
+        self._index = int(open_file(self.plan_dir_index).read().strip())
     
     @property
     def index(self):
@@ -303,14 +523,14 @@ class Plan(object):
     @index.setter
     def index(self, v):
         self._index = int(v)
-        fout = open(self.plan_dir_index, 'w')
+        fout = open_file(self.plan_dir_index, 'w')
         fout.write(str(self._index))
         fout.flush()
         fout.close()
     
     def load_steps(self):
         self._steps = []
-        lines = open(self.plan_dir_steps).readlines()
+        lines = open_file(self.plan_dir_steps).readlines()
         for line in lines:
             line = line.strip()
             if not line:
@@ -336,8 +556,11 @@ class Plan(object):
         return plan
 
     @classmethod
-    def load(cls, name, role=None, verbose=1):
-        plan = cls(name, role=role, verbose=verbose)
+    def load(cls, name, role=None):
+        verbose = common.get_verbose()
+        if verbose:
+            print('loading plan:', name)
+        plan = cls(name, role=role)
         return plan
     
     def add_step(self, s):
@@ -405,9 +628,14 @@ def get_last_completed_plan():
     """
     Returns the last plan completed.
     """
+    verbose = common.get_verbose()
+    if verbose:
+        print('get_last_completed_plan')
     for _name in reversed(sorted(list(iter_plan_names()))):
         plan = Plan.load(_name)
-#         print('plan:',plan.name,'completed:',plan.is_complete())
+        if verbose:
+            print('plan:',plan.name)
+            print('plan.completed:',plan.is_complete())
         if plan.is_complete():
             return plan
             
@@ -419,15 +647,19 @@ def get_last_plan(role=None):
         plan = Plan.load(_name, role=role)
         return plan
 
+@task_or_dryrun
 def has_outstanding_plans():
     """
     Returns true if there are plans for this role that have not been executed.
     """
+    verbose = common.get_verbose()
     last_completed = get_last_completed_plan()
-#     print('last_completed plan:',last_completed)
+    if verbose:
+        print('last_completed plan:', last_completed)
     last = get_last_plan()
-#     print('last plan:',last)
-#     print('eq:',last == last_completed)
+    if verbose:
+        print('last plan:', last)
+        print('eq:', last == last_completed)
     return last != last_completed
 
 @task_or_dryrun
@@ -470,18 +702,31 @@ def get_last_thumbprint():
     """
     Returns thumbprint from the last complete deployment.
     """
+    verbose = common.get_verbose()
     plan = get_last_completed_plan()
-#     print('last completed plan:',plan.name)
+    if verbose: print('get_last_thumbprint.last completed plan:', plan.name)
     last_thumbprint = (plan and plan.thumbprint) or {}
+    if verbose: print('get_last_thumbprint.last_thumbprint:', last_thumbprint)
     return last_thumbprint
 
 def iter_thumbprint_differences():
+    verbose = common.get_verbose()
+    if verbose: print('getting last thumbprint')
     last = get_last_thumbprint()
+    if verbose: print('getting current thumbprint')
     current = get_current_thumbprint()
+    if verbose: print('comparing thumbprints')
     for k in current:
+        if verbose: print('iter_thumbprint_differences:', k)
         if current[k] != last.get(k):
-#             print('k:',k,current[k],last.get(k))
+            if verbose:
+                print('DIFFERENCE! k:', k, current[k], last.get(k))
+                print('Current:')
+                pprint(current[k], indent=4)
+                print('Last:')
+                pprint(last.get(k), indent=4)
             yield k, last, current
+    if verbose: print('iter_thumbprint_differences done')
 
 @task_or_dryrun
 def show_diff(only=None):
@@ -554,19 +799,33 @@ def auto(fake=0, preview=0, check_outstanding=1):
     
     """
     
+    verbose = common.get_verbose()
     fake = int(fake)
     preview = int(preview)
     check_outstanding = int(check_outstanding)
     
+    all_services = set(_.strip().upper() for _ in env.services)
+    if verbose:
+        print('&'*80)
+        print('services:', env.services)
+    
     last_plan = get_last_completed_plan()
-    if check_outstanding and has_outstanding_plans():
+    outstanding = has_outstanding_plans()
+    if verbose:
+        print('outstanding plans:', outstanding)
+    if check_outstanding and outstanding:
         print(fail((
             'There are outstanding plans pending execution! '
             'Run `fab %s plan.status` for details.') % env.ROLE))
         sys.exit(1)
-        
+    
+    if verbose:
+        print('iter_thumbprint_differences')
     diffs = list(iter_thumbprint_differences())
-    if not diffs:
+    if diffs:
+        if verbose:
+            print('Differences detected!')
+    else:
         print('No differences detected.')
         return
 
@@ -574,23 +833,28 @@ def auto(fake=0, preview=0, check_outstanding=1):
     components = set()
     component_thumbprints = {}
     for component, last, current in diffs:
+        if component not in all_services:
+            continue
         component_thumbprints[component] = last, current
         components.add(component)
     component_dependences = {}
-#     dict(
-#         (_c, set(common.manifest_deployers_befores.get(_c, [])).intersection(components))
-#         for _c in components)
-#     print('component_dependences:',component_dependences)
-    print('manifest_deployers_befores:',common.manifest_deployers_befores.keys())
-    print('all components:',components)
+    
+    if verbose:
+        print('manifest_deployers_befores:',common.manifest_deployers_befores.keys())
+        print('*'*80)
+        print('all components:',components)
     for _c in components:
-        print('checking:',_c)
+        if verbose:
+            print('checking:',_c)
         deps = set(common.manifest_deployers_befores.get(_c, []))
-        print('deps0:',deps)
+        if verbose:
+            print('deps0:',deps)
         deps = deps.intersection(components)
-        print('deps1:',deps)
+        if verbose:
+            print('deps1:',deps)
         component_dependences[_c] = deps
-    print('dependencies:')
+    if verbose:
+        print('dependencies:')
     for _c in component_dependences:
         print(_c, component_dependences[_c])
     components = list(common.topological_sort(component_dependences.items()))
@@ -621,6 +885,7 @@ def auto(fake=0, preview=0, check_outstanding=1):
                     func(last=last, current=current)
                 else:
                     func()
+                    
     if preview:
         print('\nTo execute this plan on all hosts run:\n\n    fab %s deploy.run' % env.ROLE)
         return
@@ -639,4 +904,21 @@ def run(*args, **kwargs):
     auto(check_outstanding=0, *args, **kwargs)
     service.post_deploy()
     notifier.notify_post_deployment()
+
+@task_or_dryrun
+def test_remotefile():
+    f = RemoteFile('/var/log/auth.log')
+    f.read()
+    print(id(f))
+    print('-'*80)
+    f = RemoteFile('/var/log/auth.log')
+    print(id(f))
+#     f = RemoteFile('/tmp/test.txt', 'w')
+#     f.write('hello there')
+#     f.close()
+#     print('-'*80)
+#     f = RemoteFile('/tmp/test.txt', 'r')
+#     print('content:', f.read())
+#     fin = StringIO()
+#     _get(remote_path='/var/local/burlap/plans/test1/000/thumbprints/54.175.211.49', local_path=fin)
     

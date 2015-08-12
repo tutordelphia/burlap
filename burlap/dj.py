@@ -24,8 +24,7 @@ from burlap.common import (
 )
 from burlap.decorators import task_or_dryrun
 
-env.setdefault('dj_settings_loaded', False)
-if not env.dj_settings_loaded:
+if 'dj_settings_loaded' not in env:
     env.dj_settings_loaded = True
     
     # The default django settings module import path.

@@ -180,7 +180,7 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
             if verbose:
                 print('Public DNS: %s' % instance.public_dns_name)
             
-            if name in env.vm_elastic_ip_mappings:
+            if env.vm_elastic_ip_mappings and name in env.vm_elastic_ip_mappings:
                 data[name]['ip'] = env.vm_elastic_ip_mappings[name]
             else:
                 data[name]['ip'] = socket.gethostbyname(instance.public_dns_name)

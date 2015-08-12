@@ -60,12 +60,11 @@ def configure_unattended_upgrades():
     assert not env.host_os_distro or env.host_os_distro == common.UBUNTU, \
         'Only Ubuntu is supported.'
     
-    #sudo apt-get install unattended-upgrades
-    
     if env.security_unattended_upgrades_enabled:
         
         # Enable automatic package updates for Ubuntu.
         # Taken from the guide at https://help.ubuntu.com/lts/serverguide/automatic-updates.html.
+        sudo_or_dryrun('apt-get install --yes unattended-upgrades')
         fn = common.render_to_file('unattended_upgrades/etc_apt_aptconfd_50unattended_upgrades')
         put_or_dryrun(local_path=fn, remote_path='/etc/apt/apt.conf.d/50unattended-upgrades', use_sudo=True)
         fn = common.render_to_file('unattended_upgrades/etc_apt_aptconfd_10periodic')

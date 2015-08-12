@@ -34,135 +34,139 @@ from burlap.common import (
 from burlap.decorators import task_or_dryrun
 from burlap import common
 
-# An Apache-conf file and filename friendly string that uniquely identifies
-# your web application.
-env.apache_application_name = None
-
-env.apache_error_log = '/var/log/apache2/error.log'
-env.apache_log_level = 'warn'
-
-env.apache_auth_basic = False
-env.apache_auth_basic_authuserfile_template = '%(apache_docroot)s/.htpasswd_%(apache_site)s'
-env.apache_auth_basic_users = [] # [(user,password)]
-
-# If true, activates a rewrite rule that causes domain.com to redirect
-# to www.domain.com.
-env.apache_enforce_subdomain = True
-
-env.apache_ssl = False
-env.apache_ssl_port = 443
-env.apache_ssl_chmod = 440
-env.apache_listen_ports = [80, 443]
-
-# A list of path patterns that should have HTTPS enforced.
-env.apache_ssl_secure_paths_enforce = True
-env.apache_ssl_secure_paths = ['/admin/(.*)']
-
-# Defines the expected name of the SSL certificates.
-env.apache_ssl_domain_template = '%(apache_domain)s'
-
-env.apache_user = 'www-data'
-env.apache_group = 'www-data'
-env.apache_wsgi_user = 'www-data'
-env.apache_wsgi_group = 'www-data'
-env.apache_chmod = 775
-
-env.apache_mods_enabled = ['rewrite', 'wsgi', 'ssl']
-
-# The value of the Apache's ServerName field. Usually should be set
-# to the domain.
-env.apache_server_name = None
-
-env.apache_server_aliases_template = ''
-
-env.apache_docroot_template = '/usr/local/%(apache_application_name)s'
-env.apache_wsgi_dir_template = '/usr/local/%(apache_application_name)s/src/wsgi'
-#env.apache_app_log_dir_template = '/var/log/%(apache_application_name)s'
-env.apache_django_wsgi_template = '%(apache_wsgi_dir)s/%(apache_site)s.wsgi'
-env.apache_ports_template = '%(apache_root)s/ports.conf'
-env.apache_ssl_dir_template = '%(apache_root)s/ssl'
-
-env.apache_domain_with_sub_template = ''
-env.apache_domain_without_sub_template = ''
-env.apache_domain_with_sub = None
-env.apache_domain_without_sub = None
-
-env.apache_wsgi_processes = 5
-
-env.apache_wsgi_threads = 15
-
-env.apache_domain_redirect_templates = [] # [(wrong_domain,right_domain)]
-env.apache_domain_redirects = [] # [(wrong_domain,right_domain)]
-
-env.apache_extra_rewrite_rules = ''
-
-env.apache_modevasive_DOSEmailNotify = 'admin@localhost'
-env.apache_modevasive_DOSPageInterval = 1 # seconds
-env.apache_modevasive_DOSPageCount = 2
-env.apache_modevasive_DOSSiteCount = 50
-env.apache_modevasive_DOSSiteInterval = 1 # seconds
-env.apache_modevasive_DOSBlockingPeriod = 10 # seconds
-
-env.apache_modsecurity_download_url = 'https://github.com/SpiderLabs/owasp-modsecurity-crs/tarball/master'
-
-env.apache_wsgi_python_path_template = '%(apache_docroot)s/.env/lib/python%(pip_python_version)s/site-packages'
-
-# OS specific default settings.
-env.apache_specifics = type(env)()
-env.apache_specifics[LINUX] = type(env)()
-env.apache_specifics[LINUX][FEDORA] = type(env)()
-env.apache_specifics[LINUX][FEDORA].root = '/etc/httpd'
-env.apache_specifics[LINUX][FEDORA].conf = '/etc/httpd/conf/httpd.conf'
-env.apache_specifics[LINUX][FEDORA].sites_available = '/etc/httpd/sites-available'
-env.apache_specifics[LINUX][FEDORA].sites_enabled = '/etc/httpd/sites-enabled'
-env.apache_specifics[LINUX][FEDORA].log_dir = '/var/log/httpd'
-env.apache_specifics[LINUX][FEDORA].pid = '/var/run/httpd/httpd.pid'
-env.apache_specifics[LINUX][UBUNTU] = type(env)()
-env.apache_specifics[LINUX][UBUNTU].root = '/etc/apache2'
-env.apache_specifics[LINUX][UBUNTU].conf = '/etc/apache2/httpd.conf'
-env.apache_specifics[LINUX][UBUNTU].sites_available = '/etc/apache2/sites-available'
-env.apache_specifics[LINUX][UBUNTU].sites_enabled = '/etc/apache2/sites-enabled'
-env.apache_specifics[LINUX][UBUNTU].log_dir = '/var/log/apache2'
-env.apache_specifics[LINUX][UBUNTU].pid = '/var/run/apache2/apache2.pid'
-
-env.apache_ssl_certificates = None
-env.apache_ssl_certificates_templates = []
-
-# The local and remote relative directory where the SSL certificates are stored.
-env.apache_ssl_dir_local = 'ssl'
-
-# An optional segment to insert into the domain, customizable by role.
-# Useful for easily keying domain-local.com/domain-dev.com/domain-staging.com.
-env.apache_locale = ''
-
-env.apache_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
-
-# This will be appended to the custom Apache configuration file.
-env.apache_httpd_conf_append = []
-
-env._apache_settings = None
+if 'apache_application_name' not in env:
+    
+    # An Apache-conf file and filename friendly string that uniquely identifies
+    # your web application.
+    env.apache_application_name = None
+    
+    env.apache_error_log = '/var/log/apache2/error.log'
+    env.apache_log_level = 'warn'
+    
+    env.apache_auth_basic = False
+    env.apache_auth_basic_authuserfile_template = '%(apache_docroot)s/.htpasswd_%(apache_site)s'
+    env.apache_auth_basic_users = [] # [(user,password)]
+    
+    # If true, activates a rewrite rule that causes domain.com to redirect
+    # to www.domain.com.
+    env.apache_enforce_subdomain = True
+    
+    env.apache_ssl = False
+    env.apache_ssl_port = 443
+    env.apache_ssl_chmod = 440
+    env.apache_listen_ports = [80, 443]
+    
+    # A list of path patterns that should have HTTPS enforced.
+    env.apache_ssl_secure_paths_enforce = True
+    env.apache_ssl_secure_paths = ['/admin/(.*)']
+    
+    # Defines the expected name of the SSL certificates.
+    env.apache_ssl_domain_template = '%(apache_domain)s'
+    
+    env.apache_user = 'www-data'
+    env.apache_group = 'www-data'
+    env.apache_wsgi_user = 'www-data'
+    env.apache_wsgi_group = 'www-data'
+    env.apache_chmod = 775
+    
+    env.apache_mods_enabled = ['rewrite', 'wsgi', 'ssl']
+    
+    # The value of the Apache's ServerName field. Usually should be set
+    # to the domain.
+    env.apache_server_name = None
+    
+    env.apache_server_aliases_template = ''
+    
+    env.apache_docroot_template = '/usr/local/%(apache_application_name)s'
+    env.apache_wsgi_dir_template = '/usr/local/%(apache_application_name)s/src/wsgi'
+    #env.apache_app_log_dir_template = '/var/log/%(apache_application_name)s'
+    env.apache_django_wsgi_template = '%(apache_wsgi_dir)s/%(apache_site)s.wsgi'
+    env.apache_ports_template = '%(apache_root)s/ports.conf'
+    env.apache_ssl_dir_template = '%(apache_root)s/ssl'
+    
+    env.apache_domain_with_sub_template = ''
+    env.apache_domain_without_sub_template = ''
+    env.apache_domain_with_sub = None
+    env.apache_domain_without_sub = None
+    
+    env.apache_wsgi_processes = 5
+    
+    env.apache_wsgi_threads = 15
+    
+    env.apache_domain_redirect_templates = [] # [(wrong_domain,right_domain)]
+    env.apache_domain_redirects = [] # [(wrong_domain,right_domain)]
+    
+    env.apache_extra_rewrite_rules = ''
+    
+    env.apache_modevasive_DOSEmailNotify = 'admin@localhost'
+    env.apache_modevasive_DOSPageInterval = 1 # seconds
+    env.apache_modevasive_DOSPageCount = 2
+    env.apache_modevasive_DOSSiteCount = 50
+    env.apache_modevasive_DOSSiteInterval = 1 # seconds
+    env.apache_modevasive_DOSBlockingPeriod = 10 # seconds
+    
+    env.apache_modsecurity_download_url = 'https://github.com/SpiderLabs/owasp-modsecurity-crs/tarball/master'
+    
+    env.apache_wsgi_python_path_template = '%(apache_docroot)s/.env/lib/python%(pip_python_version)s/site-packages'
+    
+    # OS specific default settings.
+    env.apache_specifics = type(env)()
+    env.apache_specifics[LINUX] = type(env)()
+    env.apache_specifics[LINUX][FEDORA] = type(env)()
+    env.apache_specifics[LINUX][FEDORA].root = '/etc/httpd'
+    env.apache_specifics[LINUX][FEDORA].conf = '/etc/httpd/conf/httpd.conf'
+    env.apache_specifics[LINUX][FEDORA].sites_available = '/etc/httpd/sites-available'
+    env.apache_specifics[LINUX][FEDORA].sites_enabled = '/etc/httpd/sites-enabled'
+    env.apache_specifics[LINUX][FEDORA].log_dir = '/var/log/httpd'
+    env.apache_specifics[LINUX][FEDORA].pid = '/var/run/httpd/httpd.pid'
+    env.apache_specifics[LINUX][UBUNTU] = type(env)()
+    env.apache_specifics[LINUX][UBUNTU].root = '/etc/apache2'
+    env.apache_specifics[LINUX][UBUNTU].conf = '/etc/apache2/httpd.conf'
+    env.apache_specifics[LINUX][UBUNTU].sites_available = '/etc/apache2/sites-available'
+    env.apache_specifics[LINUX][UBUNTU].sites_enabled = '/etc/apache2/sites-enabled'
+    env.apache_specifics[LINUX][UBUNTU].log_dir = '/var/log/apache2'
+    env.apache_specifics[LINUX][UBUNTU].pid = '/var/run/apache2/apache2.pid'
+    
+    env.apache_ssl_certificates = None
+    env.apache_ssl_certificates_templates = []
+    
+    # The local and remote relative directory where the SSL certificates are stored.
+    env.apache_ssl_dir_local = 'ssl'
+    
+    # An optional segment to insert into the domain, customizable by role.
+    # Useful for easily keying domain-local.com/domain-dev.com/domain-staging.com.
+    env.apache_locale = ''
+    
+    env.apache_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
+    
+    # This will be appended to the custom Apache configuration file.
+    env.apache_httpd_conf_append = []
+    
+    env._apache_settings = None
 
 ignore_keys = [
-    'apache_site_conf_fqfn',
-    'apache_domain_without_sub',
-    'apache_server_name',
-    'apache_domain_with_sub',
-    'apache_site_conf',
-    'apache_mod_enabled',
-    'apache_tmp_chmod',
-    'apache_sync_local_path',
-    'apache_sync_remote_path',
-    'apache_site',
-    'apache_auth_basic_authuserfile',
+    # These are templated environment variables, so we should ignore them when
+    # saving a snapshot of the apache settings, since they'll be host-specific.
+    'apache_docroot',
+    'apache_wsgi_dir',
     'apache_domain',
-    'apache_ssl_domain',
-    'apache_domain_without_sub_template',
+    'apache_wsgi_python_path',
     'apache_django_wsgi',
-    'apache_domain_template',
-    'apache_server_aliases_template',
-    'apache_enforce_subdomain',
-    'apache_domain_with_sub_template',
     'apache_server_aliases',
+    'apache_ssl_domain',
+    'apache_auth_basic_authuserfile',
+    'apache_domain_with_sub',
+    'apache_domain_without_sub',
+    'apache_ports',
+    'apache_ssl_dir',
+    
+    #TODO:remove? these are possibly distro-specific?
+#     'apache_root',
+#     'apache_conf',
+#     'apache_sites_available',
+#     'apache_sites_enabled',
+#     'apache_log_dir',
+#     'apache_pid',
 ]
 
 def get_apache_settings():
@@ -175,14 +179,11 @@ def set_apache_specifics():
     if not env._apache_settings:
         env._apache_settings = type(env)()
         for _k, _v in env.iteritems():
-            if _k.startswith('apache_'):
+            if _k.startswith('apache_') and _k not in ignore_keys:
                 env._apache_settings[_k] = _v
-    
+                
     os_version = common.get_os_version()
     apache_specifics = env.apache_specifics[os_version.type][os_version.distro]
-    
-#    from pprint import pprint
-#    pprint(apache_specifics, indent=4)
     
     env.apache_root = apache_specifics.root
     env.apache_conf = apache_specifics.conf
@@ -190,9 +191,10 @@ def set_apache_specifics():
     env.apache_sites_enabled = apache_specifics.sites_enabled
     env.apache_log_dir = apache_specifics.log_dir
     env.apache_pid = apache_specifics.pid
+
     env.apache_ports = env.apache_ports_template % env
     env.apache_ssl_dir = env.apache_ssl_dir_template % env
-    
+
     return apache_specifics
 
 env.apache_service_commands = {
@@ -435,6 +437,7 @@ def configure(full=1, site=None, delete_old=0, verbose=0):
 
 @task_or_dryrun
 def configure_modsecurity():
+    get_apache_settings()
     
     env.apache_mods_enabled.append('mod-security')
     env.apache_mods_enabled.append('headers')
@@ -459,6 +462,7 @@ def configure_modsecurity():
 
 @task_or_dryrun
 def configure_modevasive():
+    get_apache_settings()
     
     env.apache_mods_enabled.append('mod-evasive')
     
@@ -467,6 +471,8 @@ def configure_modevasive():
     put(local_path=fn, remote_path='/etc/apache2/mods-available/mod-evasive.conf', use_sudo=True)
     
 def iter_certificates():
+    get_apache_settings()
+    
     print>>sys.stderr, 'apache_ssl_domain:',env.apache_ssl_domain
     for cert_type, cert_file_template in env.apache_ssl_certificates_templates:
         print>>sys.stderr, 'cert_type, cert_file_template:',cert_type, cert_file_template
@@ -478,6 +484,7 @@ def iter_certificates():
 
 @task_or_dryrun
 def install_ssl(site=ALL):
+    get_apache_settings()
     apache_specifics = set_apache_specifics()
     
     for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
@@ -521,6 +528,7 @@ def install_auth_basic_user_file(site=None):
     """
     Installs users for basic httpd auth.
     """
+    get_apache_settings()
     print>>sys.stderr, 'env.apache_auth_basic0:',env.apache_auth_basic
     apache_specifics = set_apache_specifics()
     print>>sys.stderr, 'env.apache_auth_basic1:',env.apache_auth_basic
@@ -548,6 +556,7 @@ def install_auth_basic_user_file(site=None):
 
 @task_or_dryrun
 def install_auth_basic_user_file_all():
+    get_apache_settings()
     install_auth_basic_user_file(site='all')
     
 @task_or_dryrun
@@ -555,6 +564,7 @@ def sync_media(sync_set=None, clean=0, iter_local_paths=0):
     """
     Uploads select media to an Apache accessible directory.
     """
+    get_apache_settings()
     from burlap.dj import render_remote_paths
     apache_specifics = set_apache_specifics()
     
@@ -610,6 +620,7 @@ def configure_all():
     Installs the Apache site configurations for both secure and non-secure
     sites.
     """
+    get_apache_settings()
     return configure(full=1, site=ALL, delete_old=1)
 
 @task_or_dryrun

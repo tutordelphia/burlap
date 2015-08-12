@@ -115,7 +115,7 @@ def record_manifest():
     for a future deployment.
     """
     data = common.get_component_settings(IPTABLES)
-    data['iptables_rules_template_content'] = common.render_to_string(env.iptables_rules_template, verbose=False)
+    data['iptables_rules_template_content'] = common.render_to_string(env.iptables_rules_template)
     return data
 
 def compare_manifest(old):
