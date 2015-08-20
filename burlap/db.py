@@ -834,11 +834,12 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0):
         set_collation_mysql()
         
         # Raise max packet limitation.
-        run_or_dryrun(
-            ('mysql -v -h %(db_host)s -D %(db_name)s -u %(db_root_user)s '
-            '-p"%(db_root_password)s" --execute="SET global '
-            'net_buffer_length=%(db_mysql_net_buffer_length)s; SET global '
-            'max_allowed_packet=%(db_mysql_max_allowed_packet)s;"') % env)
+#         run_or_dryrun(
+#             ('mysql -v -h %(db_host)s -D %(db_name)s -u %(db_root_user)s '
+#             '-p"%(db_root_password)s" --execute="SET global '
+#             'net_buffer_length=%(db_mysql_net_buffer_length)s; SET global '
+#             'max_allowed_packet=%(db_mysql_max_allowed_packet)s;"') % env)
+        fix_mysql_packet_size(do_set=0)
         
         # Run any server-specific commands (e.g. to setup permissions) before
         # we load the data.
@@ -856,6 +857,23 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0):
         
     else:
         raise NotImplemented
+
+@task_or_dryrun
+def fix_mysql_packet_size(do_set=1):
+    verbose = common.get_verbose()
+    from burlap.dj import set_db
+
+    do_set = int(do_set)
+
+    if do_set:
+        set_db(site=env.SITE, role=env.ROLE)
+    
+    # Raise max packet limitation.
+    run_or_dryrun(
+        ('mysql -v -h %(db_host)s -D %(db_name)s -u %(db_root_user)s '
+        '-p"%(db_root_password)s" --execute="SET global '
+        'net_buffer_length=%(db_mysql_net_buffer_length)s; SET global '
+        'max_allowed_packet=%(db_mysql_max_allowed_packet)s;"') % env)
 
 @task_or_dryrun
 def syncdb(site=None, all=0, database=None):

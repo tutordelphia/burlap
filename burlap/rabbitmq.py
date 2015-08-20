@@ -138,7 +138,7 @@ def list_users():
     sudo_or_dryrun('rabbitmqctl list_users')
     
 @task_or_dryrun
-def configure(site=None, full=0):
+def configure(site=None, full=0, only_data=0):
     """
     Installs and configures RabbitMQ.
     """
@@ -147,9 +147,8 @@ def configure(site=None, full=0):
     
     full = int(full)
     
-    
 #    assert env.rabbitmq_erlang_cookie
-    if full:
+    if full and not only_data:
         package.install_required(type=package.common.SYSTEM, service=RABBITMQ)
     
     #render_paths()
@@ -165,14 +164,18 @@ def configure(site=None, full=0):
         print 'RabbitMQ:',_settings.BROKER_USER, _settings.BROKER_VHOST
         params.add((_settings.BROKER_USER, _settings.BROKER_VHOST))
     
-    for user, vhost in params:
-        env.rabbitmq_broker_user = user
-        env.rabbitmq_broker_vhost = vhost
-        with settings(warn_only=True):
-            cmd = 'rabbitmqctl add_vhost %(rabbitmq_broker_vhost)s' % env
-            sudo_or_dryrun(cmd)
-            cmd = 'rabbitmqctl set_permissions -p %(rabbitmq_broker_vhost)s %(rabbitmq_broker_user)s ".*" ".*" ".*"' % env
-            sudo_or_dryrun(cmd)
+    params = sorted(list(params))
+    if not only_data:
+        for user, vhost in params:
+            env.rabbitmq_broker_user = user
+            env.rabbitmq_broker_vhost = vhost
+            with settings(warn_only=True):
+                cmd = 'rabbitmqctl add_vhost %(rabbitmq_broker_vhost)s' % env
+                sudo_or_dryrun(cmd)
+                cmd = 'rabbitmqctl set_permissions -p %(rabbitmq_broker_vhost)s %(rabbitmq_broker_user)s ".*" ".*" ".*"' % env
+                sudo_or_dryrun(cmd)
+                
+    return params
 
 @task_or_dryrun
 def configure_all(**kwargs):
@@ -186,6 +189,10 @@ def record_manifest():
     for a future deployment.
     """
     data = common.get_component_settings(RABBITMQ)
+    
+    vhosts = configure_all(only_data=1)
+    data['rabbitmq_all_site_vhosts'] = vhosts
+    
     return data
 
 def compare_manifest(old):
@@ -211,3 +218,9 @@ common.service_post_deployers[RABBITMQ] = [start]
 
 common.manifest_recorder[RABBITMQ] = record_manifest
 common.manifest_comparer[RABBITMQ] = compare_manifest
+
+# If the manifest changes, this method gets run.
+common.add_deployer(
+    RABBITMQ,
+    'rabbitmq.configure_all',
+    before=['packager', 'user'])

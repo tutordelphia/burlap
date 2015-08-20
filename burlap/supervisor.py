@@ -21,7 +21,10 @@ from burlap.common import (
 from burlap import common
 from burlap.decorators import task_or_dryrun
 
-env.supervisor_config_path = '/etc/supervisord.conf'
+env.supervisor_config_template = 'supervisor_daemon.template2.config'
+env.supervisor_config_path = '/etc/supervisor/supervisord.conf'
+#/etc/supervisor/conf.d/celery_
+env.supervisor_conf_dir = '/etc/supervisor/conf.d'
 env.supervisor_daemon_bin_path_template = '%(pip_virtual_env_dir)s/bin/supervisord'
 env.supervisor_daemon_path = '/etc/init.d/supervisord'
 env.supervisor_bin_path_template = '%(pip_virtual_env_dir)s/bin'
@@ -153,28 +156,51 @@ def deploy_services(site=None):
     the appropriate supervisord.conf file.
     """
     
+    verbose = common.get_verbose()
     
     render_paths()
     
+    supervisor_services = []
+    process_groups = []
+    
     for site, site_data in common.iter_sites(site=site, renderer=render_paths):
-        print site
+        if verbose:
+            print site
         for cb in env._supervisor_create_service_callbacks:
             ret = cb()
             if isinstance(ret, basestring):
-                env.supervisor_services.append(ret)
-#            else:
-#                print 'invalid'
+                supervisor_services.append(ret)
+            elif isinstance(ret, tuple):
+                assert len(ret) == 2
+                conf_name, conf_content = ret
+                if verbose:
+                    print 'conf_name:', conf_name
+                    print 'conf_content:', conf_content
+                remote_fn = os.path.join(env.supervisor_conf_dir, conf_name)
+                local_fn = common.write_to_file(conf_content)
+                put_or_dryrun(local_path=local_fn, remote_path=remote_fn, use_sudo=True)
                 
-    env.supervisor_services_rendered = '\n'.join(env.supervisor_services)
-    #print env.supervisor_services_rendered
+                process_groups.append(os.path.splitext(conf_name)[0])
+                
+                
+    env.supervisor_services_rendered = '\n'.join(supervisor_services)
 
-    fn = common.render_to_file('supervisor_daemon.template.config')
+    fn = common.render_to_file(env.supervisor_config_template)
     put_or_dryrun(local_path=fn, remote_path=env.supervisor_config_path, use_sudo=True)
+    
+    for pg in process_groups:
+        sudo_or_dryrun('supervisorctl add %s' % pg)
+    
+    #TODO:are all these really necessary?
+    sudo_or_dryrun('supervisorctl restart all')
+    sudo_or_dryrun('supervisorctl reread')
+    sudo_or_dryrun('supervisorctl update')
 
 @task_or_dryrun
 def deploy_all_services(**kwargs):
     kwargs['site'] = common.ALL
-    return deploy_services(**kwargs)
+    deploy_services(**kwargs)
+    
 
 @task_or_dryrun
 def record_manifest():
@@ -182,7 +208,16 @@ def record_manifest():
     Called after a deployment to record any data necessary to detect changes
     for a future deployment.
     """
+    verbose = common.get_verbose()
+    
     data = common.get_component_settings(SUPERVISOR)
+    
+    # Celery deploys itself through supervisor, so monitor its changes too in Apache site configs.
+    for site_name, site_data in env.sites.iteritems():
+        if verbose:
+            print site_name, site_data
+        data['celery_has_worker_%s' % site_name] = site_data.get('celery_has_worker', False)
+    
     return data
 
 def compare_manifest(old):
@@ -209,3 +244,9 @@ common.service_post_deployers[SUPERVISOR] = [start]
 
 common.manifest_recorder[SUPERVISOR] = record_manifest
 common.manifest_comparer[SUPERVISOR] = compare_manifest
+
+# If the manifest changes, this method gets run.
+common.add_deployer(
+    SUPERVISOR,
+    'supervisor.deploy_all_services',
+    before=['packager', 'user', 'rabbitmq'])

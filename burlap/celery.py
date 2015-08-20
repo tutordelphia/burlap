@@ -39,6 +39,7 @@ env.celery_daemon_user = 'www-data'
 env.celery_force_stop_command = 'pkill -9 -f celery'
 env.celery_celeryd_command_template = '%(celery_supervisor_python)s %(celery_supervisor_django_manage)s %(celery_celeryd_command)s %(celery_daemon_opts)s'
 env.celery_supervisor_django_manage_template = '%(remote_app_src_package_dir)s/manage.py'
+env.celery_supervisor_directory_template = '/usr/local/myproject'
 
 env.celery_has_celerybeat = False
 env.celery_celerybeat_command = 'celerybeat'
@@ -90,6 +91,7 @@ def render_paths():
     
     pip_render_paths()
     
+    env.celery_supervisor_directory = env.celery_supervisor_directory_template % env
     env.celery_supervisor_remote_app_src_package_dir = env.remote_app_src_package_dir
     env.celery_supervisor_django_manage = env.celery_supervisor_django_manage_template % env
     env.celery_supervisor_python = os.path.join(env.pip_virtual_env_dir, 'bin', 'python')
@@ -114,9 +116,10 @@ def create_supervisor_services():
     
     render_paths()
     
+    conf_name = 'celery_%s.conf' % env.SITE
     ret = common.render_to_string('celery_supervisor.template.conf')
     #print ret
-    return ret
+    return conf_name, ret
 
 def register_callbacks():
     from burlap.supervisor import register_callback

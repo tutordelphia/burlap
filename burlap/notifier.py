@@ -5,6 +5,7 @@ from fabric.api import (
     task, env, local, run, sudo, get, put, runs_once, execute, settings, task
 )
 
+from burlap import common
 from burlap.common import (
     put_or_dryrun,
     get_or_dryrun,
@@ -27,6 +28,8 @@ def send_email(subject, message, from_email=None, recipient_list=[]):
     import smtplib
     from email.mime.text import MIMEText
     
+    verbose = common.get_verbose()
+    
     if not recipient_list:
         return
     
@@ -42,7 +45,9 @@ def send_email(subject, message, from_email=None, recipient_list=[]):
     
     # Send the message via our own SMTP server, but don't include the
     # envelope header.
-    print('Attempting to send mail using %s...' % env.notifier_email_host)
+    if verbose:
+        print('Attempting to send mail using %s...' % env.notifier_email_host)
+        #print(env.notifier_email_host_user, env.notifier_email_host_password)
     s = smtplib.SMTP(env.notifier_email_host, env.notifier_email_port)
     s.ehlo()
     s.starttls()

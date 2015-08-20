@@ -699,7 +699,7 @@ def write_to_file(content, fn=None):
     if fn:
         fout = open(fn, 'w')
     else:
-        fd,fn = tempfile.mkstemp()
+        fd, fn = tempfile.mkstemp()
         fout = os.fdopen(fd, 'wt')
     fout.write(content)
     fout.close()

@@ -10,6 +10,7 @@ import tempfile
 import json
 import yaml
 import shutil
+import functools
 from collections import defaultdict
 from pprint import pprint
 
@@ -98,7 +99,7 @@ def is_dir(d):
                 print('output:', output)
             ret = int(output)
         else:
-            ret = os.path.isdir(fqfn)
+            ret = os.path.isdir(d)
         _fs_cache['is_dir'][d] = ret
     return _fs_cache['is_dir'][d]
 
@@ -606,7 +607,8 @@ def record(name):
 
 #DEPRECATED
 @task_or_dryrun
-def execute(name, verbose=1):
+def execute(name):
+    verbose = common.get_verbose()
     plan = Plan.load(name, verbose=int(verbose))
     if verbose:
         if plan.is_complete():
@@ -782,7 +784,26 @@ def preview():
     Lists the likely pending deployment steps.
     """
     auto(preview=1)
+
+def get_last_current_diffs(target_component):
+    """
+    Retrieves differing manifests between the current and last snapshot.
+    """
+    target_component = target_component.strip().upper()
     
+    all_services = set(_.strip().upper() for _ in env.services)
+    diffs = list(iter_thumbprint_differences())
+    components = set()
+    component_thumbprints = {}
+    for component, last, current in diffs:
+        if component not in all_services:
+            continue
+        component_thumbprints[component] = last, current
+    
+    print('component_thumbprints:', component_thumbprints.keys())
+    last, current = component_thumbprints[target_component]
+    return last, current
+
 @task_or_dryrun
 def auto(fake=0, preview=0, check_outstanding=1):
     """
@@ -798,6 +819,25 @@ def auto(fake=0, preview=0, check_outstanding=1):
         changes to the hosts.
     
     """
+    
+    def get_deploy_funcs(components):
+        for component in components:
+            funcs = common.manifest_deployers.get(component, [])
+            for func_name in funcs:
+                takes_diff = common.manifest_deployers_takes_diff.get(func_name, False)
+                #print(func_name, takes_diff)
+                if preview:
+                    #print(success((' '*4)+func_name))
+                    #continue
+                    yield func_name, None
+                else:
+                    func = common.resolve_deployer(func_name)
+                    last, current = component_thumbprints[component]
+                    if not fake:
+                        if takes_diff:
+                            yield func_name, functools.partial(func, last=last, current=current)
+                        else:
+                            yield func_name, functools.partial(func)
     
     verbose = common.get_verbose()
     fake = int(fake)
@@ -825,9 +865,6 @@ def auto(fake=0, preview=0, check_outstanding=1):
     if diffs:
         if verbose:
             print('Differences detected!')
-    else:
-        print('No differences detected.')
-        return
 
     # Create plan.
     components = set()
@@ -843,6 +880,7 @@ def auto(fake=0, preview=0, check_outstanding=1):
         print('manifest_deployers_befores:',common.manifest_deployers_befores.keys())
         print('*'*80)
         print('all components:',components)
+        
     for _c in components:
         if verbose:
             print('checking:',_c)
@@ -853,42 +891,35 @@ def auto(fake=0, preview=0, check_outstanding=1):
         if verbose:
             print('deps1:',deps)
         component_dependences[_c] = deps
+        
     if verbose:
         print('dependencies:')
-    for _c in component_dependences:
-        print(_c, component_dependences[_c])
+        for _c in component_dependences:
+            print(_c, component_dependences[_c])
+        
     components = list(common.topological_sort(component_dependences.items()))
     #print('components:',components)
-    if components:
+    plan_funcs = list(get_deploy_funcs(components))
+    if components and plan_funcs:
         if preview:
             print('These components have changed:\n')
             for component in sorted(components):
                 print((' '*4)+component)
             print('\nDeployment plan:\n')
+            for func_name, _ in plan_funcs:
+                print(success((' '*4)+func_name))
     else:
         print('Nothing to do!')
         return
     
-    # Execute plan.
-    for component in components:
-        funcs = common.manifest_deployers.get(component, [])
-        for func_name in funcs:
-            takes_diff = common.manifest_deployers_takes_diff.get(func_name, False)
-            #print(func_name, takes_diff)
-            if preview:
-                print(success((' '*4)+func_name))
-                continue
-            func = common.resolve_deployer(func_name)
-            last, current = component_thumbprints[component]
-            if not fake:
-                if takes_diff:
-                    func(last=last, current=current)
-                else:
-                    func()
-                    
+    # Execute plan. 
     if preview:
         print('\nTo execute this plan on all hosts run:\n\n    fab %s deploy.run' % env.ROLE)
         return
+    else:
+        for func_name, plan_func in plan_funcs:
+            if callable(plan_func):
+                plan_func()
     
     # Create thumbprint.
     plan = Plan.get_or_create_next(last_plan=last_plan)
