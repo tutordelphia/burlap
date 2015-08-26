@@ -40,7 +40,11 @@ def get_current_commit():
     """
     Retrieves the git commit number of the current head branch.
     """
-    return _local('git rev-parse HEAD')
+    verbose = common.get_verbose()
+    s = str(_local('git rev-parse HEAD', capture=True))
+    if verbose:
+        print 'current commit:', s
+    return s
 
 @task_or_dryrun
 def get_logs_between_commits(a, b):
@@ -52,7 +56,7 @@ def get_logs_between_commits(a, b):
     ret = _local('git log --pretty=oneline %s...%s' % (a, b), capture=True)
     if verbose:
         print ret
-    return ret
+    return str(ret)
 
 @task_or_dryrun
 def record_manifest_git_tracker(verbose=0):
@@ -68,6 +72,6 @@ def record_manifest_git_tracker(verbose=0):
 common.manifest_recorder[GIT_TRACKER] = record_manifest_git_tracker
 
 common.add_deployer(GIT_TRACKER, 'jirahelp.update_tickets_from_git',
-    before=['packager', 'pip', 'tarball', 'django_media'],
+    before=['packager', 'pip', 'tarball', 'django_media', 'django_migrations'],
     takes_diff=True)
     

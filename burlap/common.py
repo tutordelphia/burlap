@@ -1,3 +1,4 @@
+from __future__ import with_statement
 import os
 import re
 import sys
@@ -591,8 +592,7 @@ def get_packager():
     if common_packager:
         return common_packager
     #TODO:cache result by current env.host_string so we can handle multiple hosts with different OSes
-    with settings(warn_only=True):
-        with hide('running', 'stdout', 'stderr', 'warnings'):
+    with settings(warn_only=True) as a, hide('running', 'stdout', 'stderr', 'warnings') as b:
             ret = _run('cat /etc/fedora-release')
             if ret.succeeded:
                 common_packager = YUM
@@ -615,8 +615,7 @@ def get_os_version():
     common_os_version = get_rc('common_os_version')
     if common_os_version:
         return common_os_version
-    with settings(warn_only=True):
-        with hide('running', 'stdout', 'stderr', 'warnings'):
+    with settings(warn_only=True), hide('running', 'stdout', 'stderr', 'warnings'):
             ret = _run('cat /etc/fedora-release')
             if ret.succeeded:
                 common_os_version = OS(

@@ -13,7 +13,7 @@ import warnings
 
 from pprint import pprint
 
-VERSION = (0, 4, 7)
+VERSION = (0, 4, 8)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))

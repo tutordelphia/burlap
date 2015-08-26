@@ -231,6 +231,7 @@ env.apache_service_commands = {
 APACHE = 'APACHE'
 APACHE2 = 'APACHE2'
 APACHE2_MODEVASIVE = 'APACHE2_MODEVASIVE'
+APACHE2_MODRPAF = 'APACHE2_MODRPAF'
 APACHE2_MODSECURITY = 'APACHE2_MODSECURITY'
 APACHE2_VISITORS = 'APACHE2_VISITORS'
 APACHE2_MEDIA = 'APACHE2_MEDIA'
@@ -248,6 +249,10 @@ common.required_system_packages[APACHE2_MODEVASIVE] = {
 common.required_system_packages[APACHE2_MODEVASIVE] = {
     (common.UBUNTU, '12.04'): ['libapache2-modsecurity'],
     (common.UBUNTU, '14.04'): ['libapache2-modsecurity'],
+}
+common.required_system_packages[APACHE2_MODRPAF] = {
+    (common.UBUNTU, '12.04'): ['libapache2-mod-rpaf'],
+    (common.UBUNTU, '14.04'): ['libapache2-mod-rpaf'],
 }
 common.required_system_packages[APACHE2_VISITORS] = {
     (common.UBUNTU, '12.04'): ['visitors'],
@@ -413,7 +418,8 @@ def configure(full=1, site=None, delete_old=0, verbose=0):
     for mod_enabled in env.apache_mods_enabled:
         env.apache_mod_enabled = mod_enabled
         cmd = 'a2enmod %(apache_mod_enabled)s' % env
-        sudo_or_dryrun(cmd)
+        with settings(warn_only=True):
+            sudo_or_dryrun(cmd)
         
     if int(full):
         # Write master Apache configuration file.
@@ -461,14 +467,21 @@ def configure_modsecurity():
     env.apache_httpd_conf_append.append('Include "/etc/modsecurity/activated_rules/*.conf"')
 
 @task_or_dryrun
+def configure_modrpaf():
+    get_apache_settings()
+    env.apache_mods_enabled.append('rpaf')
+
+@task_or_dryrun
 def configure_modevasive():
     get_apache_settings()
     
-    env.apache_mods_enabled.append('mod-evasive')
+    env.apache_mods_enabled.append('mod-evasive')#Ubuntu 12.04
+    env.apache_mods_enabled.append('evasive')#Ubuntu 14.04
     
-    # Write modsecurity.conf.
+    # Write conf.
     fn = common.render_to_file('apache_modevasive.template.conf')
-    put(local_path=fn, remote_path='/etc/apache2/mods-available/mod-evasive.conf', use_sudo=True)
+    put_or_dryrun(local_path=fn, remote_path='/etc/apache2/mods-available/mod-evasive.conf', use_sudo=True)#Ubuntu 12.04
+    put_or_dryrun(local_path=fn, remote_path='/etc/apache2/mods-available/evasive.conf', use_sudo=True)#Ubuntu 14.04
     
 def iter_certificates():
     get_apache_settings()
@@ -624,27 +637,29 @@ def configure_all():
     return configure(full=1, site=ALL, delete_old=1)
 
 @task_or_dryrun
-def record_manifest(verbose=0):
+def record_manifest():
     """
     Called after a deployment to record any data necessary to detect changes
     for a future deployment.
     """
+    verbose = common.get_verbose()
     data = get_apache_settings()
-    if int(verbose):
+    if verbose:
         pprint(data, indent=4)
     return data
 
 @task_or_dryrun
-def record_manifest_sync_media(verbose=0):
+def record_manifest_sync_media():
     """
     Called after a deployment to record any data necessary to detect changes
     for a future deployment.
     """
+    verbose = common.get_verbose()
     data = 0
     for path in sync_media(iter_local_paths=1):
         data = min(data, common.get_last_modified_timestamp(path) or data)
     #TODO:hash media names and content
-    if int(verbose):
+    if verbose:
         print data
     return data
 

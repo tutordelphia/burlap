@@ -1,3 +1,5 @@
+import os
+import sys
 import re
 
 from fabric.api import (
@@ -75,6 +77,9 @@ def update_tickets_from_git(last=None, current=None):
     if not env.jira_ticket_pattern:
         return
     
+    if not env.jira_basic_auth_username or not env.jira_basic_auth_password:
+        return
+    
     # During a deployment, we should be given these, but for testing,
     # lookup the diffs dynamically.
     if not last or not current:
@@ -138,10 +143,15 @@ def update_tickets_from_git(last=None, current=None):
                 print 'Updating ticket %s to status %s and assigning it to %s.' \
                     % (ticket, next_transition_name, new_assignee)
                 if not dryrun:
-                    jira.transition_issue(
-                        issue,
-                        next_transition_id,
-                    )
+                    try:
+                        jira.transition_issue(
+                            issue,
+                            next_transition_id,
+                        )
+                        recheck = True
+                    except AttributeError as e:
+                        print>>sys.stderr, 'Unable to transition ticket %s to %s: %s' \
+                            % (ticket, next_transition_name, e)
                     
                     # Note assignment should happen after transition, since the assignment may
                     # effect remove transitions that we need.
@@ -154,8 +164,6 @@ def update_tickets_from_git(last=None, current=None):
                     except JIRAError as e:
                         print>>sys.stderr, 'Unable to reassign ticket %s to %s: %s' \
                             % (ticket, new_assignee, e)
-                        
-                    recheck = True
             else:
                 recheck = False
                 print 'No transitions found for ticket %s currently in status "%s".' \
