@@ -266,6 +266,16 @@ def set_db(name=None, site=None, role=None, verbose=0):
     env.db_host = default_db['HOST']
     env.db_password = default_db['PASSWORD']
     env.db_engine = default_db['ENGINE']
+    
+    if 'mysql' in env.db_engine.lower():
+        env.db_type = 'mysql'
+    elif 'postgres' in env.db_engine.lower() or 'postgis' in env.db_engine.lower():
+        env.db_type = 'postgresql'
+    elif 'sqlite' in env.db_engine.lower():
+        env.db_type = 'sqlite'
+    else:
+        env.db_type = env.db_engine    
+    
     return default_db
 
 def has_database(name, site=None, role=None):

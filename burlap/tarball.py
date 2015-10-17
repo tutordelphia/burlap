@@ -18,21 +18,24 @@ from burlap.common import (
     run_or_dryrun,
     sudo_or_dryrun,
     put_or_dryrun,
+    Satchel,
+    Deployer,
 )
 from burlap import common
 from burlap.decorators import task_or_dryrun
 
-env.tarball_clean = 1
-env.tarball_gzip = 1
-env.tarball_exclusions = [
-    '*_local.py',
-    '*.pyc',
-    '*.svn',
-    '*.tar.gz',
-    #'static',
-]
-env.tarball_dir = '.burlap/tarball_cache'
-env.tarball_extra_dirs = []
+if 'tarball_clean' not in env:
+    env.tarball_clean = 1
+    env.tarball_gzip = 1
+    env.tarball_exclusions = [
+        '*_local.py',
+        '*.pyc',
+        '*.svn',
+        '*.tar.gz',
+        #'static',
+    ]
+    env.tarball_dir = '.burlap/tarball_cache'
+    env.tarball_extra_dirs = []
 
 TARBALL = 'TARBALL'
 
@@ -131,20 +134,36 @@ def get_tarball_hash(fn=None, refresh=1, verbose=0):
         print tarball_hash
     return tarball_hash
 
-@task_or_dryrun
-def record_manifest(verbose=0):
-    """
-    Called after a deployment to record any data necessary to detect changes
-    for a future deployment.
-    """    
-    get_tarball_path()
-    fn = env.tarball_absolute_src_dir
-    print 'tarball.fn:',fn
-    data = common.get_last_modified_timestamp(fn)
-    if int(verbose):
-        print data
-    return data
-
-common.manifest_recorder[TARBALL] = record_manifest
-
-common.add_deployer(TARBALL, 'tarball.deploy', before=['package', 'apache2', 'pip', 'user'])
+class TarballSatchel(Satchel):
+    
+    name = TARBALL
+    
+    def record_manifest(self):
+        """
+        Called after a deployment to record any data necessary to detect changes
+        for a future deployment.
+        """    
+        get_tarball_path()
+        fn = env.tarball_absolute_src_dir
+        if common.get_verbose():
+            print 'tarball.fn:',fn
+        data = common.get_last_modified_timestamp(fn)
+        if common.get_verbose():
+            print data
+        return data
+        
+    def get_deployers(self):
+        """
+        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        """
+        return [
+            Deployer(
+                func='tarball.deploy',
+                # if they need to be run, these must be run before this deployer
+                before=['packager', 'apache2', 'pip', 'user'],
+                # if they need to be run, these must be run after this deployer
+                after=[],
+                takes_diff=False)
+        ]
+            
+TarballSatchel()

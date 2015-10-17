@@ -25,6 +25,7 @@ from burlap.common import (
     sudo_or_dryrun,
     local_or_dryrun,
     get_dryrun,
+    get_verbose,
 )
 from burlap.decorators import task_or_dryrun
 
@@ -658,5 +659,5 @@ def reboot():
 def list_ips():
     data = list_instances(show=0, verbose=0)
     for key, attrs in data.iteritems():
-        print(attrs.get('ip'))
+        print(attrs.get('ip'), key)
         

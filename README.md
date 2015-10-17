@@ -159,3 +159,10 @@ example output:
 
 Using this, you can review each package, determine which should be
 updated in your pip-requirements.txt and installed via pip.install.
+
+Development
+-----------
+
+When developing locally, you can browse documentation locally with:
+
+    mkdocs serve

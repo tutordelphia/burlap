@@ -84,21 +84,32 @@ def post_deploy():
                 func()
 
 @task_or_dryrun
-def restart():
-    
+def restart(name=''):
+    name = name.strip().lower()
+    _ran = False
+    #print common.service_restarters
     for service in env.services:
         service = service.strip().upper()
+#         print 'checking', service
+        if name and service.lower() != name:
+            continue
         funcs = common.service_restarters.get(service)
         if funcs:
             print 'Restarting service %s...' % (service,)
             for func in funcs:
                 if not get_dryrun():
                     func()
+                    _ran = True
+    if not get_dryrun() and not _ran and name:
+        raise Exception, 'No restart command found for service "%s".' % name
 
 @task_or_dryrun
-def stop():
+def stop(name=''):
+    name = name.strip().lower()
     for service in env.services:
         service = service.strip().upper()
+        if name and service.lower() != name:
+            continue
         funcs = common.service_stoppers.get(service)
         if funcs:
             print 'Restarting service %s...' % (service,)

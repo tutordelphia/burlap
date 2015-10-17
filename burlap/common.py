@@ -86,15 +86,17 @@ ROLE = 'ROLE'
 
 LOCALHOSTS = ('localhost', '127.0.0.1')
 
-env.confirm_deployment = False
-env.is_local = None
-env.base_config_dir = '.'
-env.src_dir = 'src' # The path relative to fab where the code resides.
+if 'services' not in env:
+
+    env.services = []
+    env.confirm_deployment = False
+    env.is_local = None
+    env.base_config_dir = '.'
+    env.src_dir = 'src' # The path relative to fab where the code resides.
+    env.sites = {} # {site:site_settings}
 
 env[SITE] = None
 env[ROLE] = None
-
-env.sites = {} # {site:site_settings}
 
 # If true, prevents run() from executing its command.
 _dryrun = False
@@ -104,7 +106,6 @@ _verbose = False
 
 _show_command_output = True
 
-env.services = []
 required_system_packages = type(env)() # {service:{os:[packages]}
 required_python_packages = type(env)() # {service:{os:[packages]}
 required_ruby_packages = type(env)() # {service:{os:[packages]}
@@ -152,6 +153,134 @@ def resolve_deployer(func_name):
 #     print('ret:',ret)
     return ret
 
+class Deployer(object):
+    """
+    Represents a task that must be run to update a service after a configuration change
+    has been made.
+    """
+    
+    def __init__(self, func, before=None, after=None, takes_diff=False):
+        self.func = func
+        self.before = before or []
+        self.after = after or []
+        self.takes_diff = takes_diff
+
+class Satchel(object):
+    """
+    Represents a base unit of functionality that is deployed and maintained on one
+    or more a target servers.
+    """
+    
+    # This will be used to uniquely identify this unit of functionality.
+    name = None
+    
+    def __init__(self):
+#         print 'Satchel.__init__'
+        assert self.name, 'A name must be specified.'
+        self.name = self.name.strip().lower()
+        
+        manifest_recorder[self.name] = self.record_manifest
+        
+        deployers = self.get_deployers()
+        for deployer in deployers:
+            assert isinstance(deployer, Deployer), 'Invalid deployer "%s".' % deployer
+            add_deployer(
+                event=self.name,
+                func=deployer.func,
+                before=deployer.before,
+                after=deployer.after,
+                takes_diff=deployer.takes_diff)
+                
+        super(Satchel, self).__init__()
+    
+    def record_manifest(self):
+        """
+        Returns a dictionary representing a serialized state of the service.
+        """
+        raise NotImplementedError
+        
+    def get_deployers(self):
+        """
+        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        """
+        raise NotImplementedError
+        
+    @property
+    def current_manifest(self):
+        from burlap import manifest
+        return manifest.get_current(name=self.name)
+        
+    @property
+    def last_manifest(self):
+        from burlap import manifest
+        return manifest.get_last(name=self.name)
+
+class Service(object):
+    
+    name = None
+    
+    commands = {} # {action: {os_version_distro: command}}
+    
+    # If true, any warnings or errors encountered during commands will be ignored.
+    ignore_errors = False
+    
+    # This command will be automatically run after every deployment.
+    post_deploy_command = 'restart'
+    
+    def __init__(self):
+#         print 'Service.__init__'
+        assert self.name
+        self.name = self.name.strip().lower()
+        service_restarters[self.name.upper()] = [self.restart]
+#         print 'service:', self.name, sorted(service_restarters.keys())
+        service_stoppers[self.name.upper()] = [self.stop]
+        if self.post_deploy_command:
+            service_post_deployers[self.name.upper()] = [getattr(self, self.post_deploy_command)]
+            
+        super(Service, self).__init__()
+    
+    def get_command(self, action):
+        os_version = get_os_version()
+        return self.commands[action][os_version.distro]
+    
+    def enable(self):
+        cmd = self.get_command(ENABLE)
+        sudo_or_dryrun(cmd)
+    
+    def disable(self):
+        cmd = self.get_command(DISABLE)
+        sudo_or_dryrun(cmd)
+        
+    def restart(self):
+        s = {'warn_only':True} if self.ignore_errors else {} 
+        with settings(**s):
+            cmd = self.get_command(RESTART)
+            sudo_or_dryrun(cmd)
+        
+    def reload(self):
+        s = {'warn_only':True} if self.ignore_errors else {} 
+        with settings(**s):
+            cmd = self.get_command(RELOAD)
+            sudo_or_dryrun(cmd)
+        
+    def start(self):
+        s = {'warn_only':True} if self.ignore_errors else {} 
+        with settings(**s):
+            cmd = self.get_command(START)
+            sudo_or_dryrun(cmd)
+        
+    def stop(self):
+        s = {'warn_only':True} if self.ignore_errors else {} 
+        with settings(**s):
+            cmd = self.get_command(STOP)
+            sudo_or_dryrun(cmd)
+        
+    def status(self):
+        s = {'warn_only':True} if self.ignore_errors else {} 
+        with settings(**s):
+            cmd = self.get_command(STATUS)
+            sudo_or_dryrun(cmd)
+
 env.hosts_retriever = None
 env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,
 
@@ -185,6 +314,7 @@ def get_hosts_retriever(s=None):
     Given the function name, looks up the method for dynamically retrieving host data.
     """
     s = s or env.hosts_retriever
+    assert s, 'No hosts retriever specified.'
     module_name = '.'.join(s.split('.')[:-1])
     func_name = s.split('.')[-1]
     retriever = getattr(importlib.import_module(module_name), func_name)

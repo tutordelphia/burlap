@@ -23,6 +23,8 @@ from burlap.common import (
     ROLE,
     render_to_file,
     find_template,
+    Satchel,
+    Deployer,
 )
 from burlap.decorators import task_or_dryrun
 
@@ -69,24 +71,40 @@ def configure_unattended_upgrades():
         put_or_dryrun(local_path=fn, remote_path='/etc/apt/apt.conf.d/50unattended-upgrades', use_sudo=True)
         fn = common.render_to_file('unattended_upgrades/etc_apt_aptconfd_10periodic')
         put_or_dryrun(local_path=fn, remote_path='/etc/apt/apt.conf.d/10periodic', use_sudo=True)
+        
+    else:
+        #TODO:disable
+        pass
 
 ### Manifest functions. 
 
-@task_or_dryrun
-def record_manifest():
-    """
-    Called after a deployment to record any data necessary to detect changes
-    for a future deployment.
-    """
-    verbose = common.get_verbose()
-    data = common.get_component_settings(UNATTENDED_UPGRADES)
-    if verbose:
-        print data
-    return data
-
-common.manifest_recorder[UNATTENDED_UPGRADES] = record_manifest
-
-common.add_deployer(
-    UNATTENDED_UPGRADES,
-    'security.configure_unattended_upgrades',
-    before=['packager', 'user'])
+class UnattendedUpgradesSatchel(Satchel):
+    
+    name = UNATTENDED_UPGRADES
+    
+    def record_manifest(self):
+        """
+        Called after a deployment to record any data necessary to detect changes
+        for a future deployment.
+        """
+        verbose = common.get_verbose()
+        data = common.get_component_settings(UNATTENDED_UPGRADES)
+        if verbose:
+            print data
+        return data
+        
+    def get_deployers(self):
+        """
+        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        """
+        return [
+            Deployer(
+                func='security.configure_unattended_upgrades',
+                # if they need to be run, these must be run before this deployer
+                before=['packager', 'user'],
+                # if they need to be run, these must be run after this deployer
+                after=[],
+                takes_diff=False)
+        ]
+        
+UnattendedUpgradesSatchel()

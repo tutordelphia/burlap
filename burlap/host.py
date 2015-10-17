@@ -13,6 +13,7 @@ from fabric.api import (
 from fabric.contrib import files
 from fabric.tasks import Task
 
+from burlap import common
 from burlap.common import (
     run_or_dryrun,
     put_or_dryrun,
@@ -22,6 +23,9 @@ from burlap.common import (
     ROLE,
     render_to_file,
     find_template,
+    get_verbose,
+    Satchel,
+    Deployer,
 )
 from burlap.decorators import task_or_dryrun
 
@@ -34,8 +38,31 @@ if 'host_hostname' not in env:
     
     env.media_mount_dirs = []
 
+HOSTNAME = 'hostname'
+
+def iter_hostnames():
+    from burlap.common import get_hosts_retriever
+    
+    verbose = get_verbose()
+    
+    retriever = get_hosts_retriever()
+    
+    hosts = list(retriever(extended=1))
+    for _hostname, _data in hosts:
+        yield _hostname
+#         if _data.ip == env.host_string:
+#             yield _hostname
+#         elif _data.public_dns_name == env.host_string:
+#             yield _hostname
+
 @task_or_dryrun
-def set_hostname(name=None, verbose=0):
+@runs_once
+def list_hostnames():
+    for hostname in iter_hostnames():
+        print hostname
+
+@task_or_dryrun
+def set_hostname(name=None):
     """
     Assigns a name to the server accessible from user space.
     
@@ -44,7 +71,7 @@ def set_hostname(name=None, verbose=0):
     """
     from burlap.common import get_hosts_retriever
     
-    verbose = int(verbose)
+    verbose = get_verbose()
     
     retriever = get_hosts_retriever()
     
@@ -141,4 +168,52 @@ def list_public_ips(show_hostname=0):
             print hn, output
         else:
             print output
+            
+# @task_or_dryrun
+# def record_manifest_hostname():
+#     """
+#     Called after a deployment to record any data necessary to detect changes
+#     for a future deployment.
+#     """
+#     data = {}
+#     data['hostnames'] = set(iter_hostnames())
+#     return data
+
+# def compare_manifest_hostname(old):
+#     old = old or {}
+#     new = record_manifest_hostname()
+#     
+#     has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
+#     if has_diffs:
+#         methods.append(QueuedCommand('rabbitmq.configure_all', pre=pre))
+#     return methods
+
+class HostnameSatchel(Satchel):
+    
+    name = HOSTNAME
+    
+    def record_manifest(self):
+        """
+        Returns a dictionary representing a serialized state of the service.
+        """
+        data = {}
+        data['hostnames'] = set(iter_hostnames())
+        return data
         
+    def get_deployers(self):
+        """
+        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        """
+        return [
+            Deployer(
+                func='host.set_hostname',
+                before=[],
+                after=[],
+                takes_diff=False)
+        ]
+
+HostnameSatchel()
+
+#common.manifest_recorder[HOSTNAME] = record_manifest_hostname
+
+#common.add_deployer(HOSTNAME, 'host.set_hostname', before=[])

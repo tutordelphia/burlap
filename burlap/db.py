@@ -34,7 +34,8 @@ from burlap.decorators import task_or_dryrun
 #from burlap.plan import run, sudo
 
 env.db_dump_fn = None
-env.db_dump_fn_default_pattern = None
+#env.db_dump_fn_template = '%(db_dump_dest_dir)s/db_%(SITE)s_%(ROLE)s_%(db_date)s.sql.gz'
+env.db_dump_fn_template = '%(db_dump_dest_dir)s/db_%(db_type)s_%(SITE)s_%(ROLE)s_$(date +%%Y%%m%%d).sql.gz'
 
 # This overrides the built-in load command.
 env.db_dump_command = None
@@ -553,7 +554,7 @@ def dump(dest_dir=None, to_local=None, from_local=0, archive=0):
     if dest_dir:
         env.db_dump_dest_dir = dest_dir
     env.db_date = datetime.date.today().strftime('%Y%m%d')
-    env.db_dump_fn = '%(db_dump_dest_dir)s/%(db_name)s_%(db_date)s.sql.gz' % env
+    env.db_dump_fn = env.db_dump_fn_template % env
     if to_local is None and not env.is_local:
         to_local = 1
         
@@ -702,7 +703,7 @@ def render_fn(fn):
 
 @task_or_dryrun
 def get_default_db_fn():
-    fn = env.db_dump_fn_default_pattern % env
+    fn = env.db_dump_fn_template % env
     fn = render_fn(fn)
     return fn
 

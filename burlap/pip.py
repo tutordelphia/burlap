@@ -42,6 +42,9 @@ from burlap.common import (
     ROLE,
     find_template,
     QueuedCommand,
+    Satchel,
+    Deployer,
+    get_verbose,
 )
 from burlap.decorators import task_or_dryrun
 from burlap import versioner
@@ -116,12 +119,13 @@ def has_pip():
         return bool(ret)
     
 @task_or_dryrun
-def bootstrap():
+def bootstrap(clean=0):
     """
     Installs all the necessary packages necessary for managing virtual
     environments with pip.
     """
-    if has_pip():
+    clean = int(clean)
+    if has_pip() and not clean:
         return
     env.pip_path_versioned = env.pip_path % env
     run_or_dryrun('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py')
@@ -139,12 +143,21 @@ def virtualenv_exists():
     
     render_paths()
     
-    base_dir = os.path.split(env.pip_virtual_env_dir)[0]
+    #base_dir = os.path.split(env.pip_virtual_env_dir)[0]
+    base_dir = env.pip_virtual_env_dir
     
+    ret = True
     with settings(warn_only=True):
         ret = _run('ls %s' % base_dir) or ''
         ret = 'cannot access' not in ret.strip().lower()
-        return ret
+        
+    if common.get_verbose():
+        if ret:
+            print 'Yes'
+        else:
+            print 'No'
+        
+    return ret
 
 @task_or_dryrun
 def init(clean=0, check_global=0):
@@ -729,8 +742,11 @@ def upgrade_pip():
     render_remote_paths()
     if env.pip_virtual_env_dir_template:
         env.pip_virtual_env_dir = env.pip_virtual_env_dir_template % env
+    sudo_or_dryrun("chown -R %(pip_user)s:%(pip_group)s %(pip_virtual_env_dir)s" % env)
     run_or_dryrun(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade setuptools" % env)
     run_or_dryrun(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade distribute" % env)
+    with settings(warn_only=True):
+        run_or_dryrun(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade pip" % env)
 
 @task_or_dryrun
 def uninstall(package):
@@ -749,12 +765,12 @@ def uninstall(package):
         sudo_or_dryrun(env.pip_uninstall_command % env)
     
 @task_or_dryrun
-def update_install():
+def update_install(clean=0):
     from burlap.dj import render_remote_paths
     
-    bootstrap()
+    bootstrap(clean=clean)
     
-    init()
+    init(clean=clean)
     
     req_fn = find_template(env.pip_requirements_fn)
 #     print('req_fn:',req_fn)
@@ -832,23 +848,38 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
         sudo_or_dryrun('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
         sudo_or_dryrun('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
 
-@task_or_dryrun
-def record_manifest(verbose=1):
-    """
-    Called after a deployment to record any data necessary to detect changes
-    for a future deployment.
-    """
-    # Not really necessary, because pre-deployment, we'll just retrieve this
-    # list again, but it's nice to have a separate record to detect
-    # non-deployment changes to installed packages.
-    #data = check(return_type=INSTALLED)
+class PIPSatchel(Satchel):
     
-    desired = get_desired_package_versions(preserve_order=True)
-    data = sorted(_raw for _n, (_v, _raw) in desired)
-    if int(verbose):
-        print data
-    return data
-
-common.manifest_recorder[PIP] = record_manifest
-
-common.add_deployer(PIP, 'pip.update_install', before=['package', 'user'])
+    name = PIP
+    
+    def record_manifest(self):
+        """
+        Called after a deployment to record any data necessary to detect changes
+        for a future deployment.
+        """
+        # Not really necessary, because pre-deployment, we'll just retrieve this
+        # list again, but it's nice to have a separate record to detect
+        # non-deployment changes to installed packages.
+        #data = check(return_type=INSTALLED)
+        
+        desired = get_desired_package_versions(preserve_order=True)
+        data = sorted(_raw for _n, (_v, _raw) in desired)
+        if get_verbose():
+            print data
+        return data
+        
+    def get_deployers(self):
+        """
+        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        """ 
+        return [
+            Deployer(
+                func='pip.update_install',
+                # if they need to be run, these must be run before this deployer
+                before=['packager', 'user'],
+                # if they need to be run, these must be run after this deployer
+                after=[],
+                takes_diff=False)
+        ]
+        
+PIPSatchel()

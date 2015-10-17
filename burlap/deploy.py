@@ -265,7 +265,7 @@ def ongoing(s):
 def iter_plan_names(role=None):
     d = get_plan_dir(role=role)
     assert is_dir(d)
-    for name in list_dir(d):
+    for name in sorted(list_dir(d)):
         fqfn = os.path.join(d, name)
         if not is_dir(fqfn):
             continue
@@ -666,14 +666,14 @@ def has_outstanding_plans():
 
 @task_or_dryrun
 @runs_once
-def status(name=None, verbose=0):
+def status(name=None):
     """
     Reports the status of any pending plans for the current role.
     """
     print('plan,complete,percent')
     for _name in iter_plan_names():
         #print(_name)
-        plan = Plan.load(_name, verbose=int(verbose))
+        plan = Plan.load(_name)
         output = '%s,%s,%s' % (_name, int(plan.is_complete()), plan.percent_complete)
         if plan.is_complete():
             output = success(output)
@@ -779,11 +779,11 @@ def thumbprint(name=None):
     
 @task_or_dryrun
 @runs_once
-def preview():
+def preview(**kwargs):
     """
     Lists the likely pending deployment steps.
     """
-    auto(preview=1)
+    auto(preview=1, **kwargs)
 
 def get_last_current_diffs(target_component):
     """
@@ -856,7 +856,9 @@ def auto(fake=0, preview=0, check_outstanding=1):
     if check_outstanding and outstanding:
         print(fail((
             'There are outstanding plans pending execution! '
-            'Run `fab %s plan.status` for details.') % env.ROLE))
+            'Run `fab %s deploy.status` for details.\n'
+            'To ignore these, re-run with :check_outstanding=0.'
+        ) % env.ROLE))
         sys.exit(1)
     
     if verbose:

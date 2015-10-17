@@ -17,11 +17,16 @@ from burlap.common import (
     local_or_dryrun,
     find_template,
     QueuedCommand,
+    Satchel,
+    Deployer,
 )
 from burlap.decorators import task_or_dryrun
 
-env.package_install_apt_extras = []
-env.package_install_yum_extras = []
+if 'package' not in env:
+    env.package = True
+    env.package_install_apt_extras = []
+    env.package_install_yum_extras = []
+    env.package_ubuntu_multiverse = False
 
 PACKAGER = 'PACKAGER'
 
@@ -88,6 +93,17 @@ def upgrade(*args, **kwargs):
         #return upgrade_yum(*args, **kwargs)
     else:
         raise Exception, 'Unknown packager: %s' % (packager,)
+
+@task_or_dryrun
+def configure_ubuntu_multiverse_repos():
+    if env.package_ubuntu_multiverse:
+        # Enable the multiverse so we can install select non-free packages.
+        sudo_or_dryrun('sed -i "/^# deb.*multiverse/ s/^# //" /etc/apt/sources.list')
+        sudo_or_dryrun('apt-get update')
+    else:
+        # Disable the multiverse.
+        sudo_or_dryrun('sed -i "/^# // s/^# deb.*multiverse/" /etc/apt/sources.list')
+        sudo_or_dryrun('apt-get update')
 
 def upgrade_apt():
     sudo_or_dryrun('apt-get update -y --fix-missing')
@@ -222,23 +238,78 @@ def install_required(type=None, service=None, list_only=0, verbose=0, **kwargs):
         else:
             raise NotImplementedError
     return lst
-            
-@task_or_dryrun
-def record_manifest(verbose=0):
-    """
-    Called after a deployment to record any data necessary to detect changes
-    for a future deployment.
-    """
-    data = []
-    
-    data.extend(install_required(type=common.SYSTEM, verbose=False, list_only=True))
-    data.extend(install_custom(list_only=True))
-    
-    data.sort()
-    if int(verbose):
-        print data
-    return data
+#             
+# @task_or_dryrun
+# def record_manifest(verbose=0):
+#     """
+#     Called after a deployment to record any data necessary to detect changes
+#     for a future deployment.
+#     """
+#     data = []
+#     
+#     data.extend(install_required(type=common.SYSTEM, verbose=False, list_only=True))
+#     data.extend(install_custom(list_only=True))
+#     
+#     data.sort()
+#     if int(verbose):
+#         print data
+#     return data
 
-common.manifest_recorder[PACKAGER] = record_manifest
+class PackagerSatchel(Satchel):
+    
+    name = PACKAGER
+    
+    def record_manifest(self):
+        """
+        Returns a dictionary representing a serialized state of the service.
+        """
+        data = []
+        
+        data.extend(install_required(type=common.SYSTEM, verbose=False, list_only=True))
+        data.extend(install_custom(list_only=True))
+        
+        data.sort()
+        return data
+        
+    def get_deployers(self):
+        """
+        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        """
+        return [
+            Deployer(
+                func='package.install',
+                before=['user'],
+                after=[],
+                takes_diff=False)
+        ]
 
-common.add_deployer(PACKAGER, 'package.install', before=['user'])
+class UbuntuMultiverseSatchel(Satchel):
+    
+    name = 'ubuntu-multiverse'
+    
+    def record_manifest(self):
+        """
+        Returns a dictionary representing a serialized state of the service.
+        """
+        return dict(package_ubuntu_multiverse=env.package_ubuntu_multiverse)
+        
+    def get_deployers(self):
+        """
+        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        """
+        return [
+            Deployer(
+                func='package.configure_ubuntu_multiverse_repos',
+                # if they need to be run, these must be run before this deployer
+                before=['user'],
+                # if they need to be run, these must be run after this deployer
+                after=[PACKAGER],
+                takes_diff=False)
+        ]
+
+PackagerSatchel()
+UbuntuMultiverseSatchel()
+
+#common.manifest_recorder[PACKAGER] = record_manifest
+
+#common.add_deployer(PACKAGER, 'package.install', before=['user'])

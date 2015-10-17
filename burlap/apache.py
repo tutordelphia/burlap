@@ -20,6 +20,7 @@ from burlap.common import (
     render_to_string,
     get_packager,
     get_os_version,
+    get_verbose,
     find_template,
     ROLE,
     SITE,
@@ -30,6 +31,9 @@ from burlap.common import (
     FEDORA,
     UBUNTU,
     QueuedCommand,
+    Satchel,
+    Deployer,
+    Service,
 )
 from burlap.decorators import task_or_dryrun
 from burlap import common
@@ -142,6 +146,38 @@ if 'apache_application_name' not in env:
     # This will be appended to the custom Apache configuration file.
     env.apache_httpd_conf_append = []
     
+    env.apache_service_commands = {
+        common.START:{
+            common.FEDORA: 'systemctl start httpd.service',
+            common.UBUNTU: 'service apache2 start',
+        },
+        common.STOP:{
+            common.FEDORA: 'systemctl stop httpd.service',
+            common.UBUNTU: 'service apache2 stop',
+        },
+        common.DISABLE:{
+            common.FEDORA: 'systemctl disable httpd.service',
+            common.UBUNTU: 'chkconfig apache2 off',
+        },
+        common.ENABLE:{
+            common.FEDORA: 'systemctl enable httpd.service',
+            common.UBUNTU: 'chkconfig apache2 on',
+        },
+        common.RELOAD:{
+            common.FEDORA: 'systemctl reload httpd.service',
+            common.UBUNTU: 'service apache2 reload',
+        },
+        common.RESTART:{
+            common.FEDORA: 'systemctl restart httpd.service',
+            #common.UBUNTU: 'service apache2 restart',
+            # Note, the sleep 5 is necessary because the stop/start appears to
+            # happen in the background but gets aborted if Fabric exits before
+            # it completes.
+            common.UBUNTU: 'service apache2 restart; sleep 3',
+        },
+    }
+
+    
     env._apache_settings = None
 
 ignore_keys = [
@@ -196,37 +232,6 @@ def set_apache_specifics():
     env.apache_ssl_dir = env.apache_ssl_dir_template % env
 
     return apache_specifics
-
-env.apache_service_commands = {
-    common.START:{
-        common.FEDORA: 'systemctl start httpd.service',
-        common.UBUNTU: 'service apache2 start',
-    },
-    common.STOP:{
-        common.FEDORA: 'systemctl stop httpd.service',
-        common.UBUNTU: 'service apache2 stop',
-    },
-    common.DISABLE:{
-        common.FEDORA: 'systemctl disable httpd.service',
-        common.UBUNTU: 'chkconfig apache2 off',
-    },
-    common.ENABLE:{
-        common.FEDORA: 'systemctl enable httpd.service',
-        common.UBUNTU: 'chkconfig apache2 on',
-    },
-    common.RELOAD:{
-        common.FEDORA: 'systemctl reload httpd.service',
-        common.UBUNTU: 'service apache2 reload',
-    },
-    common.RESTART:{
-        common.FEDORA: 'systemctl restart httpd.service',
-        #common.UBUNTU: 'service apache2 restart',
-        # Note, the sleep 5 is necessary because the stop/start appears to
-        # happen in the background but gets aborted if Fabric exits before
-        # it completes.
-        common.UBUNTU: 'service apache2 restart; sleep 3',
-    },
-}
 
 APACHE = 'APACHE'
 APACHE2 = 'APACHE2'
@@ -634,67 +639,93 @@ def configure_all():
     sites.
     """
     get_apache_settings()
-    return configure(full=1, site=ALL, delete_old=1)
-
-@task_or_dryrun
-def record_manifest():
-    """
-    Called after a deployment to record any data necessary to detect changes
-    for a future deployment.
-    """
-    verbose = common.get_verbose()
-    data = get_apache_settings()
-    if verbose:
-        pprint(data, indent=4)
-    return data
-
-@task_or_dryrun
-def record_manifest_sync_media():
-    """
-    Called after a deployment to record any data necessary to detect changes
-    for a future deployment.
-    """
-    verbose = common.get_verbose()
-    data = 0
-    for path in sync_media(iter_local_paths=1):
-        data = min(data, common.get_last_modified_timestamp(path) or data)
-    #TODO:hash media names and content
-    if verbose:
-        print data
-    return data
+    configure(full=1, site=ALL, delete_old=1)
+    
+    install_auth_basic_user_file(site=ALL)
+    install_ssl(site=ALL)
 
 # These tasks are run when the service.configure task is run.
-common.service_configurators[APACHE2] = [
-    configure_all,
-    lambda: install_auth_basic_user_file(site=ALL),
-    lambda: install_ssl(site=ALL),
-    sync_media,
-]
+# common.service_configurators[APACHE2] = [
+#     configure_all,
+#     lambda: install_auth_basic_user_file(site=ALL),
+#     lambda: install_ssl(site=ALL),
+#     sync_media,
+# ]
 
-# These tasks are run when the service.deploy task is run.
-#common.service_deployers[APACHE2] = [configure]
+class ApacheSatchel(Satchel, Service):
+    
+    name = APACHE2
+    
+    ## Service options.
+    
+    #ignore_errors = True
+    
+    # {action: {os_version_distro: command}}
+    commands = env.apache_service_commands
+    
+    post_deploy_command = 'reload'
+    
+    def record_manifest(self):
+        """
+        Called after a deployment to record any data necessary to detect changes
+        for a future deployment.
+        """
+        verbose = common.get_verbose()
+        data = get_apache_settings()
+        if verbose:
+            pprint(data, indent=4)
+        return data
+        
+    def get_deployers(self):
+        """
+        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        """
+#         from burlap.package import PACKAGER
+#         from burlap.user import USER
+        return [
+            Deployer(
+                func='apache.configure_all',
+                # if they need to be run, these must be run before this deployer
+                before=['packager', 'user'],
+                # if they need to be run, these must be run after this deployer
+                after=[],
+                takes_diff=False)
+        ]
 
-# These tasks are run when the service.restart task is run.
-common.service_restarters[APACHE2] = [reload]
-common.service_stoppers[APACHE2] = [stop]
-
-# Apache doesn't strictly need to be stopped, as reload can cleanly reload all
-# configs without much noticable downtime.
-# A more legitmate concern is how allowing users to browse the site during
-# a deployment will effect other components, and how we want to avoid any
-# negative effects system-wide.
-# e.g. If Django ORM models have been changed but the migrations have not yet
-# run, we don't want any part of site accessible, since the user might
-# encounter errors due to a mismatch between the code and database schema or
-# submit bad data to the database. However, that case is a system-wide concern
-# so we'd want to ideally switch all Apache instances to maintenance mode,
-# showing a clean static "site is down for maintenance" message.
-common.service_pre_deployers[APACHE2] = []
-
-common.service_post_deployers[APACHE2] = [reload]
-
-common.manifest_recorder[APACHE2] = record_manifest
-common.manifest_recorder[APACHE2_MEDIA] = record_manifest_sync_media
-
-common.add_deployer(APACHE2, 'apache.configure_all', before=['packager', 'user'])
-common.add_deployer(APACHE2_MEDIA, 'apache.sync_media', before=['packager', APACHE, APACHE2, 'pip', 'tarball'])
+class ApacheMediaSatchel(Satchel):
+    
+    name = APACHE2_MEDIA
+    
+    def record_manifest(self):
+        """
+        Called after a deployment to record any data necessary to detect changes
+        for a future deployment.
+        """
+        verbose = common.get_verbose()
+        data = 0
+        for path in sync_media(iter_local_paths=1):
+            data = min(data, common.get_last_modified_timestamp(path) or data)
+        #TODO:hash media names and content
+        if verbose:
+            print data
+        return data
+        
+    def get_deployers(self):
+        """
+        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        """
+#         from burlap.package import PACKAGER
+#         from burlap.tarball import TARBALL
+#         from burlap.pip import PIP
+        return [
+            Deployer(
+                func='apache.sync_media',
+                # if they need to be run, these must be run before this deployer
+                before=['packager', 'apache', 'apache2', 'pip', 'tarball'],
+                # if they need to be run, these must be run after this deployer
+                after=[],
+                takes_diff=False)
+        ]
+            
+ApacheSatchel()
+ApacheMediaSatchel()
