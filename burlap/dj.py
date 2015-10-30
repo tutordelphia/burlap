@@ -223,10 +223,12 @@ def manage(cmd, *args, **kwargs):
     run_or_dryrun(cmd)
     
 @task_or_dryrun
-def migrate(app='', migration='', site=None, fake=0):
+def migrate(app='', migration='', site=None, fake=0, ignore_errors=0):
     """
     Runs the standard South migrate command for one or more sites.
     """
+    
+    ignore_errors = int(ignore_errors)
     
     render_remote_paths()
     env.django_migrate_migration = migration
@@ -241,8 +243,14 @@ def migrate(app='', migration='', site=None, fake=0):
             '%(django_manage)s migrate %(django_migrate_app)s %(django_migrate_migration)s '
             '%(django_migrate_fake_str)s') % env
         cmd = cmd.strip()
-        run_or_dryrun(cmd)
+        with settings(warn_only=ignore_errors):
+            run_or_dryrun(cmd)
 
+@task_or_dryrun
+def migrate_all(*args, **kwargs):
+    kwargs['site'] = 'all'
+    return migrate(*args, **kwargs)
+    
 def set_db(name=None, site=None, role=None, verbose=0):
     name = name or 'default'
 #    print '!'*80

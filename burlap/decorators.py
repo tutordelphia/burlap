@@ -12,7 +12,6 @@ from functools import wraps
 #from .context_managers import settings
 from burlap import tasks
 
-
 def task_or_dryrun(*args, **kwargs):
     """
     Decorator declaring the wrapped function to be a new-style task.
@@ -38,5 +37,7 @@ def task_or_dryrun(*args, **kwargs):
 
     def wrapper(func):
         return task_class(func, *args, **kwargs)
+    wrapper.is_task_or_dryrun = True
+    wrapper.wrapped = func
 
     return wrapper if invoked else wrapper(func)

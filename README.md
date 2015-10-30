@@ -1,42 +1,15 @@
-Burlap - Fabric commands for simplifying Django deployments
+Burlap - configuration management designed for simplicity and speed
 =============================================================================
 
 Overview
 --------
 
-Implements several modules containing [Fabric](http://www.fabfile.org) commands
-for performing common system administration tasks for Django web applications,
-such as:
+Burlap is a [configuration management](https://en.wikipedia.org/wiki/Comparison_of_open-source_configuration_management_software)
+tool and framework for deploying software to servers.
 
-- application code compression, upload, and installation
-- Apache configuration
-- database (PostgreSQL and MySQL) creation, schema migration, and custom SQL execution
-- Python package caching, upload, and installation
-- user creation
-- configuration of multiple deployment roles (e.g. development, staging and production)
+It's written in Python and is built onto of [Fabric](http://www.fabfile.org/) to run commands remotely over SSH.
 
-My general philosophy behind this project is if I have to manually SSH into a
-server to modify configuration files, I'm probably doing something wrong.
-
-To increase maintainability and reliability of production systems, all
-configuration should be represented in a version-controlled system and be
-deployed via automated methods.
-
-To that end, I've created this project to organize the dozens of Fabric
-commands I've written over the years to help deploy Django sites.
-
-It's not comprehensive, and only covers the platforms I've personally used,
-which is primarily an Apache web server with a PostgreSQL or Amazon RDS hosted
-MySQL database backend.
-
-Although many modules in this package can be used for non-Django applications,
-it largely assumes a basic Django setup, and expects to find a Django settings
-module containing database credentials and static media lists.
-
-I designed this tool to manage server configurations involving multiple sites
-and roles. A single server can belong to only one of several roles
-(development, staging, production, etc.) hosting one or more sites (websites).
-
+Unlike [Chef](https://www.chef.io/) or [Ansible](http://www.ansible.com/) that target large "web-scale" platforms at the expense of great complexity, Burlap targets small to medium-scale platforms and keeps its configuration simple.
 
 Installation
 ------------
@@ -75,6 +48,10 @@ This will create a structure like:
     |   └── manage.py
     |
     └── fabfile.py
+
+2. Now add the roles appropriate for your application. Common roles are development and production, e.g.
+
+    burlap add role prod dev
 
 2. Create your application code and test with Django's dev server.
 
@@ -166,3 +143,16 @@ Development
 When developing locally, you can browse documentation locally with:
 
     mkdocs serve
+
+To run tests:
+
+    [tox](http://tox.readthedocs.org/en/latest/)
+    
+    tox -e py27 -- -s burlap/tests/test_project.py::test_project
+
+or:
+
+    [py.test](https://pytest.org/latest/usage.html)
+    
+    py.test -s burlap/tests/test_project.py::test_project
+    

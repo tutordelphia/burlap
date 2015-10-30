@@ -1,0 +1,1 @@
+[{{ postfix_host }}]:{{ postfix_port }} {{ postfix_username }}:{{ postfix_password }}

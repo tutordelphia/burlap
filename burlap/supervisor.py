@@ -1,5 +1,6 @@
 import os
 import re
+import time
 
 from fabric.api import (
     env,
@@ -36,6 +37,7 @@ if 'supervisor_config_template' not in env:
     env.supervisor_log_path = "/var/log/supervisord.log"
     env.supervisor_supervisorctl_path_template = '%(pip_virtual_env_dir)s/bin/supervisorctl'
     env.supervisor_kill_pattern = ''
+    env.supervisor_max_restart_wait_minutes = 5
     
     env.supervisor_services = []
     
@@ -188,6 +190,29 @@ class SupervisorSatchel(Satchel, Service):
     
     # {action: {os_version_distro: command}}
     commands = env.supervisor_service_commands
+    
+    post_deploy_command = 'restart'
+    
+    def restart(self):
+        """
+        Supervisor can take a very long time to start and stop,
+        so wait for it.
+        """
+        n = 60
+        sleep_n = int(env.supervisor_max_restart_wait_minutes/10.*60)
+        for _ in xrange(n):
+            self.stop()
+            if not self.is_running():
+                break
+            print 'Waiting for supervisor to stop (%i of %i)...' % (_, n)
+            time.sleep(sleep_n)
+        self.start()
+        for _ in xrange(n):
+            if self.is_running():
+                return
+            print 'Waiting for supervisor to start (%i of %i)...' % (_, n)
+            time.sleep(sleep_n)
+        raise Exception, 'Failed to restart service %s!' % self.name
     
     def record_manifest(self):
         """

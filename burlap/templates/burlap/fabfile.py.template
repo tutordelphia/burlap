@@ -1,0 +1,21 @@
+"""
+Fabric command script for project {project_name}.
+
+For most deployments, you'll want to do:
+
+    fab <role> deploy.run
+    
+"""
+
+from burlap.common import (
+    env,
+    run_or_dryrun,
+    put_or_dryrun,
+    sudo_or_dryrun,
+    local_or_dryrun,
+)
+from burlap.decorators import task_or_dryrun
+
+@task_or_dryrun
+def custom_task():
+    run_or_dryrun('echo "$(date)"')

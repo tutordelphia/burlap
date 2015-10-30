@@ -93,6 +93,11 @@ def restart(name=''):
 #         print 'checking', service
         if name and service.lower() != name:
             continue
+        srv = common.services.get(service)
+        if srv:
+            srv.restart()
+            _ran = True
+            continue
         funcs = common.service_restarters.get(service)
         if funcs:
             print 'Restarting service %s...' % (service,)
@@ -115,7 +120,24 @@ def stop(name=''):
             print 'Restarting service %s...' % (service,)
             for func in funcs:
                 func()
-                
+
+@task_or_dryrun
+def is_running(name):
+    name = name.strip().lower()
+    _ran = False
+    #print common.service_restarters
+    for service in env.services:
+        service = service.strip().upper()
+#         print 'checking', service
+        if name and service.lower() != name:
+            continue
+        srv = common.services.get(service)
+        if srv:
+            _ran = True
+            print '%s.is_running: %s' % (name, srv.is_running())
+    if not get_dryrun() and not _ran and name:
+        raise Exception, 'No restart command found for service "%s".' % name
+
 def is_selected(name):
     name = name.strip().upper()
     for service in env.services:

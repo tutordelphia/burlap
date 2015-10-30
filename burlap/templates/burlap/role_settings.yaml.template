@@ -1,0 +1,10 @@
+# Settings for {{ role }}.
+inherits: all
+
+# Set this to the domain/IP of your {{ role }} server(s).
+# For now, let's assume we'll do most development locally...
+hosts: ['localhost']
+
+# This is the base directory where all files will be installed once deployed.
+# For development, we'll just make this the CWD.
+remote_app_dir_template: "."

@@ -1,0 +1,8 @@
+# This is the name of the Django app that contains the global settings for your site.
+app_name: {site_name}
+
+# This is the name of the Apache site that will host your Django app.
+default_site: {site_name}
+
+# This the template used to retrieving your Django app settings.
+settings_module: '%(app_name)s.settings'

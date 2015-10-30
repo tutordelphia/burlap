@@ -29,4 +29,3 @@ class WrappedCallableTask(_WrappedCallableTask):
             set_verbose(kwargs['verbose'])
             del kwargs['verbose']
         return self.wrapped(*args, **kwargs)
-        

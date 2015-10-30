@@ -1,7 +1,10 @@
 import unittest
 
-from mock import patch
-
+try:
+    import pytest
+    from mock import patch
+except ImportError:
+    pass
 
 class TestVagrantMachines(unittest.TestCase):
 

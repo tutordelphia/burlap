@@ -1,4 +1,4 @@
-from __future__ import with_statement
+from __future__ import with_statement, print_function
 import os
 import re
 import sys
@@ -12,10 +12,12 @@ import yaml
 import pipes
 import json
 import getpass
+import inspect
 from collections import namedtuple, OrderedDict
 from StringIO import StringIO
 from pprint import pprint
 from datetime import date
+
 from fabric.api import (
     env,
     local,
@@ -30,7 +32,6 @@ from fabric.api import (
     runs_once,
 )
 from fabric import state
-
 import fabric.api
 
 if hasattr(fabric.api, '_run'):
@@ -42,9 +43,7 @@ if hasattr(fabric.api, '_sudo'):
 PACKAGERS = APT, YUM = ('apt-get', 'yum')
 
 OS_TYPES = LINUX, WINDOWS = ('linux', 'windows')
-OS_DISTRO = FEDORA, UBUNTU = ('fedora', 'ubuntu')
-FEDORA_13 = 'fedora-13'
-FEDORA_16 = 'fedora-16'
+OS_DISTRO = FEDORA, UBUNTU, DEBIAN, CENTOS = ('fedora', 'ubuntu', 'debian', 'centos')
 
 SYSTEM = 'system'
 RUBY = 'ruby'
@@ -118,6 +117,7 @@ service_post_deployers = type(env)() # {service:[func]}
 service_post_db_loaders = type(env)() # {service:[func]}
 service_restarters = type(env)() # {service:[func]}
 service_stoppers = type(env)() # {service:[func]}
+services = {} # {name: service_obj}
 
 manifest_recorder = type(env)() #{component:[func]}
 manifest_comparer = type(env)() #{component:[func]}
@@ -125,6 +125,41 @@ manifest_deployers = type(env)() #{component:[func]}
 manifest_deployers_befores = type(env)() #{component:[pending components that must be run first]}
 #manifest_deployers_afters = type(env)() #{component:[pending components that must be run last]}
 manifest_deployers_takes_diff = type(env)()
+
+#http://www.saltycrane.com/blog/2010/09/class-based-fabric-scripts-metaprogramming-hack/
+def add_class_methods_as_module_level_functions_for_fabric(instance, module_name, method_name):
+    '''
+    Utility to take the methods of the instance of a class, instance,
+    and add them as functions to a module, module_name, so that Fabric
+    can find and call them. Call this at the bottom of a module after
+    the class definition.
+    '''
+    from .decorators import task_or_dryrun
+    
+    # get the module as an object
+    module_obj = sys.modules[module_name]
+
+    # Iterate over the methods of the class and dynamically create a function
+    # for each method that calls the method and add it to the current module
+    # NOTE: inspect.ismethod actually executes the methods?!
+    #for method in inspect.getmembers(instance, predicate=inspect.ismethod):
+    
+    method_obj = getattr(instance, method_name)
+
+    if not method_name.startswith('_'):
+        # get the bound method
+        func = getattr(instance, method_name)
+        
+        # Convert executable to a Fabric task, if not done so already.
+        if not hasattr(func, 'is_task_or_dryrun'):
+            func = task_or_dryrun(func)
+
+        # add the function to the current module
+        setattr(module_obj, method_name, func)
+        
+        func.wrapped.__func__.fabric_name = '%s.%s' % (module_name, method_name)
+        
+        return func
 
 def add_deployer(event, func, before=[], after=[], takes_diff=False):
     event = event.strip().upper()
@@ -165,6 +200,13 @@ class Deployer(object):
         self.after = after or []
         self.takes_diff = takes_diff
 
+def get_class_module_name(self):
+    name = self.__module__
+    if name == '__main__':
+        filename = sys.modules[self.__module__].__file__
+        name = os.path.splitext(os.path.basename(filename))[0]
+    return name
+
 class Satchel(object):
     """
     Represents a base unit of functionality that is deployed and maintained on one
@@ -174,36 +216,70 @@ class Satchel(object):
     # This will be used to uniquely identify this unit of functionality.
     name = None
     
+    tasks = ()
+    
     def __init__(self):
-#         print 'Satchel.__init__'
         assert self.name, 'A name must be specified.'
         self.name = self.name.strip().lower()
         
         manifest_recorder[self.name] = self.record_manifest
-        
-        deployers = self.get_deployers()
-        for deployer in deployers:
-            assert isinstance(deployer, Deployer), 'Invalid deployer "%s".' % deployer
-            add_deployer(
-                event=self.name,
-                func=deployer.func,
-                before=deployer.before,
-                after=deployer.after,
-                takes_diff=deployer.takes_diff)
                 
         super(Satchel, self).__init__()
+        
+        # Register select instance methods as Fabric tasks.
+        for task_name in self.tasks:
+            task = add_class_methods_as_module_level_functions_for_fabric(
+                instance=self,
+                module_name=get_class_module_name(self),
+                method_name=task_name)
+            
+            # If task is marked as a deployer, then add it to the deployer list.
+            if hasattr(task.wrapped, 'is_deployer'):
+                add_deployer(
+                    event=self.name,
+                    func=task.wrapped.fabric_name,#deployer.func,
+                    before=getattr(task.wrapped, 'deploy_before', []),#deployer.before,
+                    after=getattr(task.wrapped, 'deploy_after', []),#deployer.after,
+                    takes_diff=getattr(task.wrapped, 'deployer_takes_diff', False))
+                
+        deployers = self.get_deployers()
+        if deployers:
+            for deployer in deployers:
+                assert isinstance(deployer, Deployer), 'Invalid deployer "%s".' % deployer
+                add_deployer(
+                    event=self.name,
+                    func=deployer.func,
+                    before=deployer.before,
+                    after=deployer.after,
+                    takes_diff=deployer.takes_diff)
+    
+    def render_to_file(self, *args, **kwargs):
+        return render_to_file(*args, **kwargs)
+    
+    def put_or_dryrun(self, *args, **kwargs):
+        return put_or_dryrun(*args, **kwargs)
+    
+    def run_or_dryrun(self, *args, **kwargs):
+        return run_or_dryrun(*args, **kwargs)
+    
+    def local_or_dryrun(self, *args, **kwargs):
+        return local_or_dryrun(*args, **kwargs)
+    
+    def sudo_or_dryrun(self, *args, **kwargs):
+        return sudo_or_dryrun(*args, **kwargs)
     
     def record_manifest(self):
         """
         Returns a dictionary representing a serialized state of the service.
         """
-        raise NotImplementedError
+        data = get_component_settings(self.name)
+        return data
         
     def get_deployers(self):
         """
         Returns one or more Deployer instances, representing tasks to run during a deployment.
         """
-        raise NotImplementedError
+        #raise NotImplementedError
         
     @property
     def current_manifest(self):
@@ -228,16 +304,16 @@ class Service(object):
     post_deploy_command = 'restart'
     
     def __init__(self):
-#         print 'Service.__init__'
         assert self.name
         self.name = self.name.strip().lower()
         service_restarters[self.name.upper()] = [self.restart]
-#         print 'service:', self.name, sorted(service_restarters.keys())
         service_stoppers[self.name.upper()] = [self.stop]
         if self.post_deploy_command:
             service_post_deployers[self.name.upper()] = [getattr(self, self.post_deploy_command)]
             
         super(Service, self).__init__()
+        
+        services[self.name.strip().upper()] = self
     
     def get_command(self, action):
         os_version = get_os_version()
@@ -276,10 +352,17 @@ class Service(object):
             sudo_or_dryrun(cmd)
         
     def status(self):
-        s = {'warn_only':True} if self.ignore_errors else {} 
-        with settings(**s):
+        with settings(warn_only=True):
             cmd = self.get_command(STATUS)
-            sudo_or_dryrun(cmd)
+            return sudo_or_dryrun(cmd)
+            
+    def is_running(self):
+        status = str(self.status())
+        status = re.sub(r'[\s\s]+', ' ', status)
+        return 'is running' in status
+
+class ServiceSatchel(Satchel, Service):
+    pass
 
 env.hosts_retriever = None
 env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,
@@ -382,7 +465,7 @@ def local_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print '[%s@localhost] local: %s' % (getpass.getuser(), cmd)
+        print('[%s@localhost] local: %s' % (getpass.getuser(), cmd))
     else:
         return local(*args, **kwargs)
         
@@ -392,7 +475,7 @@ def run_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print '%s run: %s' % (render_command_prefix(), cmd)
+        print('%s run: %s' % (render_command_prefix(), cmd))
     else:
         return _run(*args, **kwargs)
 
@@ -402,7 +485,7 @@ def sudo_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print '%s sudo: %s' % (render_command_prefix(), cmd)
+        print('%s sudo: %s' % (render_command_prefix(), cmd))
     else:
         return _sudo(*args, **kwargs)
 
@@ -428,13 +511,12 @@ def put_or_dryrun(**kwargs):
         
         if env.host_string in LOCALHOSTS:
             cmd = 'rsync --progress --verbose %s %s' % (local_path, remote_path)
-            #print ('sudo ' if use_sudo else '')+'echo "%s" > %s' % (shellquote(open(local_path).read()), remote_path)
-            print '%s put: %s' % (render_command_prefix(), cmd)
+            print('%s put: %s' % (render_command_prefix(), cmd))
             env.put_remote_path = local_path
         else:
             cmd = 'rsync --progress --verbose %s %s' % (local_path, remote_path)
             env.put_remote_path = remote_path
-            print '%s put: %s' % (render_command_prefix(), cmd)
+            print('%s put: %s' % (render_command_prefix(), cmd))
             
         if real_remote_path and use_sudo:
             sudo_or_dryrun('mv %s %s' % (remote_path, real_remote_path))
@@ -456,8 +538,7 @@ def get_or_dryrun(**kwargs):
         if not local_path.startswith('/'):
             local_path = '/tmp/' + local_path
         cmd = ('sudo ' if use_sudo else '')+'rsync --progress --verbose %s@%s:%s %s' % (env.user, env.host_string, remote_path, local_path)
-        #print ('sudo ' if use_sudo else '')+'echo "%s" > %s' % (shellquote(open(local_path).read()), remote_path)
-        print '[localhost] get: %s' % (cmd,)
+        print('[localhost] get: %s' % (cmd,))
         env.get_local_path = local_path
         
     else:
@@ -558,7 +639,6 @@ def get_submodules(module):
     def is_module(d):
         d = os.path.join(dir, d)
         return os.path.isfile(d) and glob.glob(os.path.join(d, '*.py*'))
-    #print os.listdir(dir)
     return filter(is_module, os.listdir(dir))
 
 def iter_apps():
@@ -671,14 +751,22 @@ class QueuedCommand(object):
         raise NotImplementedError
 
 def get_template_dirs():
-    yield os.path.join(env.ROLES_DIR, env[ROLE], 'templates')
-    yield os.path.join(env.ROLES_DIR, env[ROLE])
-    yield os.path.join(env.ROLES_DIR, '..', 'templates', env[ROLE])
-    yield os.path.join(env.ROLES_DIR, ALL, 'templates')
-    yield os.path.join(env.ROLES_DIR, ALL)
-    yield os.path.join(env.ROLES_DIR, '..', 'templates', ALL)
-    yield os.path.join(env.ROLES_DIR, '..', 'templates')
-    yield os.path.join(os.path.dirname(__file__), 'templates')
+    
+    paths = (
+        (env.ROLES_DIR, env[ROLE], 'templates'),
+        (env.ROLES_DIR, env[ROLE]),
+        (env.ROLES_DIR, '..', 'templates', env[ROLE]),
+        (env.ROLES_DIR, ALL, 'templates'),
+        (env.ROLES_DIR, ALL),
+        (env.ROLES_DIR, '..', 'templates', ALL),
+        (env.ROLES_DIR, '..', 'templates'),
+        (os.path.dirname(__file__), 'templates'),
+    )
+    
+    for path in paths:
+        if None in path:
+            continue
+        yield os.path.join(*path)
     env.template_dirs = get_template_dirs()
 
 env.template_dirs = get_template_dirs()
@@ -690,7 +778,6 @@ def save_env():
             continue
         elif isinstance(v, (types.GeneratorType, types.ModuleType)):
             continue
-        #print type(k),type(v)
         env_default[k] = copy.deepcopy(v)
     return env_default
 
@@ -770,59 +857,73 @@ def find_template(template):
     verbose = get_verbose()
     final_fqfn = None
     for path in get_template_dirs():
+        if verbose:
+            print('Checking: %s' % path)
         fqfn = os.path.abspath(os.path.join(path, template))
         if os.path.isfile(fqfn):
             if verbose:
-                print>>sys.stderr, 'Using template: %s' % (fqfn,)
+                print('Using template: %s' % (fqfn,))
             final_fqfn = fqfn
             break
         else:
             if verbose:
-                print>>sys.stderr, 'Template not found: %s' % (fqfn,)
+                print('Template not found: %s' % (fqfn,))
     return final_fqfn
 
-def render_to_string(template):
+def render_to_string(template, extra=None):
     """
     Renders the given template to a string.
     """
-    import django
-    from django.template import Context, Template
-    from django.template.loader import render_to_string
+    #import django
+    #from django.template import Context, Template
+    #from django.template.loader import render_to_string
+    from jinja2 import Template
+    
+    extra = extra or {}
     
     final_fqfn = find_template(template)
     assert final_fqfn, 'Template not found: %s' % template
-    from django.conf import settings
-    try:
-        settings.configure()
-    except RuntimeError:
-        pass
+    #from django.conf import settings
+#     try:
+#         settings.configure()
+#     except RuntimeError:
+#         pass
     
     #content = render_to_string('template.txt', dict(env=env))
     template_content = open(final_fqfn, 'r').read()
     t = Template(template_content)
-    c = Context(env)
-    rendered_content = t.render(c)
+    #c = Context(env)
+    if extra:
+        context = env.copy()
+        context.update(extra)
+    else:
+        context = env
+    rendered_content = t.render(**context)
     rendered_content = rendered_content.replace('&quot;', '"')
     return rendered_content
 
-def render_to_file(template, fn=None, **kwargs):
+def render_to_file(template, fn=None, extra=None, **kwargs):
     """
     Returns a template to a file.
     If no filename given, a temporary filename will be generated and returned.
     """
     import tempfile
     dryrun = get_dryrun(kwargs.get('dryrun'))
-    content = render_to_string(template)
+    content = render_to_string(template, extra=extra)
     if fn:
         fout = open(fn, 'w')
     else:
         fd, fn = tempfile.mkstemp()
         fout = os.fdopen(fd, 'wt')
-    print 'echo -e %s > %s' % (shellquote(content), fn)
+    print('echo -e %s > %s' % (shellquote(content), fn))
     fout.write(content)
     fout.close()
     return fn
 
+def install_script(local_path=None, remote_path=None):
+    put_or_dryrun(local_path=local_path, remote_path=remote_path, use_sudo=True)
+    sudo_or_dryrun('chmod +x %s' % env.put_remote_path)
+    
 def write_to_file(content, fn=None):
     import tempfile
     if fn:
@@ -839,15 +940,11 @@ def set_site(site):
         return
     env[SITE] = os.environ[SITE] = site
 
-
 def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=False, verbose=False):
     """
     Iterates over sites, safely setting environment variables for each site.
     """
     from dj import render_remote_paths
-#    print 'site:',env.default_site
-#    print 'site:',env.SITE
-    #assert sites or site, 'Either site or sites must be specified.'
     if sites is None:
         site = site or env.SITE
         if site == ALL:
@@ -858,19 +955,14 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
     renderer = renderer or render_remote_paths
     env_default = save_env()
     for site, site_data in sites:
-#        print '-'*80
-#        print 'site:',site
-#        print 'env.django_settings_module_template00:',env.django_settings_module_template
         if no_secure and site.endswith('_secure'):
             continue
         env.update(env_default)
         env.update(env.sites[site])
         env.SITE = site
         renderer()
-#        print 'env.django_settings_module_template01:',env.django_settings_module_template
         if setter:
             setter(site)
-#        print 'env.django_settings_module_template02:',env.django_settings_module_template
         yield site, site_data
     env.update(env_default)
 

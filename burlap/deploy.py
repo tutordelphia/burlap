@@ -706,7 +706,7 @@ def get_last_thumbprint():
     """
     verbose = common.get_verbose()
     plan = get_last_completed_plan()
-    if verbose: print('get_last_thumbprint.last completed plan:', plan.name)
+    if verbose and plan: print('get_last_thumbprint.last completed plan:', plan.name)
     last_thumbprint = (plan and plan.thumbprint) or {}
     if verbose: print('get_last_thumbprint.last_thumbprint:', last_thumbprint)
     return last_thumbprint
@@ -783,7 +783,7 @@ def preview(**kwargs):
     """
     Lists the likely pending deployment steps.
     """
-    auto(preview=1, **kwargs)
+    return auto(preview=1, **kwargs)
 
 def get_last_current_diffs(target_component):
     """
@@ -912,12 +912,12 @@ def auto(fake=0, preview=0, check_outstanding=1):
                 print(success((' '*4)+func_name))
     else:
         print('Nothing to do!')
-        return
+        return False
     
     # Execute plan. 
     if preview:
         print('\nTo execute this plan on all hosts run:\n\n    fab %s deploy.run' % env.ROLE)
-        return
+        return True
     else:
         for func_name, plan_func in plan_funcs:
             if callable(plan_func):
@@ -933,6 +933,18 @@ def run(*args, **kwargs):
     Performs a full deployment.
     """
     from burlap import service, notifier
+    
+    assume_yes = int(kwargs.pop('assume_yes', 0))
+    
+    if env.host_string == env.hosts[0]:
+        pending = preview(*args, **kwargs)
+        if pending:
+            if not assume_yes \
+            and not raw_input('\nBegin deployment? [yn] ').strip().lower().startswith('y'):
+                sys.exit(1)
+        else:
+            return
+    
     service.pre_deploy()
     auto(check_outstanding=0, *args, **kwargs)
     service.post_deploy()

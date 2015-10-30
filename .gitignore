@@ -1,4 +1,3 @@
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -57,4 +56,11 @@ docs/_build/
 
 # PIP install version files.
 /=*
-/site/
+
+.pip_cache
+.tarball_cache
+.manifests
+/dist/
+/burlap.egg-info/
+/.tox/
+/.cache/

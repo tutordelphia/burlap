@@ -29,6 +29,7 @@ from burlap.common import QueuedCommand
 
 if 'cron_crontabs_available' not in env:
     
+    env.cron_enabled = True
     env.cron_crontabs_available = type(env)() # {name:[cron lines]}
     
     #env._cron_create_crontab_callbacks = []
@@ -141,11 +142,6 @@ def deploy(site=None, verbose=0):
     put_or_dryrun(local_path=fn)
     sudo_or_dryrun('crontab -u %(cron_user)s %(put_remote_path)s' % env)
 
-@task_or_dryrun
-def deploy_all(**kwargs):
-    kwargs['site'] = common.ALL
-    return deploy(**kwargs)
-
 class CronSatchel(Satchel, Service):
     
     name = CRON
@@ -157,32 +153,24 @@ class CronSatchel(Satchel, Service):
     # {action: {os_version_distro: command}}
     commands = env.cron_service_commands
     
+    tasks = (
+        'configure',
+    )
+    
     def __init__(self):
         #Satchel, Service
         super(CronSatchel, self).__init__()
-    
-    def record_manifest(self):
-        """
-        Called after a deployment to record any data necessary to detect changes
-        for a future deployment.
-        """
-        data = common.get_component_settings(CRON)
-        if common.get_verbose():
-            print data
-        return data
-        
-    def get_deployers(self):
-        """
-        Returns one or more Deployer instances, representing tasks to run during a deployment.
-        """ 
-        return [
-            Deployer(
-                func='cron.deploy_all',
-                # if they need to be run, these must be run before this deployer
-                before=['packager', 'user', 'tarball'],
-                # if they need to be run, these must be run after this deployer
-                after=[],
-                takes_diff=False)
-        ]
+
+    def configure(self, **kwargs):
+        if env.cron_enabled:
+            kwargs['site'] = common.ALL
+            deploy(**kwargs)
+            self.enable()
+            self.restart()
+        else:
+            self.disable()
+            self.stop()
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'user', 'tarball']
         
 CronSatchel()

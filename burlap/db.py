@@ -542,7 +542,7 @@ def update_all_from_diff(last=None, current=None):
 
 @task_or_dryrun
 @runs_once
-def dump(dest_dir=None, to_local=None, from_local=0, archive=0):
+def dump(dest_dir=None, to_local=None, from_local=0, archive=0, dump_fn=None):
     """
     Exports the target database to a single transportable file on the localhost,
     appropriate for loading using load().
@@ -554,7 +554,7 @@ def dump(dest_dir=None, to_local=None, from_local=0, archive=0):
     if dest_dir:
         env.db_dump_dest_dir = dest_dir
     env.db_date = datetime.date.today().strftime('%Y%m%d')
-    env.db_dump_fn = env.db_dump_fn_template % env
+    env.db_dump_fn = dump_fn or (env.db_dump_fn_template % env)
     if to_local is None and not env.is_local:
         to_local = 1
         
