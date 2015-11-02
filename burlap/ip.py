@@ -60,6 +60,8 @@ class IPSatchel(ServiceSatchel):
         'static',
         'dynamic',
     )
+    
+    post_deploy_command = None
 
     def static(self):
         """

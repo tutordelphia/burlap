@@ -10,7 +10,7 @@ AVAHI = 'avahi'
 
 if 'avahi_enabled' not in env:
     
-    env.avahi_enabled = False
+    env.avahi_enabled = True
     env.avahi_daemon_name = 'avahi-daemon'
 
     env.avahi_service_commands = {

@@ -158,10 +158,12 @@ if 'apache_application_name' not in env:
         common.DISABLE:{
             common.FEDORA: 'systemctl disable httpd.service',
             common.UBUNTU: 'chkconfig apache2 off',
+            (common.UBUNTU, '14.04'): 'update-rc.d -f apache2 remove',
         },
         common.ENABLE:{
             common.FEDORA: 'systemctl enable httpd.service',
             common.UBUNTU: 'chkconfig apache2 on',
+            (common.UBUNTU, '14.04'): 'update-rc.d apache2 defaults',
         },
         common.RELOAD:{
             common.FEDORA: 'systemctl reload httpd.service',

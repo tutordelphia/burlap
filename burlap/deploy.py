@@ -939,11 +939,13 @@ def run(*args, **kwargs):
     if env.host_string == env.hosts[0]:
         pending = preview(*args, **kwargs)
         if pending:
+            # There are changes that need to be deployed, but confirm first with user.
             if not assume_yes \
             and not raw_input('\nBegin deployment? [yn] ').strip().lower().startswith('y'):
                 sys.exit(1)
         else:
-            return
+            # There are no changes pending, so abort all further tasks.
+            sys.exit(1)
     
     service.pre_deploy()
     auto(check_outstanding=0, *args, **kwargs)

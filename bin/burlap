@@ -12,10 +12,13 @@ import argparse
 import os
 import sys
 
-#sys.path.insert(0, os.path.normpath(os.path.join(os.path.realpath(__file__), '../..')))
+_path = os.path.normpath(os.path.join(os.path.realpath(__file__), '../..'))
+#print('path:', _path)
+sys.path.insert(0, _path)
 
 import burlap
 from burlap import common
+print('common:', common)
 
 fabfile_template = os.path.join(
     os.path.dirname(burlap.__file__),
@@ -253,6 +256,7 @@ if __name__ == "__main__":
                 common.render_to_string(
                     'burlap/role_settings.yaml.template',
                     extra=dict(role=_role)))
+            print('Added role %s!' % role)
         
     else:
         raise NotImplementedError, 'Unknown action: %s' % (args.action)

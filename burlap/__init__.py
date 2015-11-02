@@ -13,7 +13,7 @@ import warnings
 
 from pprint import pprint
 
-VERSION = (0, 5, 0)
+VERSION = (0, 6, 0)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -55,15 +55,19 @@ try:
     from . import common
     from . import debug
     
+    Satchel = common.Satchel
+    ServiceSatchel = common.ServiceSatchel
+    
     env_default = common.save_env()
 
 except ImportError as e:
-    print(e, file=sys.stderr)
+    print('Unable to initialize yaml: %s' % e, file=sys.stderr)
     pass
 
 try:
     common
-except NameError:
+except NameError as e:
+    print('Unable to initialize common: %s' % e, file=sys.stderr)
     common = None
 
 try:

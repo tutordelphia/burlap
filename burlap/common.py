@@ -207,6 +207,24 @@ def get_class_module_name(self):
         name = os.path.splitext(os.path.basename(filename))[0]
     return name
 
+class _EnvProxy(object):
+    """
+    Filters a satchel's access to the enviroment object.
+    """
+    
+    def __init__(self, satchel):
+        self.satchel = satchel
+        
+    def __getattr__(self, k):
+        if k in ('satchel',):
+            return super(_EnvProxy, self).__getattr__(k)
+        return env[self.satchel.env_prefix + k]
+        
+    def __setattr__(self, k, v):
+        if k in ('satchel',):
+            return super(_EnvProxy, self).__setattr__(k, v)
+        env[self.satchel.env_prefix + k] = v
+
 class Satchel(object):
     """
     Represents a base unit of functionality that is deployed and maintained on one
@@ -218,13 +236,28 @@ class Satchel(object):
     
     tasks = ()
     
+    required_system_packages = {
+        #OS: [package1, package2, ...],
+    }
+    
     def __init__(self):
         assert self.name, 'A name must be specified.'
         self.name = self.name.strip().lower()
         
+        self.env = _EnvProxy(self)
+        
+        _prefix = '%s_enabled' % self.name
+        if _prefix not in env:
+            env[_prefix] = True
+            self.set_defaults()
+        
         manifest_recorder[self.name] = self.record_manifest
                 
         super(Satchel, self).__init__()
+        
+        # Register service commands.
+        if self.required_system_packages:
+            required_system_packages[self.name.upper()] = self.required_system_packages
         
         # Register select instance methods as Fabric tasks.
         for task_name in self.tasks:
@@ -252,6 +285,13 @@ class Satchel(object):
                     before=deployer.before,
                     after=deployer.after,
                     takes_diff=deployer.takes_diff)
+    
+    @property
+    def env_prefix(self):
+        return '%s_' % self.name
+    
+    def set_defaults(self):
+        pass
     
     def render_to_file(self, *args, **kwargs):
         return render_to_file(*args, **kwargs)
@@ -301,7 +341,7 @@ class Service(object):
     ignore_errors = False
     
     # This command will be automatically run after every deployment.
-    post_deploy_command = 'restart'
+    post_deploy_command = None #'restart'
     
     def __init__(self):
         assert self.name
@@ -314,6 +354,10 @@ class Service(object):
         super(Service, self).__init__()
         
         services[self.name.strip().upper()] = self
+        
+        _key = '%s_service_commands' % self.name
+        if _key in env:
+            self.commands = env[_key]
     
     def get_command(self, action):
         os_version = get_os_version()

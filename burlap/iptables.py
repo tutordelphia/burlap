@@ -24,7 +24,7 @@ from burlap.decorators import task_or_dryrun
 
 env.iptables_enabled = True
 env.iptables_ssh_port = 22
-env.iptables_rules_template = 'iptables.template.rules'
+env.iptables_rules_template = 'iptables/iptables.template.rules'
 
 env.iptables_service_commands = {
     common.START:{
