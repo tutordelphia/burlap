@@ -106,7 +106,7 @@ def generate_csr(domain='', r=None):
         #2048?
         env.ssl_base_dst = '%s/%s' % (ssl_dst, env.ssl_domain.replace('*.', ''))
         env.ssl_csr_year = date.today().year
-        cmd = 'openssl req -nodes -newkey rsa:%(ssl_length)s -subj "/C=%(ssl_country)s/ST=%(ssl_state)s/L=%(ssl_city)s/O=%(ssl_organization)s/CN=%(ssl_domain)s" -keyout %(ssl_base_dst)s.key -out %(ssl_base_dst)s.%(ssl_csr_year)i.csr' % env
+        cmd = 'openssl req -nodes -newkey rsa:%(ssl_length)s -subj "/C=%(ssl_country)s/ST=%(ssl_state)s/L=%(ssl_city)s/O=%(ssl_organization)s/CN=%(ssl_domain)s" -keyout %(ssl_base_dst)s.%(ssl_csr_year)i.key -out %(ssl_base_dst)s.%(ssl_csr_year)i.csr' % env
         local_or_dryrun(cmd)
 
 def get_expiration_date(fn):

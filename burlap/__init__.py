@@ -13,7 +13,7 @@ import warnings
 
 from pprint import pprint
 
-VERSION = (0, 6, 0)
+VERSION = (0, 6, 1)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -126,11 +126,11 @@ def _get_environ_handler(name, d):
         
         # Dynamically retrieve hosts.
         if env.hosts_retriever:
-#            print('retriever:',retriever)
+#             print('retriever:',retriever)
 #            print('hosts:',env.hosts)
             if verbose:
                 print('Building host list...')
-            env.hosts = list(retriever(verbose=verbose))
+            env.hosts = list(retriever(verbose=verbose, site=site))
             if verbose:
                 print('Found hosts:')
                 print(env.hosts)

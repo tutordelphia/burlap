@@ -310,9 +310,14 @@ def exists(name='default', site=None):
             '| grep {db_name} | wc -l').format(**env)
         if verbose:
             print cmd
-        ret = run_or_dryrun(cmd)
-        if ret is not None:
-            ret = int(ret) >= 1
+        with settings(warn_only=True):
+            ret = run_or_dryrun(cmd)
+            #print 'ret:', ret
+            if ret is not None:
+                if 'password authentication failed' in ret:
+                    ret = False
+                else:
+                    ret = int(ret) >= 1
             
     elif 'mysql' in env.db_engine:
         
@@ -388,6 +393,7 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
     drop = int(drop)
     
     # Do nothing if we're not dropping and the database already exists.
+    print 'Checking to see if database already exists...'
     if exists(name=name, site=site) and not drop:
         print('Database already exists. Aborting creation. '\
             'Use drop=1 to override.')
@@ -411,19 +417,23 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
 #    print 'role:',env[ROLE]
     
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-            
+        
+        print 'Setting root login...'
         set_root_login()
         
         # Create role/user.
         with settings(warn_only=True):
+            print 'Creating user...'
             cmd = 'psql --user={db_postgresql_postgres_user} --no-password --command="CREATE USER {db_user} WITH PASSWORD \'{db_password}\';"'.format(**env)
             run_or_dryrun(cmd)
-            
+        
+        print 'Creating database...'
         cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --command="CREATE DATABASE %(db_name)s WITH OWNER=%(db_user)s ENCODING=\'%(db_postgresql_encoding)s\'"' % env
         run_or_dryrun(cmd)
         
         #run_or_dryrun('psql --user=postgres -d %(db_name)s -c "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %(db_user)s_ro CASCADE; DROP ROLE IF EXISTS %(db_user)s_ro; DROP USER IF EXISTS %(db_user)s_ro; CREATE USER %(db_user)s_ro WITH PASSWORD \'readonly\'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO %(db_user)s_ro;"')
         with settings(warn_only=True):
+            print 'Enabling plpgsql on database...'
             cmd = 'createlang -U postgres plpgsql %(db_name)s' % env
             run_or_dryrun(cmd)
             

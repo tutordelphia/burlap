@@ -8,5 +8,5 @@ then
 fi
 #script_dir=`dirname $0`
 #cd $script_dir
-. ../.env/bin/activate
+. .env/bin/activate
 PS1="\u@\h:\W(virt)\$ "

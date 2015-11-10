@@ -13,12 +13,10 @@ import os
 import sys
 
 _path = os.path.normpath(os.path.join(os.path.realpath(__file__), '../..'))
-#print('path:', _path)
 sys.path.insert(0, _path)
 
 import burlap
 from burlap import common
-print('common:', common)
 
 fabfile_template = os.path.join(
     os.path.dirname(burlap.__file__),
@@ -186,8 +184,9 @@ if __name__ == "__main__":
     add_role_parser = subparsers.add_parser(
         'add-role',
         help='Adds a new role to the project.')
-    add_role_parser.add_argument('roles', metavar='roles', type=str, nargs='+',
-               help='Names of roles to add.')
+    add_role_parser.add_argument(
+        'roles', metavar='roles', type=str, nargs='+',
+        help='Names of roles to add.')
                    
     args = parser.parse_args()
 

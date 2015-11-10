@@ -79,13 +79,20 @@ if 'vm_name_tag' not in env:
     # Usually stored in a shelf file.
     env.vm_elastic_ip_mappings = None
 
-def retrieve_ec2_hosts(verbose=0, extended=0):
+def retrieve_ec2_hosts(verbose=0, extended=0, site=None):
     verbose = int(verbose)
     extended = int(extended)
     for name, data in list_instances(show=0, verbose=verbose).iteritems():
         if verbose:
-            print(name)
+            print('name:', name)
             pprint(data, indent=4)
+        
+        # Ignore hosts that are disabled for the given site.
+#        if 'shell' in sys.argv:
+#         if site and env.available_sites_by_host and name in env.available_sites_by_host:
+#             if site not in env.available_sites_by_host[name]:
+#                 continue
+            
         if extended:
             yield (name, data)
         elif data.public_dns_name:
