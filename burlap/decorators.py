@@ -32,8 +32,10 @@ def task_or_dryrun(*args, **kwargs):
     """
     invoked = bool(not args or kwargs)
     task_class = kwargs.pop("task_class", tasks.WrappedCallableTask)
-    if not invoked:
-        func, args = args[0], ()
+#     if invoked:
+#         func, args = args[0], ()
+#     else:
+    func, args = args[0], ()
 
     def wrapper(func):
         return task_class(func, *args, **kwargs)

@@ -35,11 +35,11 @@ Unattended-Upgrade::Package-Blacklist {
 // If empty or unset then no email is sent, make sure that you
 // have a working mail setup on your system. A package that provides
 // 'mailx' must be installed. E.g. "user@example.com"
-Unattended-Upgrade::Mail "{{ security_unattended_upgrades_mail_to }}";
+Unattended-Upgrade::Mail "{{ securityunattendedupgrades_mail_to }}";
 
 // Set this value to "true" to get emails only on errors. Default
 // is to always send a mail if Unattended-Upgrade::Mail is set
-Unattended-Upgrade::MailOnlyOnError "{{ security_unattended_upgrades_mailonlyonerror }}";
+Unattended-Upgrade::MailOnlyOnError "{{ securityunattendedupgrades_mailonlyonerror }}";
 
 // Do automatic removal of new unused dependencies after the upgrade
 // (equivalent to apt-get autoremove)
@@ -47,12 +47,12 @@ Unattended-Upgrade::MailOnlyOnError "{{ security_unattended_upgrades_mailonlyone
 
 // Automatically reboot *WITHOUT CONFIRMATION*
 //  if the file /var/run/reboot-required is found after the upgrade 
-Unattended-Upgrade::Automatic-Reboot "{{ security_unattended_upgrades_reboot }}";
+Unattended-Upgrade::Automatic-Reboot "{{ securityunattendedupgrades_reboot }}";
 
 // If automatic reboot is enabled and needed, reboot at the specific
 // time instead of immediately
 //  Default: "now"
-Unattended-Upgrade::Automatic-Reboot-Time "{{ security_unattended_upgrades_reboot_time }}";
+Unattended-Upgrade::Automatic-Reboot-Time "{{ securityunattendedupgrades_reboot_time }}";
 
 // Use apt bandwidth limit feature, this example limits the download
 // speed to 70kb/sec

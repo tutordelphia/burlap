@@ -33,7 +33,10 @@ import sys
 import xmlrpclib
 import urllib2
 
-import feedparser
+try:
+    import feedparser
+except ImportError:
+    feedparser = None
 import json
 
 VERSION = (0, 1, 0)

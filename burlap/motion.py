@@ -3,71 +3,55 @@ Wrapper around the Motion service.
 
 http://www.lavrsen.dk/foswiki/bin/view/Motion/WebHome
 """
-from fabric.api import env
 
-from burlap import common
-from burlap.common import (
-    put_or_dryrun,
-    sudo_or_dryrun,
-    local_or_dryrun,
-    run_or_dryrun,
-    Satchel,
-    Service,
-)
+from burlap import ServiceSatchel
+from burlap.constants import *
 
-MOTION = 'motion'
-
-if 'motion_enabled' not in env:
+class MotionSatchel(ServiceSatchel):
     
-    env.motion_enabled = False
-    env.motion_notify_enabled = False
-
-    env.motion_service_commands = {
-        common.START:{
-            common.FEDORA: 'systemctl start motion.service',
-            common.UBUNTU: 'service motion start',
-        },
-        common.STOP:{
-            common.FEDORA: 'systemctl stop motion.service',
-            common.UBUNTU: 'service motion stop',
-        },
-        common.DISABLE:{
-            common.FEDORA: 'systemctl disable motion.service',
-            common.UBUNTU: 'chkconfig motion off',
-        },
-        common.ENABLE:{
-            common.FEDORA: 'systemctl enable motion.service',
-            common.UBUNTU: 'chkconfig motion on',
-        },
-        common.RESTART:{
-            common.FEDORA: 'systemctl restart motion.service',
-            common.UBUNTU: 'service motion restart; sleep 5',
-        },
-        common.STATUS:{
-            common.FEDORA: 'systemctl status motion.service',
-            common.UBUNTU: 'service motion status',
-        },
-    }
-    
-common.required_system_packages[MOTION] = {
-    common.FEDORA: ['motion'],
-    common.UBUNTU: ['motion'],
-}
-
-class MotionSatchel(Satchel, Service):
-    
-    name = MOTION
+    name = 'motion'
     
     ## Service options.
     
     #ignore_errors = True
     
-    # {action: {os_version_distro: command}}
-    commands = env.motion_service_commands
+    required_system_packages = {
+        FEDORA: ['motion'],
+        UBUNTU: ['motion'],
+    }
 
     tasks = (
         'configure',
     )
+    
+    def set_defaults(self):
+        self.env.notify_enabled = False
+        self.env.service_commands = {
+            START:{
+                FEDORA: 'systemctl start motion.service',
+                UBUNTU: 'service motion start',
+            },
+            STOP:{
+                FEDORA: 'systemctl stop motion.service',
+                UBUNTU: 'service motion stop',
+            },
+            DISABLE:{
+                FEDORA: 'systemctl disable motion.service',
+                UBUNTU: 'chkconfig motion off',
+            },
+            ENABLE:{
+                FEDORA: 'systemctl enable motion.service',
+                UBUNTU: 'chkconfig motion on',
+            },
+            RESTART:{
+                FEDORA: 'systemctl restart motion.service',
+                UBUNTU: 'service motion restart; sleep 5',
+            },
+            STATUS:{
+                FEDORA: 'systemctl status motion.service',
+                UBUNTU: 'service motion status',
+            },
+        }    
     
     def configure(self):
         todo

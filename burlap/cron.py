@@ -1,8 +1,8 @@
 import os
 import sys
 
-from burlap import common
-from burlap.common import env, ServiceSatchel
+from burlap import ServiceSatchel
+from burlap.constants import * 
 
 class CronSatchel(ServiceSatchel):
     
@@ -18,53 +18,49 @@ class CronSatchel(ServiceSatchel):
     
     post_deploy_command = None
     
-#     def __init__(self):
-#         #Satchel, Service
-#         super(CronSatchel, self).__init__()
-
     required_system_packages = {
-        common.FEDORA: ['crontabs'],
-        (common.UBUNTU, '12.04'): ['cron'],
+        FEDORA: ['crontabs'],
+        (UBUNTU, '12.04'): ['cron'],
     }
 
     def set_defaults(self):
-        env.enabled = True
-        env.crontabs_available = type(env)() # {name:[cron lines]}
-        env.command = 'cron'
-        env.user = 'www-data'
-        env.python = None
-        env.crontab_headers = ['PATH=/usr/sbin:/usr/bin:/sbin:/bin\nSHELL=/bin/bash']
-        env.django_manage_template = '%(remote_app_src_package_dir)s/manage.py'
-        env.stdout_log_template = '/tmp/chroniker-%(SITE)s-stdout.$(date +\%%d).log'
-        env.stderr_log_template = '/tmp/chroniker-%(SITE)s-stderr.$(date +\%%d).log'
-        env.crontabs_selected = [] # [name]
+        self.env.enabled = True
+        self.env.crontabs_available = type(self.genv)() # {name:[cron lines]}
+        self.env.command = 'cron'
+        self.env.user = 'www-data'
+        self.env.python = None
+        self.env.crontab_headers = ['PATH=/usr/sbin:/usr/bin:/sbin:/bin\nSHELL=/bin/bash']
+        self.env.django_manage_template = '%(remote_app_src_package_dir)s/manage.py'
+        self.env.stdout_log_template = '/tmp/chroniker-%(SITE)s-stdout.$(date +\%%d).log'
+        self.env.stderr_log_template = '/tmp/chroniker-%(SITE)s-stderr.$(date +\%%d).log'
+        self.env.crontabs_selected = [] # [name]
            
-        env.service_commands = {
-            common.START:{
-                common.FEDORA: 'systemctl start crond.service',
-                common.UBUNTU: 'service cron start',
+        self.env.service_commands = {
+            START:{
+                FEDORA: 'systemctl start crond.service',
+                UBUNTU: 'service cron start',
             },
-            common.STOP:{
-                common.FEDORA: 'systemctl stop crond.service',
-                common.UBUNTU: 'service cron stop',
+            STOP:{
+                FEDORA: 'systemctl stop crond.service',
+                UBUNTU: 'service cron stop',
             },
-            common.DISABLE:{
-                common.FEDORA: 'systemctl disable crond.service',
-                common.UBUNTU: 'chkconfig cron off',
-                (common.UBUNTU, '14.04'): 'update-rc.d -f cron remove',
+            DISABLE:{
+                FEDORA: 'systemctl disable crond.service',
+                UBUNTU: 'chkconfig cron off',
+                (UBUNTU, '14.04'): 'update-rc.d -f cron remove',
             },
-            common.ENABLE:{
-                common.FEDORA: 'systemctl enable crond.service',
-                common.UBUNTU: 'chkconfig cron on',
-                (common.UBUNTU, '14.04'): 'update-rc.d cron defaults',
+            ENABLE:{
+                FEDORA: 'systemctl enable crond.service',
+                UBUNTU: 'chkconfig cron on',
+                (UBUNTU, '14.04'): 'update-rc.d cron defaults',
             },
-            common.RESTART:{
-                common.FEDORA: 'systemctl restart crond.service',
-                common.UBUNTU: 'service cron restart; sleep 3',
+            RESTART:{
+                FEDORA: 'systemctl restart crond.service',
+                UBUNTU: 'service cron restart; sleep 3',
             },
-            common.STATUS:{
-                common.FEDORA: 'systemctl status crond.service',
-                common.UBUNTU: 'service cron status',
+            STATUS:{
+                FEDORA: 'systemctl status crond.service',
+                UBUNTU: 'service cron status',
             },
         }
         
@@ -73,26 +69,27 @@ class CronSatchel(ServiceSatchel):
         
         pip_render_paths()
         
-        self.env.python = os.path.join(env.pip_virtual_env_dir, 'bin', 'python')
-        self.env.django_manage = env.cron_django_manage_template % env
-        self.env.stdout_log = env.cron_stdout_log_template % env
-        self.env.stderr_log = env.cron_stderr_log_template % env
+        self.env.python = os.path.join(self.genv.pip_virtual_env_dir, 'bin', 'python')
+        self.env.django_manage = self.env.django_manage_template % self.genv
+        self.env.stdout_log = self.env.stdout_log_template % self.genv
+        self.env.stderr_log = self.env.stderr_log_template % self.genv
     
     def deploy(self, site=None, verbose=0):
         """
         Writes entire crontab to the host.
-        """ 
+        """
+        from burlap.common import get_current_hostname, iter_sites
         
         verbose = int(verbose)
         cron_crontabs = []
-        hostname = common.get_current_hostname()
-        target_sites = env.available_sites_by_host.get(hostname, None)
+        hostname = get_current_hostname()
+        target_sites = self.genv.available_sites_by_host.get(hostname, None)
         if verbose:
             print>>sys.stderr, 'hostname: "%s"' % (hostname,) 
-        for site, site_data in common.iter_sites(site=site, renderer=render_paths):
+        for site, site_data in iter_sites(site=site, renderer=self.render_paths):
             if verbose:
                 print>>sys.stderr, 'site:',site
-            #print 'cron_crontabs_selected:',env.cron_crontabs_selected
+            #print 'cron_crontabs_selected:',env.crontabs_selected
             
             # Only load site configurations that are allowed for this host.
             if target_sites is None:
@@ -104,9 +101,9 @@ class CronSatchel(ServiceSatchel):
                     continue
             
             if verbose:
-                print>>sys.stderr, 'env.cron_crontabs_selected:',env.cron_crontabs_selected
-            for selected_crontab in env.cron_crontabs_selected:
-                lines = env.cron_crontabs_available.get(selected_crontab, [])
+                print>>sys.stderr, 'env.crontabs_selected:', self.env.crontabs_selected
+            for selected_crontab in self.env.crontabs_selected:
+                lines = self.env.crontabs_available.get(selected_crontab, [])
                 if verbose:
                     print>>sys.stderr, 'lines:',lines
                 for line in lines:
@@ -115,18 +112,18 @@ class CronSatchel(ServiceSatchel):
         if not cron_crontabs:
             return
         
-        cron_crontabs = env.cron_crontab_headers + cron_crontabs
+        cron_crontabs = self.env.crontab_headers + cron_crontabs
         cron_crontabs.append('\n')
-        env.cron_crontabs_rendered = '\n'.join(cron_crontabs)
-        fn = self.write_to_file(content=env.cron_crontabs_rendered)
-        if common.get_dryrun():
-            print 'echo %s > %s' % (env.cron_crontabs_rendered, fn)
+        self.env.crontabs_rendered = '\n'.join(cron_crontabs)
+        fn = self.write_to_file(content=env.crontabs_rendered)
+        if self.dryrun:
+            print 'echo %s > %s' % (env.crontabs_rendered, fn)
         self.put_or_dryrun(local_path=fn)
         self.sudo_or_dryrun('crontab -u %(cron_user)s %(put_remote_path)s' % env)
     
     def configure(self, **kwargs):
-        if env.cron_enabled:
-            kwargs['site'] = common.ALL
+        if self.env.enabled:
+            kwargs['site'] = ALL
             self.deploy(**kwargs)
             self.enable()
             self.restart()

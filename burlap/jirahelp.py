@@ -62,7 +62,7 @@ def update_tickets_from_git(last=None, current=None):
     """
     from jira import JIRA, JIRAError
     from burlap.deploy import get_last_current_diffs
-    from burlap.git import get_current_commit, GIT_TRACKER
+    from burlap.git import get_current_commit, GITTRACKER
     
     dryrun = common.get_dryrun()
     verbose = common.get_verbose()
@@ -83,7 +83,7 @@ def update_tickets_from_git(last=None, current=None):
     # During a deployment, we should be given these, but for testing,
     # lookup the diffs dynamically.
     if not last or not current:
-        last, current = get_last_current_diffs(GIT_TRACKER)
+        last, current = get_last_current_diffs(GITTRACKER)
     
     if verbose:
         print '-'*80
@@ -92,10 +92,10 @@ def update_tickets_from_git(last=None, current=None):
         print 'current.keys:', current.keys()
     
     try:
-        last_commit = last['GIT_TRACKER']['current_commit']
+        last_commit = last['GITTRACKER']['current_commit']
     except KeyError:
         return
-    current_commit = current['GIT_TRACKER']['current_commit']
+    current_commit = current['GITTRACKER']['current_commit']
     
     # Find all tickets deployed between last deployment and now.
     tickets = get_tickets_between_commits(current_commit, last_commit)

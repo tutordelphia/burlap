@@ -9,15 +9,6 @@ import traceback
 from collections import defaultdict
 import shutil, csv
 
-# try:
-#     sys.path.remove('')
-# except ValueError:
-#     pass
-# sys.path.remove('.')
-# import pip
-# print pip.__file__
-# print 'pip0:',dir(pip)
-
 from fabric.api import (
     env,
     require,
@@ -48,8 +39,12 @@ from burlap.common import (
 )
 from burlap.decorators import task_or_dryrun
 from burlap import versioner
+from burlap.constants import *
 
-from requirements.requirement import Requirement
+try:
+    from requirements.requirement import Requirement
+except ImportError:
+    Requirement = None
 
 env.pip_build_directory = '/tmp/pip-build-root/pip'
 env.pip_check_permissions = True
@@ -62,6 +57,7 @@ env.pip_virtual_env_dir = '.env'
 env.pip_virtual_env_exe = sudo_or_dryrun
 env.pip_requirements_fn = 'pip-requirements.txt'
 env.pip_use_virt = True
+env.pip_bootstrap_packages = ['setuptools', 'distribute', 'virtualenv', 'pip']
 env.pip_build_dir = '/tmp/pip-build'
 env.pip_path = 'pip%(pip_python_version)s'
 env.pip_update_command = '%(pip_path_versioned)s install --use-mirrors --timeout=120 --no-install %(pip_no_deps)s --build %(pip_build_dir)s --download %(pip_cache_dir)s --exists-action w %(pip_package)s'
@@ -79,22 +75,6 @@ PENDING = 'pending'
 
 PIP = 'PIP'
 
-common.required_system_packages[PIP] = {
-    common.FEDORA: [
-        #'python-pip'#obsolete?
-    ],
-    (common.UBUNTU, '12.04'): [
-        #'python-pip',#obsolete in 14.04?
-        #'python-virtualenv',#obsolete in 14.04?
-        'gcc', 'python-dev', 'build-essential'
-    ],
-    (common.UBUNTU, '14.04'): [
-        #'python-pip',#obsolete in 14.04?
-        #'python-virtualenv',#obsolete in 14.04?
-        'gcc', 'python-dev', 'build-essential'
-    ],
-}
-
 def render_paths():
     from burlap.dj import render_remote_paths
     env.pip_path_versioned = env.pip_path % env
@@ -104,8 +84,9 @@ def render_paths():
     if env.is_local:
         env.pip_virtual_env_dir = os.path.abspath(env.pip_virtual_env_dir)
 
-def clean_virtualenv():
+def clean_virtualenv(virtualenv_dir=None):
     render_paths()
+    env.pip_virtual_env_dir = virtualenv_dir or env.pip_virtual_env_dir
     with settings(warn_only=True):
         print 'Deleting old virtual environment...'
         sudo_or_dryrun('rm -Rf %(pip_virtual_env_dir)s' % env)
@@ -119,32 +100,35 @@ def has_pip():
         return bool(ret)
     
 @task_or_dryrun
-def bootstrap(clean=0):
+def bootstrap(force=0):
     """
     Installs all the necessary packages necessary for managing virtual
     environments with pip.
     """
-    clean = int(clean)
-    if has_pip() and not clean:
+    force = int(force)
+    if has_pip() and not force:
         return
-    env.pip_path_versioned = env.pip_path % env
+        
+    _env = type(env)(env)
+        
+    _env.pip_path_versioned = _env.pip_path % _env
     run_or_dryrun('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py')
     #sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env))
     with settings(warn_only=True):
-        sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env))
+        sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**_env))
     sudo_or_dryrun('easy_install -U pip')
-    sudo_or_dryrun('{pip_path_versioned} install --upgrade setuptools'.format(**env))
-    sudo_or_dryrun('{pip_path_versioned} install --upgrade distribute'.format(**env))
-    sudo_or_dryrun('{pip_path_versioned} install --upgrade virtualenv'.format(**env))
-    sudo_or_dryrun('{pip_path_versioned} install --upgrade pip'.format(**env))
+    if env.pip_bootstrap_packages:
+        for package in _env.pip_bootstrap_packages:
+            _env.package = package
+            sudo_or_dryrun('{pip_path_versioned} install --upgrade {package}'.format(**_env))
 
 @task_or_dryrun
-def virtualenv_exists():
+def virtualenv_exists(virtualenv_dir=None):
     
     render_paths()
     
     #base_dir = os.path.split(env.pip_virtual_env_dir)[0]
-    base_dir = env.pip_virtual_env_dir
+    base_dir = virtualenv_dir or env.pip_virtual_env_dir
     
     ret = True
     with settings(warn_only=True):
@@ -160,7 +144,7 @@ def virtualenv_exists():
     return ret
 
 @task_or_dryrun
-def init(clean=0, check_global=0):
+def init(clean=0, check_global=0, virtualenv_dir=None, check_permissions=None):
     """
     Creates the virtual environment.
     """
@@ -170,9 +154,9 @@ def init(clean=0, check_global=0):
     
     # Delete any pre-existing environment.
     if int(clean):
-        clean_virtualenv()
+        clean_virtualenv(virtualenv_dir=virtualenv_dir)
     
-    if virtualenv_exists():
+    if virtualenv_exists(virtualenv_dir=virtualenv_dir):
 #         print 'virtualenv exists'
         return
     
@@ -182,19 +166,43 @@ def init(clean=0, check_global=0):
         print 'Ensuring the global pip install is up-to-date.'
         sudo_or_dryrun('pip install --upgrade pip')
     
-    print env.pip_virtual_env_dir
+    virtualenv_dir = virtualenv_dir or env.pip_virtual_env_dir
+    
     #if not files.exists(env.pip_virtual_env_dir):
     print 'Creating new virtual environment...'
     with settings(warn_only=True):
-        cmd = 'virtualenv --no-site-packages %(pip_virtual_env_dir)s' % env
+        cmd = 'virtualenv --no-site-packages %s' % virtualenv_dir
         if env.is_local:
             run_or_dryrun(cmd)
         else:
             sudo_or_dryrun(cmd)
-        
-    if not env.is_local and env.pip_check_permissions:
+    
+    if check_permissions is None:
+        check_permissions = env.pip_check_permissions
+    
+    if not env.is_local and check_permissions:
         sudo_or_dryrun('chown -R %(pip_user)s:%(pip_group)s %(remote_app_dir)s' % env)
         sudo_or_dryrun('chmod -R %(pip_chmod)s %(remote_app_dir)s' % env)
+
+@task_or_dryrun
+def set_virtualenv_permissions(user=None, group=None, perms=None, virtualenv_dir=None):
+    from burlap.dj import render_remote_paths
+    
+    _env = type(env)(env)
+    
+    _env.pip_user = user or _env.pip_user
+    _env.pip_group = group or _env.pip_group
+    _env.pip_chmod = perms or _env.pip_chmod
+    _env.pip_virtual_env_dir = virtualenv_dir or _env.pip_virtual_env_dir
+    
+    render_remote_paths()
+    if virtualenv_dir:
+        _env.pip_virtual_env_dir = virtualenv_dir
+    elif _env.pip_virtual_env_dir_template:
+        _env.pip_virtual_env_dir = _env.pip_virtual_env_dir_template % _env
+    
+    sudo_or_dryrun('chown -R %(pip_user)s:%(pip_group)s %(pip_virtual_env_dir)s' % _env)
+    sudo_or_dryrun('chmod -R %(pip_chmod)s %(pip_virtual_env_dir)s' % _env)
 
 def iter_pip_requirements():
     for line in open(find_template(env.pip_requirements_fn)):
@@ -624,7 +632,12 @@ def check(return_type=PENDING):
             continue
         elif ' ' in line:
             continue
-        k, v = line.split('==')
+        try:
+            k, v = line.split('==')
+        except ValueError as e:
+#             print>>sys.stderr, 'Malformed line: %s' % line
+#             sys.exit()
+            continue
         if not k.strip() or not v.strip():
             continue
         print 'Installed:',k,v
@@ -765,25 +778,49 @@ def uninstall(package):
         sudo_or_dryrun(env.pip_uninstall_command % env)
     
 @task_or_dryrun
-def update_install(clean=0):
-    from burlap.dj import render_remote_paths
+def update_install(clean=0, pip_requirements_fn=None, virtualenv_dir=None, user=None, group=None, perms=None):
+    try:
+        from burlap.dj import render_remote_paths
+    except ImportError:
+        render_remote_paths = None
     
-    bootstrap(clean=clean)
+    _env = type(env)(env)
     
-    init(clean=clean)
+    pip_requirements_fn = pip_requirements_fn or env.pip_requirements_fn
     
-    req_fn = find_template(env.pip_requirements_fn)
-#     print('req_fn:',req_fn)
-    env.pip_remote_requirements_fn = '/tmp/pip-requirements.txt'
-    put_or_dryrun(local_path=req_fn, remote_path=env.pip_remote_requirements_fn)
+    bootstrap(force=clean)
+    
+    init(clean=clean, virtualenv_dir=virtualenv_dir, check_permissions=False)
+    
+    req_fn = find_template(pip_requirements_fn)
+    assert req_fn, 'Could not find file: %s' % pip_requirements_fn
+    _env.pip_remote_requirements_fn = '/tmp/pip-requirements.txt'
+    put_or_dryrun(
+        local_path=req_fn,
+        remote_path=_env.pip_remote_requirements_fn,
+    )
 
-    render_remote_paths()
+    if render_remote_paths:
+        render_remote_paths()
     
-    env.pip_update_install_command = ". %(remote_app_dir)s/.env/bin/activate; pip install -r %(pip_remote_requirements_fn)s; deactivate"
-    if env.is_local:
-        run_or_dryrun(env.pip_update_install_command % env)
+    if virtualenv_dir:
+        _env.virtualenv_dir = virtualenv_dir
+    elif _env.pip_virtual_env_dir_template:
+        _env.virtualenv_dir = _env.pip_virtual_env_dir_template % _env
+    
+    _env.pip_update_install_command = "%(virtualenv_dir)s/bin/pip install -r %(pip_remote_requirements_fn)s"
+    if _env.is_local:
+        run_or_dryrun(_env.pip_update_install_command % _env)
     else:
-        sudo_or_dryrun(env.pip_update_install_command % env)
+        sudo_or_dryrun(_env.pip_update_install_command % _env)
+        
+    if not _env.is_local and (_env.pip_check_permissions or user or group or perms):
+        set_virtualenv_permissions(
+            user=user,
+            group=group,
+            perms=perms,
+            virtualenv_dir=virtualenv_dir,
+        )
     
 @task_or_dryrun
 def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
@@ -852,6 +889,26 @@ class PIPSatchel(Satchel):
     
     name = PIP
     
+    tasks = (
+        'configure',
+    )
+    
+    required_system_packages = {
+        FEDORA: [
+            #'python-pip'#obsolete?
+        ],
+        (UBUNTU, '12.04'): [
+            #'python-pip',#obsolete in 14.04?
+            #'python-virtualenv',#obsolete in 14.04?
+            'gcc', 'python-dev', 'build-essential'
+        ],
+        (UBUNTU, '14.04'): [
+            #'python-pip',#obsolete in 14.04?
+            #'python-virtualenv',#obsolete in 14.04?
+            'gcc', 'python-dev', 'build-essential'
+        ],
+    }
+
     def record_manifest(self):
         """
         Called after a deployment to record any data necessary to detect changes
@@ -867,19 +924,10 @@ class PIPSatchel(Satchel):
         if get_verbose():
             print data
         return data
-        
-    def get_deployers(self):
-        """
-        Returns one or more Deployer instances, representing tasks to run during a deployment.
-        """ 
-        return [
-            Deployer(
-                func='pip.update_install',
-                # if they need to be run, these must be run before this deployer
-                before=['packager', 'user'],
-                # if they need to be run, these must be run after this deployer
-                after=[],
-                takes_diff=False)
-        ]
+    
+    def configure(self):
+        return update_install()
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'user']
         
 PIPSatchel()

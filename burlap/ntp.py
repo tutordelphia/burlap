@@ -25,6 +25,7 @@ class NTPClientSatchel(ServiceSatchel):
     )
     
     def set_defaults(self):
+        self.env.enabled = True
         self.env.service_commands = {
             START:{
                 UBUNTU: 'service ntp start',
@@ -49,7 +50,13 @@ class NTPClientSatchel(ServiceSatchel):
         }
 
     def configure(self):
-        pass
+        if self.env.enabled:
+            self.install_packages()
+            self.enable()
+            self.start()
+        else:
+            self.disable()
+            self.stop()
     configure.is_deployer = True
     configure.deploy_before = ['packager', 'user']
     

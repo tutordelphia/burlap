@@ -1,8 +1,6 @@
 
-from burlap import common
-from burlap.common import (
-    ServiceSatchel
-)
+from burlap.constants import *
+from burlap import ServiceSatchel
 
 class NetworkManagerSatchel(ServiceSatchel):
     
@@ -20,32 +18,36 @@ class NetworkManagerSatchel(ServiceSatchel):
     )
     
     required_system_packages = {
-        common.UBUNTU: ['network-manager'],
+        UBUNTU: ['network-manager'],
     }
     
     def set_defaults(self):
         self.env.check_enabled = False
     
         self.env.service_commands = {
-            common.START:{
-                common.UBUNTU: 'service network-manager start',
+            START:{
+                UBUNTU: 'service network-manager start',
             },
-            common.STOP:{
-                common.UBUNTU: 'service network-manager stop',
+            STOP:{
+                UBUNTU: 'service network-manager stop',
             },
-            common.DISABLE:{
-                common.UBUNTU: 'chkconfig network-manager off',
+            DISABLE:{
+                UBUNTU: 'chkconfig network-manager off',
             },
-            common.ENABLE:{
-                common.UBUNTU: 'chkconfig network-manager on',
+            ENABLE:{
+                UBUNTU: 'chkconfig network-manager on',
             },
-            common.RESTART:{
-                common.UBUNTU: 'service network-manager restart',
+            RESTART:{
+                UBUNTU: 'service network-manager restart',
             },
-            common.STATUS:{
-                common.UBUNTU: 'service network-manager status',
+            STATUS:{
+                UBUNTU: 'service network-manager status',
             },
         }
+        
+        self.env.check_script_path = '/usr/local/bin/check_networkmanager.sh'
+        self.env.cron_script_path = '/etc/cron.d/check_networkmanager'
+        self.env.cron_perms = '600'
         
     def configure(self):
         
@@ -61,17 +63,17 @@ class NetworkManagerSatchel(ServiceSatchel):
             # and restart it if theres' no Internet connection.
             self.install_script(
                 local_path='check_networkmanager.sh',
-                remote_path='/usr/local/bin/check_networkmanager.sh')
+                remote_path=self.lenv.check_script_path)
             remote_path = self.put_or_dryrun(
                 local_path='etc_crond_check_networkmanager',
-                remote_path='/etc/cron.d/check_networkmanager', use_sudo=True)
+                remote_path=self.env.cron_script_path, use_sudo=True)
             self.sudo_or_dryrun('chown root:root %s' % remote_path)#env.put_remote_path)
             # Must be 600, otherwise gives INSECURE MODE error.
             # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
-            self.sudo_or_dryrun('chmod 600 %s' % remote_path)#env.put_remote_path)
+            self.sudo_or_dryrun('chmod %s %s' % (self.env.cron_perms, remote_path))#env.put_remote_path)
             self.sudo_or_dryrun('service cron restart')
         else:
-            self.sudo_or_dryrun('rm -f /etc/cron.d/check_networkmanager')
+            self.sudo_or_dryrun('rm -f {cron_script_path}'.format(**self.lenv))
             self.sudo_or_dryrun('service cron restart')
             
     configure.is_deployer = True

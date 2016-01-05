@@ -1,169 +1,149 @@
 import os
-import sys
-import datetime
 import hashlib
 
-from fabric.api import (
-    env,
-    require,
-    settings,
-    cd,
-    task,
-)
-from fabric.contrib import files
-
-from burlap.common import (
-    QueuedCommand,
-    local_or_dryrun,
-    run_or_dryrun,
-    sudo_or_dryrun,
-    put_or_dryrun,
-    Satchel,
-    Deployer,
-)
-from burlap import common
-from burlap.decorators import task_or_dryrun
-
-if 'tarball_clean' not in env:
-    env.tarball_clean = 1
-    env.tarball_gzip = 1
-    env.tarball_exclusions = [
-        '*_local.py',
-        '*.pyc',
-        '*.svn',
-        '*.tar.gz',
-        #'static',
-    ]
-    env.tarball_dir = '.burlap/tarball_cache'
-    env.tarball_extra_dirs = []
-
-TARBALL = 'TARBALL'
-
-def get_tarball_path():
-    env.tarball_gzip_flag = ''
-    env.tarball_ext = 'tar'
-    if env.tarball_gzip:
-        env.tarball_gzip_flag = '--gzip'
-        env.tarball_ext = 'tgz'
-    if not os.path.isdir(env.tarball_dir):
-        os.makedirs(env.tarball_dir)
-    env.tarball_absolute_src_dir = os.path.abspath(env.src_dir)
-    env.tarball_path = os.path.abspath('%(tarball_dir)s/code-%(ROLE)s-%(SITE)s-%(host_string)s.%(tarball_ext)s' % env)
-    return env.tarball_path
-
-@task_or_dryrun
-def create(gzip=1):
-    """
-    Generates a tarball of all deployable code.
-    """
-    
-    assert env.SITE, 'Site unspecified.'
-    assert env.ROLE, 'Role unspecified.'
-    env.tarball_gzip = bool(int(gzip))
-    get_tarball_path()
-    print 'Creating tarball...'
-    env.tarball_exclusions_str = ' '.join(
-        "--exclude='%s'" % _ for _ in env.tarball_exclusions)
-    cmd = ("cd %(tarball_absolute_src_dir)s; " \
-        "tar %(tarball_exclusions_str)s --exclude-vcs %(tarball_gzip_flag)s " \
-        "--create --verbose --dereference --file %(tarball_path)s *") % env
-    local_or_dryrun(cmd)
-
-@task_or_dryrun
-def deploy(clean=None, refresh=1):
-    """
-    Copies the tarball to the target server.
-    
-    Note, clean=1 will delete any dynamically generated files not included
-    in the tarball.
-    """
-    
-    if clean is None:
-        clean = env.tarball_clean
-    clean = int(clean)
-    
-    # Generate fresh tarball.
-    if int(refresh):
-        create()
-    
-    tarball_path = get_tarball_path()
-    assert os.path.isfile(tarball_path), \
-        'No tarball found. Ensure you ran create() first.'
-    put_or_dryrun(local_path=env.tarball_path)
-    
-    env.remote_app_dir = env.remote_app_dir_template % env
-    env.remote_app_src_dir = env.remote_app_src_dir_template % env
-    env.remote_app_src_package_dir = env.remote_app_src_package_dir_template % env
-    
-    if int(clean):
-        print 'Deleting old remote source...'
-        sudo_or_dryrun('rm -Rf  %(remote_app_src_dir)s' % env)
-        sudo_or_dryrun('mkdir -p %(remote_app_src_dir)s' % env)
-    
-    print 'Extracting tarball...'
-    sudo_or_dryrun('mkdir -p %(remote_app_src_dir)s' % env)
-    sudo_or_dryrun('tar -xvzf %(put_remote_path)s -C %(remote_app_src_dir)s' % env)
-    
-    for path in env.tarball_extra_dirs:
-        env.tarball_extra_dir_path = path % env
-        if path.startswith('/'):
-            sudo_or_dryrun('mkdir -p %(tarball_extra_dir_path)s' % env)
-        else:
-            sudo_or_dryrun('mkdir -p %(remote_app_dir)s/%(tarball_extra_dir_path)s' % env)
-    
-    # Mark executables.
-    print 'Marking source files as executable...'
-    sudo_or_dryrun('chmod +x %(remote_app_src_package_dir)s/*' % env)
-    sudo_or_dryrun('chmod -R %(apache_chmod)s %(remote_app_src_package_dir)s' % env)
-    sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(remote_app_dir)s' % env)
-
-@task_or_dryrun
-def get_tarball_hash(fn=None, refresh=1, verbose=0):
-    """
-    Calculates the hash for the tarball.
-    """
-    get_tarball_path()
-    fn = fn or env.tarball_path
-    if int(refresh):
-        create()
-    # Note, gzip is almost deterministic, but it includes a timestamp in the
-    # first few bytes so we strip that off before taking the hash.
-    tarball_hash = hashlib.sha512(open(fn).read()[8:]).hexdigest()
-    if int(verbose):
-        print fn
-        print tarball_hash
-    return tarball_hash
+from burlap import Satchel
+from burlap.constants import *
 
 class TarballSatchel(Satchel):
     
-    name = TARBALL
+    name = 'tarball'
+    
+    tasks = (
+        'create',
+        'get_tarball_hash',
+        'configure',
+    )
+    
+    def set_defaults(self):
+        self.env.clean = 1
+        self.env.gzip = 1
+        self.env.exclusions = [
+            '*_local.py',
+            '*.pyc',
+            '*.svn',
+            '*.tar.gz',
+            #'static',
+        ]
+        self.env.dir = '.burlap/tarball_cache'
+        self.env.extra_dirs = []
     
     def record_manifest(self):
         """
         Called after a deployment to record any data necessary to detect changes
         for a future deployment.
-        """    
-        get_tarball_path()
-        fn = env.tarball_absolute_src_dir
-        if common.get_verbose():
-            print 'tarball.fn:',fn
-        data = common.get_last_modified_timestamp(fn)
-        if common.get_verbose():
+        """
+        from burlap.common import get_last_modified_timestamp
+        self.get_tarball_path()
+        fn = self.env.absolute_src_dir
+        if self.verbose:
+            print 'tarball.fn:', fn
+        data = get_last_modified_timestamp(fn)
+        if self.verbose:
             print data
         return data
         
-    def get_deployers(self):
+    def get_tarball_path(self):
+        self.env.gzip_flag = ''
+        self.env.ext = 'tar'
+        if self.env.gzip:
+            self.env.gzip_flag = '--gzip'
+            self.env.ext = 'tgz'
+        if not os.path.isdir(self.env.dir):
+            os.makedirs(self.env.dir)
+        self.env.absolute_src_dir = os.path.abspath(self.genv.src_dir)
+        self.env.path = os.path.abspath('%(tarball_dir)s/code-%(ROLE)s-%(SITE)s-%(host_string)s.%(tarball_ext)s' % self.genv)
+        return self.env.path
+    
+    def create(self, gzip=1):
         """
-        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        Generates a tarball of all deployable code.
         """
-        return [
-            Deployer(
-                func='tarball.deploy',
-                # if they need to be run, these must be run before this deployer
-                before=['packager', 'apache2', 'pip', 'user'],
-                # if they need to be run, these must be run after this deployer
-                after=[],
-                takes_diff=False)
-        ]
+        
+        assert self.genv.SITE, 'Site unspecified.'
+        assert self.genv.ROLE, 'Role unspecified.'
+        self.env.gzip = bool(int(gzip))
+        self.get_tarball_path()
+        print 'Creating tarball...'
+        self.env.exclusions_str = ' '.join(
+            "--exclude='%s'" % _ for _ in self.env.exclusions)
+        cmd = ("cd %(tarball_absolute_src_dir)s; " \
+            "tar %(tarball_exclusions_str)s --exclude-vcs %(tarball_gzip_flag)s " \
+            "--create --verbose --dereference --file %(tarball_path)s *") % self.genv
+        self.local_or_dryrun(cmd)
+    
+    def get_tarball_hash(fn=None, refresh=1, verbose=0):
+        """
+        Calculates the hash for the tarball.
+        """
+        self.get_tarball_path()
+        fn = fn or self.env.path
+        if int(refresh):
+            self.create()
+        # Note, gzip is almost deterministic, but it includes a timestamp in the
+        # first few bytes so we strip that off before taking the hash.
+        tarball_hash = hashlib.sha512(open(fn).read()[8:]).hexdigest()
+        if int(verbose):
+            print fn
+            print tarball_hash
+        return tarball_hash
+        
+    def configure(self, clean=None, refresh=1):
+        """
+        Copies the tarball to the target server.
+        
+        Note, clean=1 will delete any dynamically generated files not included
+        in the tarball.
+        """
+        
+        if clean is None:
+            clean = self.env.clean
+        clean = int(clean)
+        
+        # Generate fresh tarball.
+        if int(refresh):
+            self.create()
+        
+        tarball_path = self.get_tarball_path()
+        assert os.path.isfile(tarball_path), \
+            'No tarball found. Ensure you ran create() first.'
+        self.put_or_dryrun(local_path=self.env.path)
+        
+        self.genv.remote_app_dir = \
+            self.genv.remote_app_dir_template % self.genv
+        self.genv.remote_app_src_dir = \
+            self.genv.remote_app_src_dir_template % self.genv
+        self.genv.remote_app_src_package_dir = \
+            self.genv.remote_app_src_package_dir_template % self.genv
+        
+        if int(clean):
+            print 'Deleting old remote source...'
+            self.sudo_or_dryrun('rm -Rf  %(remote_app_src_dir)s' % self.genv)
+            self.sudo_or_dryrun('mkdir -p %(remote_app_src_dir)s' % self.genv)
+        
+        print 'Extracting tarball...'
+        self.sudo_or_dryrun('mkdir -p %(remote_app_src_dir)s' % self.genv)
+        self.sudo_or_dryrun('tar -xvzf %(put_remote_path)s -C %(remote_app_src_dir)s' % self.genv)
+        
+        for path in self.env.extra_dirs:
+            self.env.extra_dir_path = path % self.genv
+            if path.startswith('/'):
+                self.sudo_or_dryrun(
+                    'mkdir -p %(tarball_extra_dir_path)s' % self.genv)
+            else:
+                self.sudo_or_dryrun(
+                    'mkdir -p %(remote_app_dir)s/%(tarball_extra_dir_path)s' % self.genv)
+        
+        # Mark executables.
+        print 'Marking source files as executable...'
+        self.sudo_or_dryrun(
+            'chmod +x %(remote_app_src_package_dir)s/*' % self.genv)
+        self.sudo_or_dryrun(
+            'chmod -R %(apache_chmod)s %(remote_app_src_package_dir)s' % self.genv)
+        self.sudo_or_dryrun(
+            'chown -R %(apache_user)s:%(apache_group)s %(remote_app_dir)s' % self.genv)
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'apache2', 'pip', 'user']
             
-TarballSatchel()
+tarball_satchel = TarballSatchel()
+
+deploy = tarball_satchel.configure

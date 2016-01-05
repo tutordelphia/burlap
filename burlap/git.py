@@ -27,7 +27,7 @@ from burlap.decorators import task_or_dryrun
 GIT = 'GIT'
 
 # Tracks git versions deployed remotely.
-GIT_TRACKER = 'GIT_TRACKER'
+GITTRACKER = 'GITTRACKER'
 
 common.required_system_packages[GIT] = {
     common.FEDORA: ['git'],
@@ -69,9 +69,9 @@ def record_manifest_git_tracker(verbose=0):
     }
     return data
 
-common.manifest_recorder[GIT_TRACKER] = record_manifest_git_tracker
+common.manifest_recorder[GITTRACKER] = record_manifest_git_tracker
 
-common.add_deployer(GIT_TRACKER, 'jirahelp.update_tickets_from_git',
+common.add_deployer(GITTRACKER, 'jirahelp.update_tickets_from_git',
     before=['packager', 'pip', 'tarball', 'django_media', 'django_migrations'],
     takes_diff=True)
     

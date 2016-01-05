@@ -18,6 +18,7 @@ from burlap.common import (
     put_or_dryrun,
     sudo_or_dryrun,
     local_or_dryrun,
+    print_command,
     SITE,
     ROLE,
     render_to_file,
@@ -69,8 +70,11 @@ def generate_keys():
     if env.user_key_filename.endswith('.pem'):
         src = env.user_key_filename+'.pub'
         dst = (env.user_key_filename+'.pub').replace('.pem', '')
-        print src, dst
-        os.rename(src, dst)
+        print 'generate_keys:', src, dst
+        if common.get_dryrun():
+            print_command('mv %s %s' % (src, dst))
+        else:
+            os.rename(src, dst)
 
 @task_or_dryrun
 def passwordless(username=None, pubkey=None):

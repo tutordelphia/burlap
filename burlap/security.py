@@ -2,25 +2,27 @@
 General tweaks and services to enhance system security.
 """
 
-from burlap import common
-from burlap.common import Satchel, env
+from burlap import Satchel
+from burlap.constants import *
 
 class UnattendedUpgradesSatchel(Satchel):
     """
     Enables various degrees of automatic package download and installation.
     """
     
-    name = 'security_unattended_upgrades'
+    name = 'securityunattendedupgrades'
     
     required_system_packages = {
-        common.UBUNTU: ['unattended-upgrades'],
-        (common.UBUNTU, '12.04'): ['unattended-upgrades'],
-        (common.UBUNTU, '14.04'): ['unattended-upgrades'],
+        UBUNTU: ['unattended-upgrades'],
+        (UBUNTU, '12.04'): ['unattended-upgrades'],
+        (UBUNTU, '14.04'): ['unattended-upgrades'],
     }
     
+    tasks = (
+        'configure',
+    )
+    
     def set_defaults(self):
-
-        self.env.unattended_upgrades_enabled = False
         
         self.env.mail_to = 'root@localhost'
         self.env.reboot = 'true'
@@ -35,7 +37,7 @@ class UnattendedUpgradesSatchel(Satchel):
     def configure(self):
         
         #TODO:generalize for other distros?
-        assert not env.host_os_distro or env.host_os_distro == common.UBUNTU, \
+        assert not self.genv.host_os_distro or self.genv.host_os_distro == UBUNTU, \
             'Only Ubuntu is supported.'
         
         if self.env.enabled:

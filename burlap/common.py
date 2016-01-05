@@ -31,8 +31,11 @@ from fabric.api import (
     hide,
     runs_once,
 )
+from fabric.contrib import files
 from fabric import state
 import fabric.api
+
+from .constants import *
 
 if hasattr(fabric.api, '_run'):
     _run = fabric.api._run
@@ -40,50 +43,10 @@ if hasattr(fabric.api, '_run'):
 if hasattr(fabric.api, '_sudo'):
     _sudo = fabric.api._sudo
 
-PACKAGERS = APT, YUM = ('apt-get', 'yum')
-
-OS_TYPES = LINUX, WINDOWS = ('linux', 'windows')
-OS_DISTRO = FEDORA, UBUNTU, DEBIAN, CENTOS = ('fedora', 'ubuntu', 'debian', 'centos')
-
-SYSTEM = 'system'
-RUBY = 'ruby'
-PYTHON = 'python'
-PACKAGE_TYPES = (
-    SYSTEM,
-    PYTHON, # pip
-    RUBY, # gem
-)
-
-ALL = 'all' # denotes the global role
-
-START = 'start'
-STOP = 'stop'
-STATUS = 'status'
-RELOAD = 'reload'
-RESTART = 'restart'
-ENABLE = 'enable'
-DISABLE = 'disable'
-STATUS = 'status'
-SERVICE_COMMANDS = (
-    START,
-    STOP,
-    STATUS,
-    RESTART,
-    ENABLE,
-    DISABLE,
-    STATUS,
-)
 
 OS = namedtuple('OS', ['type', 'distro', 'release'])
 
 ROLE_DIR = env.ROLES_DIR = 'roles'
-
-DJANGO = 'DJANGO'
-
-SITE = 'SITE'
-ROLE = 'ROLE'
-
-LOCALHOSTS = ('localhost', '127.0.0.1')
 
 if 'services' not in env:
 
@@ -126,18 +89,55 @@ manifest_deployers_befores = type(env)() #{component:[pending components that mu
 #manifest_deployers_afters = type(env)() #{component:[pending components that must be run last]}
 manifest_deployers_takes_diff = type(env)()
 
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def start_error():
+    print(Colors.FAIL)
+
+def end_error():
+    print(Colors.ENDC)
+
+def print_fail(s, file=None):
+    print(Colors.FAIL + str(s) + Colors.ENDC, file=file or sys.stderr)
+
+def print_success(s, file=None):
+    print(Colors.OKGREEN + str(s) + Colors.ENDC, file=file or sys.stdout)
+
+def create_module(name):
+    """
+    Dynamically creates a module with the given name.
+    """
+    import sys, imp
+
+    assert name not in sys.modules, 'Module %s has already been registered!' % name
+    module = imp.new_module(name)
+    sys.modules[name] = module
+
+    return module
+
 #http://www.saltycrane.com/blog/2010/09/class-based-fabric-scripts-metaprogramming-hack/
-def add_class_methods_as_module_level_functions_for_fabric(instance, module_name, method_name):
+def add_class_methods_as_module_level_functions_for_fabric(instance, module_name, method_name, module_alias=None):
     '''
     Utility to take the methods of the instance of a class, instance,
     and add them as functions to a module, module_name, so that Fabric
     can find and call them. Call this at the bottom of a module after
     the class definition.
     '''
+    import imp
     from .decorators import task_or_dryrun
     
     # get the module as an object
     module_obj = sys.modules[module_name]
+
+    module_alias = re.sub('[^a-zA-Z0-9]+', '', module_alias or '')
 
     # Iterate over the methods of the class and dynamically create a function
     # for each method that calls the method and add it to the current module
@@ -147,17 +147,36 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
     method_obj = getattr(instance, method_name)
 
     if not method_name.startswith('_'):
+        
         # get the bound method
         func = getattr(instance, method_name)
         
+        #http://stackoverflow.com/questions/3799545/dynamically-importing-python-module/3799609#3799609
+#         if module_alias and module_alias not in sys.modules:
+#             module_obj = imp.new_module(module_alias)
+#             #exec "" in module_obj.__dict__
+#             sys.modules[module_alias] = module_obj
+        print('-'*80)
+        print('module_name:', module_name)
+        print('method_name:', method_name)
+        print('module_alias:', module_alias)
+        print('module_obj:', module_obj)
+        print('func.module:', func.__module__)
+        
         # Convert executable to a Fabric task, if not done so already.
         if not hasattr(func, 'is_task_or_dryrun'):
-            func = task_or_dryrun(func)
+#             if module_alias:
+#                 func = task_or_dryrun(func)#, alias='%s.%s' % (module_alias, method_name))
+#             else:
+            func = task_or_dryrun(func)#, real_module=module_obj)
 
         # add the function to the current module
+#         print('setattr:', module_obj, method_name, module_alias)
         setattr(module_obj, method_name, func)
         
-        func.wrapped.__func__.fabric_name = '%s.%s' % (module_name, method_name)
+        fabric_name = '%s.%s' % (module_alias or module_name, method_name)
+#         print('fabric_name:', fabric_name)
+        func.wrapped.__func__.fabric_name = fabric_name
         
         return func
 
@@ -210,6 +229,17 @@ def get_class_module_name(self):
 class _EnvProxy(object):
     """
     Filters a satchel's access to the enviroment object.
+    
+    Allows referencing of environment variables without explicitly specifying
+    the Satchel's namespace.
+    
+    For example, instead of:
+    
+        env.satchelname_variable = 123
+    
+    you can use:
+        
+        self.env.variable = 123 
     """
     
     def __init__(self, satchel):
@@ -225,6 +255,8 @@ class _EnvProxy(object):
             return super(_EnvProxy, self).__setattr__(k, v)
         env[self.satchel.env_prefix + k] = v
 
+SATCHEL_NAME_PATTERN = re.compile(r'^[a-z][a-z]*$')
+
 class Satchel(object):
     """
     Represents a base unit of functionality that is deployed and maintained on one
@@ -234,7 +266,10 @@ class Satchel(object):
     # This will be used to uniquely identify this unit of functionality.
     name = None
     
-    tasks = ()
+    #TODO:auto-add configure when the multi-methods per module bug is fixed
+    tasks = (
+        #'configure',
+    )
     
     required_system_packages = {
         #OS: [package1, package2, ...],
@@ -244,7 +279,18 @@ class Satchel(object):
         assert self.name, 'A name must be specified.'
         self.name = self.name.strip().lower()
         
+        assert SATCHEL_NAME_PATTERN.findall(self.name), 'Invalid name: %s' % self.name
+        
+        self._os_version_cache = {} # {host:info}
+        
+        # Global environment.
+        self.genv = env
+        
+        self._requires_satchels = set()
+        
         self.env = _EnvProxy(self)
+        
+        self.files = files
         
         _prefix = '%s_enabled' % self.name
         if _prefix not in env:
@@ -259,12 +305,18 @@ class Satchel(object):
         if self.required_system_packages:
             required_system_packages[self.name.upper()] = self.required_system_packages
         
+        # Add built-in tasks.
+        if 'install_packages' not in self.tasks:
+            self.tasks += ('install_packages',)
+        
         # Register select instance methods as Fabric tasks.
         for task_name in self.tasks:
             task = add_class_methods_as_module_level_functions_for_fabric(
                 instance=self,
                 module_name=get_class_module_name(self),
-                method_name=task_name)
+                method_name=task_name,
+                module_alias=self.name,
+            )
             
             # If task is marked as a deployer, then add it to the deployer list.
             if hasattr(task.wrapped, 'is_deployer'):
@@ -286,9 +338,77 @@ class Satchel(object):
                     after=deployer.after,
                     takes_diff=deployer.takes_diff)
     
+    def requires_satchel(self, satchel):
+        self._requires_satchels.add(satchel.name.lower())
+    
+    def check_satchel_requirements(self):
+        lst = []
+        lst.extend(self.genv.get('services') or [])
+        lst.extend(self.genv.get('satchels') or [])
+        lst = [_.lower() in lst]
+        for req in self._requires_satchels:
+            req = req.lower()
+            assert req in lst
+    
+    @property
+    def lenv(self):
+        """
+        Returns a version of env filtered to only include the variables in our namespace.
+        """
+        _env = type(env)()
+        for _k, _v in env.iteritems():
+            if _k.startswith(self.name+'_'):
+                _env[_k[len(self.name)+1:]] = _v
+        return _env
+    
     @property
     def env_prefix(self):
         return '%s_' % self.name
+    
+    @property
+    def packager(self):
+        return get_packager()
+    
+    @property
+    def os_version(self):
+        hs = env.host_string
+        if hs not in self._os_version_cache:
+            self._os_version_cache[hs] = get_os_version()
+        return self._os_version_cache[hs]
+    
+    def write_to_file(self, *args, **kwargs):
+        return write_to_file(*args, **kwargs)
+    
+    def find_template(self, template):
+        return find_template(template)
+    
+    def install_packages(self):
+        os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
+#         print('os_version:', os_version)
+        req_packages = self.required_system_packages
+        patterns = [
+            (os_version.type, os_version.distro, os_version.release),
+            (os_version.distro, os_version.release),
+            (os_version.type, os_version.distro),
+            (os_version.distro,),
+            os_version.distro,
+        ]
+#         print('req_packages:', req_packages)
+        package_list = None
+        for pattern in patterns:
+#             print('pattern:', pattern)
+            if pattern in req_packages:
+                package_list = req_packages[pattern]
+                break
+#         print('package_list:', package_list)
+        if package_list:
+            package_list_str = ' '.join(package_list)
+            if os_version.distro == UBUNTU:
+                self.sudo_or_dryrun('apt-get update --fix-missing; apt-get install --yes %s' % package_list_str)
+            elif os_version.distro == FEDORA:
+                self.sudo_or_dryrun('yum install --assumeyes %s' % package_list_str)
+            else:
+                raise NotImplementedError, 'Unknown distro: %s' % os_version.distro
     
     def set_defaults(self):
         pass
@@ -307,14 +427,27 @@ class Satchel(object):
     
     def sudo_or_dryrun(self, *args, **kwargs):
         return sudo_or_dryrun(*args, **kwargs)
-    
+        
+    def print_command(self, *args, **kwargs):
+        return print_command(*args, **kwargs)
+        
     def record_manifest(self):
         """
         Returns a dictionary representing a serialized state of the service.
         """
         data = get_component_settings(self.name)
         return data
-        
+    
+    def configure(self):
+        """
+        The standard method called to apply functionality when the manifest changes.
+        """
+        raise NotImplementedError
+    configure.is_deployer = True
+    configure.deploy_before = []
+    configure.takes_diff = False
+    
+    #TODO:deprecated, remove?
     def get_deployers(self):
         """
         Returns one or more Deployer instances, representing tasks to run during a deployment.
@@ -330,6 +463,22 @@ class Satchel(object):
     def last_manifest(self):
         from burlap import manifest
         return manifest.get_last(name=self.name)
+        
+    @property
+    def verbose(self):
+        return get_verbose()
+        
+    @verbose.setter
+    def verbose(self, v):
+        return set_verbose(v)
+        
+    @property
+    def dryrun(self):
+        return get_dryrun()
+        
+    @dryrun.setter
+    def dryrun(self, v):
+        return set_dryrun(v)
 
 class Service(object):
     
@@ -358,10 +507,37 @@ class Service(object):
         _key = '%s_service_commands' % self.name
         if _key in env:
             self.commands = env[_key]
+ 
+        tasks = (
+            'start',
+            'stop',
+            'restart',
+            'enable',
+            'disable',
+            'status',
+            'reload',
+        )   
+        for task_name in tasks:
+            task = add_class_methods_as_module_level_functions_for_fabric(
+                instance=self,
+                module_name=get_class_module_name(self),
+                method_name=task_name,
+                module_alias=self.name,
+            )
     
     def get_command(self, action):
-        os_version = get_os_version()
-        return self.commands[action][os_version.distro]
+        os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
+#         print('os_version:', os_version)
+        patterns = [
+            (os_version.type, os_version.distro, os_version.release),
+            (os_version.distro, os_version.release),
+            (os_version.type, os_version.distro),
+            (os_version.distro,),
+            os_version.distro,
+        ]
+        for pattern in patterns:
+            if pattern in self.commands[action]:
+                return self.commands[action][pattern]
     
     def enable(self):
         cmd = self.get_command(ENABLE)
@@ -502,6 +678,9 @@ def render_command_prefix():
         extra_s = json.dumps(extra)
     s = '[%s@%s%s]' % (env.user, env.host_string, extra_s)
     return s
+
+def print_command(cmd):
+    print('[%s@localhost] local: %s' % (getpass.getuser(), cmd))
 
 def local_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
@@ -849,6 +1028,9 @@ def set_rc(k, v):
     env._rc[env[ROLE]][k] = v
 
 def get_packager():
+    """
+    Returns the packager detected on the remote system.
+    """
     common_packager = get_rc('common_packager')
     if common_packager:
         return common_packager
@@ -873,23 +1055,26 @@ def get_packager():
     return common_packager
 
 def get_os_version():
+    """
+    Returns a named tuple describing the operating system on the remote host.
+    """
     common_os_version = get_rc('common_os_version')
     if common_os_version:
         return common_os_version
     with settings(warn_only=True), hide('running', 'stdout', 'stderr', 'warnings'):
-            ret = _run('cat /etc/fedora-release')
+            ret = _run('cat /etc/lsb-release')
             if ret.succeeded:
                 common_os_version = OS(
                     type = LINUX,
-                    distro = FEDORA,
-                    release = re.findall('release ([0-9]+)', ret)[0])
+                    distro = UBUNTU,
+                    release = re.findall('DISTRIB_RELEASE=([0-9\.]+)', ret)[0])
             else:
-                ret = _run('cat /etc/lsb-release')
+                ret = _run('cat /etc/fedora-release')
                 if ret.succeeded:
                     common_os_version = OS(
                         type = LINUX,
-                        distro = UBUNTU,
-                        release = re.findall('DISTRIB_RELEASE=([0-9\.]+)', ret)[0])
+                        distro = FEDORA,
+                        release = re.findall('release ([0-9]+)', ret)[0])
                 else:
                     raise Exception, 'Unable to determine OS version.'
     if not common_os_version:
@@ -1117,3 +1302,33 @@ class Shelf(object):
         yaml.dump(d, open(self.filename, 'wb'))
 
 shelf = Shelf()
+
+def get_host_ip(hostname):
+    #TODO:use generic host retriever?
+    from burlap.vm import list_instances
+    data = list_instances(show=0, verbose=0)
+    for key, attrs in data.iteritems():
+#         print('key:',key,attrs)
+        if key == hostname:
+            return attrs.get('ip')
+
+def get_hosts_for_site(site=None):
+    """
+    Returns a list of hosts that have been configured to support the given site.
+    """
+    site = site or env.SITE
+    hosts = set()
+#     print('env.available_sites_by_host:',env.available_sites_by_host)
+#     print('site:',site)
+    for hostname, _sites in env.available_sites_by_host.iteritems():
+#         print('checking hostname:',hostname, _sites)
+        for _site in _sites:
+            if _site == site:
+#                 print( '_site:',_site)
+                host_ip = get_host_ip(hostname)
+#                 print( 'host_ip:',host_ip)
+                if host_ip:
+                    hosts.add(host_ip)
+                    break
+    return list(hosts)
+    

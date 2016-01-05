@@ -176,6 +176,7 @@ def shell(gui=0):
     """
     Opens a UNIX shell.
     """
+    from burlap.common import get_hosts_for_site
     
     try:
         from dj import render_remote_paths
@@ -183,24 +184,32 @@ def shell(gui=0):
     except Exception:
         pass
     
+    _env = type(env)(env)
+    
+    if _env.SITE != _env.default_site:
+        shell_hosts = get_hosts_for_site()
+        if shell_hosts:
+            _env.host_string = shell_hosts[0]
+    
     #print 'env.remote_app_dir:',env.remote_app_dir
-    env.SITE = env.SITE or env.default_site
-    env.shell_x_opt = '-X' if int(gui) else ''
-    if '@' in env.host_string:
-        env.shell_host_string = env.host_string
+    _env.SITE = _env.SITE or _env.default_site
+    _env.shell_x_opt = '-X' if int(gui) else ''
+    
+    if '@' in _env.host_string:
+        _env.shell_host_string = _env.host_string
     else:
-        env.shell_host_string = '%(user)s@%(host_string)s' % env
+        _env.shell_host_string = '%(user)s@%(host_string)s' % _env
         
-    env.shell_check_host_key_str = '-o StrictHostKeyChecking=no'
-        
-    env.shell_default_dir = env.shell_default_dir_template % env
-    env.shell_interactive_shell_str = env.shell_interactive_shell % env
-    if env.is_local:
-        cmd = '%(shell_interactive_shell_str)s' % env
-    elif env.key_filename:
-        cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
-    elif env.password:
-        cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % env
+    _env.shell_check_host_key_str = '-o StrictHostKeyChecking=no'
+    
+    _env.shell_default_dir = _env.shell_default_dir_template % _env
+    _env.shell_interactive_shell_str = _env.shell_interactive_shell % _env
+    if _env.is_local:
+        cmd = '%(shell_interactive_shell_str)s' % _env
+    elif _env.key_filename:
+        cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % _env
+    elif _env.password:
+        cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % _env
     local_or_dryrun(cmd)
 
 @task_or_dryrun

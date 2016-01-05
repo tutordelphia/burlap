@@ -1,5 +1,8 @@
+from __future__ import print_function
 import os
+import sys
 import re
+import traceback
 
 from fabric.api import (
     env,
@@ -30,15 +33,15 @@ def configure():
     Applies one-time settings changes to the host, usually to initialize the service.
     """
     
-    print 'env.services:',env.services
+    print('env.services:', env.services)
     for service in list(env.services):
         service = service.strip().upper()
         funcs = common.service_configurators.get(service, [])
         if funcs:
-            print '!'*80
-            print 'Configuring service %s...' % (service,)
+            print('!'*80)
+            print('Configuring service %s...' % (service,))
             for func in funcs:
-                print 'Function:',func
+                print('Function:', func)
                 if not get_dryrun():
                     func()
 
@@ -51,7 +54,7 @@ def pre_deploy():
         service = service.strip().upper()
         funcs = common.service_pre_deployers.get(service)
         if funcs:
-            print 'Running pre-deployments for service %s...' % (service,)
+            print('Running pre-deployments for service %s...' % (service,))
             for func in funcs:
                 func()
                 
@@ -65,7 +68,7 @@ def deploy():
         service = service.strip().upper()
         funcs = common.service_deployers.get(service)
         if funcs:
-            print 'Deploying service %s...' % (service,)
+            print('Deploying service %s...' % (service,))
             for func in funcs:
                 if not get_dryrun():
                     func()
@@ -75,13 +78,20 @@ def post_deploy():
     """
     Runs methods services have requested be run before after deployment.
     """
+    verbose = common.get_verbose()
     for service in env.services:
         service = service.strip().upper()
+        if verbose:
+            print('post_deploy:', service)
         funcs = common.service_post_deployers.get(service)
         if funcs:
-            print 'Running post-deployments for service %s...' % (service,)
+            if verbose:
+                print('Running post-deployments for service %s...' % (service,))
             for func in funcs:
-                func()
+                try:
+                    func()
+                except Exception as e:
+                    print(traceback.format_exc(), file=sys.stderr)
 
 @task_or_dryrun
 def restart(name=''):
@@ -100,7 +110,7 @@ def restart(name=''):
             continue
         funcs = common.service_restarters.get(service)
         if funcs:
-            print 'Restarting service %s...' % (service,)
+            print('Restarting service %s...' % (service,))
             for func in funcs:
                 if not get_dryrun():
                     func()
@@ -117,7 +127,7 @@ def stop(name=''):
             continue
         funcs = common.service_stoppers.get(service)
         if funcs:
-            print 'Restarting service %s...' % (service,)
+            print('Restarting service %s...' % (service,))
             for func in funcs:
                 func()
 
@@ -134,7 +144,7 @@ def is_running(name):
         srv = common.services.get(service)
         if srv:
             _ran = True
-            print '%s.is_running: %s' % (name, srv.is_running())
+            print('%s.is_running: %s' % (name, srv.is_running()))
     if not get_dryrun() and not _ran and name:
         raise Exception, 'No restart command found for service "%s".' % name
 
@@ -155,7 +165,7 @@ def pre_db_dump():
         service = service.strip().upper()
         funcs = common.service_pre_db_dumpers.get(service)
         if funcs:
-            print 'Running pre-database dump for service %s...' % (service,)
+            print('Running pre-database dump for service %s...' % (service,))
             for func in funcs:
                 func()
 
@@ -169,6 +179,6 @@ def post_db_dump():
         service = service.strip().upper()
         funcs = common.service_post_db_dumpers.get(service)
         if funcs:
-            print 'Running post-database dump for service %s...' % (service,)
+            print('Running post-database dump for service %s...' % (service,))
             for func in funcs:
                 func()

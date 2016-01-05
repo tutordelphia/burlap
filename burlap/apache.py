@@ -1,187 +1,15 @@
 import os
 import sys
 import datetime
+import warnings
 from pprint import pprint
 
-from fabric.api import (
-    env,
-    require,
-    settings,
-    cd,
-)
-from fabric.contrib import files
+from fabric.api import settings
 
-from burlap.common import (
-    ALL,
-    run_or_dryrun,
-    put_or_dryrun,
-    local_or_dryrun,
-    sudo_or_dryrun,
-    render_to_string,
-    get_packager,
-    get_os_version,
-    get_verbose,
-    find_template,
-    ROLE,
-    SITE,
-    YUM,
-    APT,
-    LINUX,
-    WINDOWS,
-    FEDORA,
-    UBUNTU,
-    QueuedCommand,
-    Satchel,
-    Deployer,
-    Service,
-)
-from burlap.decorators import task_or_dryrun
-from burlap import common
+from burlap.constants import *
+from burlap import Satchel, ServiceSatchel
 
-if 'apache_application_name' not in env:
-    
-    # An Apache-conf file and filename friendly string that uniquely identifies
-    # your web application.
-    env.apache_application_name = None
-    
-    env.apache_error_log = '/var/log/apache2/error.log'
-    env.apache_log_level = 'warn'
-    
-    env.apache_auth_basic = False
-    env.apache_auth_basic_authuserfile_template = '%(apache_docroot)s/.htpasswd_%(apache_site)s'
-    env.apache_auth_basic_users = [] # [(user,password)]
-    
-    # If true, activates a rewrite rule that causes domain.com to redirect
-    # to www.domain.com.
-    env.apache_enforce_subdomain = True
-    
-    env.apache_ssl = False
-    env.apache_ssl_port = 443
-    env.apache_ssl_chmod = 440
-    env.apache_listen_ports = [80, 443]
-    
-    # A list of path patterns that should have HTTPS enforced.
-    env.apache_ssl_secure_paths_enforce = True
-    env.apache_ssl_secure_paths = ['/admin/(.*)']
-    
-    # Defines the expected name of the SSL certificates.
-    env.apache_ssl_domain_template = '%(apache_domain)s'
-    
-    env.apache_user = 'www-data'
-    env.apache_group = 'www-data'
-    env.apache_wsgi_user = 'www-data'
-    env.apache_wsgi_group = 'www-data'
-    env.apache_chmod = 775
-    
-    env.apache_mods_enabled = ['rewrite', 'wsgi', 'ssl']
-    
-    # The value of the Apache's ServerName field. Usually should be set
-    # to the domain.
-    env.apache_server_name = None
-    
-    env.apache_server_aliases_template = ''
-    
-    env.apache_docroot_template = '/usr/local/%(apache_application_name)s'
-    env.apache_wsgi_dir_template = '/usr/local/%(apache_application_name)s/src/wsgi'
-    #env.apache_app_log_dir_template = '/var/log/%(apache_application_name)s'
-    env.apache_django_wsgi_template = '%(apache_wsgi_dir)s/%(apache_site)s.wsgi'
-    env.apache_ports_template = '%(apache_root)s/ports.conf'
-    env.apache_ssl_dir_template = '%(apache_root)s/ssl'
-    
-    env.apache_domain_with_sub_template = ''
-    env.apache_domain_without_sub_template = ''
-    env.apache_domain_with_sub = None
-    env.apache_domain_without_sub = None
-    
-    env.apache_wsgi_processes = 5
-    
-    env.apache_wsgi_threads = 15
-    
-    env.apache_domain_redirect_templates = [] # [(wrong_domain,right_domain)]
-    env.apache_domain_redirects = [] # [(wrong_domain,right_domain)]
-    
-    env.apache_extra_rewrite_rules = ''
-    
-    env.apache_modevasive_DOSEmailNotify = 'admin@localhost'
-    env.apache_modevasive_DOSPageInterval = 1 # seconds
-    env.apache_modevasive_DOSPageCount = 2
-    env.apache_modevasive_DOSSiteCount = 50
-    env.apache_modevasive_DOSSiteInterval = 1 # seconds
-    env.apache_modevasive_DOSBlockingPeriod = 10 # seconds
-    
-    env.apache_modsecurity_download_url = 'https://github.com/SpiderLabs/owasp-modsecurity-crs/tarball/master'
-    
-    env.apache_wsgi_python_path_template = '%(apache_docroot)s/.env/lib/python%(pip_python_version)s/site-packages'
-    
-    # OS specific default settings.
-    env.apache_specifics = type(env)()
-    env.apache_specifics[LINUX] = type(env)()
-    env.apache_specifics[LINUX][FEDORA] = type(env)()
-    env.apache_specifics[LINUX][FEDORA].root = '/etc/httpd'
-    env.apache_specifics[LINUX][FEDORA].conf = '/etc/httpd/conf/httpd.conf'
-    env.apache_specifics[LINUX][FEDORA].sites_available = '/etc/httpd/sites-available'
-    env.apache_specifics[LINUX][FEDORA].sites_enabled = '/etc/httpd/sites-enabled'
-    env.apache_specifics[LINUX][FEDORA].log_dir = '/var/log/httpd'
-    env.apache_specifics[LINUX][FEDORA].pid = '/var/run/httpd/httpd.pid'
-    env.apache_specifics[LINUX][UBUNTU] = type(env)()
-    env.apache_specifics[LINUX][UBUNTU].root = '/etc/apache2'
-    env.apache_specifics[LINUX][UBUNTU].conf = '/etc/apache2/httpd.conf'
-    env.apache_specifics[LINUX][UBUNTU].sites_available = '/etc/apache2/sites-available'
-    env.apache_specifics[LINUX][UBUNTU].sites_enabled = '/etc/apache2/sites-enabled'
-    env.apache_specifics[LINUX][UBUNTU].log_dir = '/var/log/apache2'
-    env.apache_specifics[LINUX][UBUNTU].pid = '/var/run/apache2/apache2.pid'
-    
-    env.apache_ssl_certificates = None
-    env.apache_ssl_certificates_templates = []
-    
-    # The local and remote relative directory where the SSL certificates are stored.
-    env.apache_ssl_dir_local = 'ssl'
-    
-    # An optional segment to insert into the domain, customizable by role.
-    # Useful for easily keying domain-local.com/domain-dev.com/domain-staging.com.
-    env.apache_locale = ''
-    
-    env.apache_sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
-    
-    # This will be appended to the custom Apache configuration file.
-    env.apache_httpd_conf_append = []
-    
-    env.apache_service_commands = {
-        common.START:{
-            common.FEDORA: 'systemctl start httpd.service',
-            common.UBUNTU: 'service apache2 start',
-        },
-        common.STOP:{
-            common.FEDORA: 'systemctl stop httpd.service',
-            common.UBUNTU: 'service apache2 stop',
-        },
-        common.DISABLE:{
-            common.FEDORA: 'systemctl disable httpd.service',
-            common.UBUNTU: 'chkconfig apache2 off',
-            (common.UBUNTU, '14.04'): 'update-rc.d -f apache2 remove',
-        },
-        common.ENABLE:{
-            common.FEDORA: 'systemctl enable httpd.service',
-            common.UBUNTU: 'chkconfig apache2 on',
-            (common.UBUNTU, '14.04'): 'update-rc.d apache2 defaults',
-        },
-        common.RELOAD:{
-            common.FEDORA: 'systemctl reload httpd.service',
-            common.UBUNTU: 'service apache2 reload',
-        },
-        common.RESTART:{
-            common.FEDORA: 'systemctl restart httpd.service',
-            #common.UBUNTU: 'service apache2 restart',
-            # Note, the sleep 5 is necessary because the stop/start appears to
-            # happen in the background but gets aborted if Fabric exits before
-            # it completes.
-            common.UBUNTU: 'service apache2 restart; sleep 3',
-        },
-    }
-
-    
-    env._apache_settings = None
-
+#TODO:deprecated, removed
 ignore_keys = [
     # These are templated environment variables, so we should ignore them when
     # saving a snapshot of the apache settings, since they'll be host-specific.
@@ -207,116 +35,12 @@ ignore_keys = [
 #     'apache_pid',
 ]
 
-def get_apache_settings():
-    if not env._apache_settings:
-        set_apache_specifics()
-    return env._apache_settings
-
-def set_apache_specifics():
-    
-    if not env._apache_settings:
-        env._apache_settings = type(env)()
-        for _k, _v in env.iteritems():
-            if _k.startswith('apache_') and _k not in ignore_keys:
-                env._apache_settings[_k] = _v
-                
-    os_version = common.get_os_version()
-    apache_specifics = env.apache_specifics[os_version.type][os_version.distro]
-    
-    env.apache_root = apache_specifics.root
-    env.apache_conf = apache_specifics.conf
-    env.apache_sites_available = apache_specifics.sites_available
-    env.apache_sites_enabled = apache_specifics.sites_enabled
-    env.apache_log_dir = apache_specifics.log_dir
-    env.apache_pid = apache_specifics.pid
-
-    env.apache_ports = env.apache_ports_template % env
-    env.apache_ssl_dir = env.apache_ssl_dir_template % env
-
-    return apache_specifics
-
-APACHE = 'APACHE'
-APACHE2 = 'APACHE2'
-APACHE2_MODEVASIVE = 'APACHE2_MODEVASIVE'
-APACHE2_MODRPAF = 'APACHE2_MODRPAF'
-APACHE2_MODSECURITY = 'APACHE2_MODSECURITY'
-APACHE2_VISITORS = 'APACHE2_VISITORS'
-APACHE2_MEDIA = 'APACHE2_MEDIA'
-
-common.required_system_packages[APACHE2] = {
-    common.FEDORA: ['httpd'],
-    #common.UBUNTU: ['apache2', 'mod_ssl', 'mod_wsgi'],
-    (common.UBUNTU, '12.04'): ['apache2', 'libapache2-mod-wsgi'],
-    (common.UBUNTU, '14.04'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'],
-}
-common.required_system_packages[APACHE2_MODEVASIVE] = {
-    (common.UBUNTU, '12.04'): ['libapache2-mod-evasive'],
-    (common.UBUNTU, '14.04'): ['libapache2-mod-evasive'],
-}
-common.required_system_packages[APACHE2_MODEVASIVE] = {
-    (common.UBUNTU, '12.04'): ['libapache2-modsecurity'],
-    (common.UBUNTU, '14.04'): ['libapache2-modsecurity'],
-}
-common.required_system_packages[APACHE2_MODRPAF] = {
-    (common.UBUNTU, '12.04'): ['libapache2-mod-rpaf'],
-    (common.UBUNTU, '14.04'): ['libapache2-mod-rpaf'],
-}
-common.required_system_packages[APACHE2_VISITORS] = {
-    (common.UBUNTU, '12.04'): ['visitors'],
-    (common.UBUNTU, '14.04'): ['visitors'],
-}
-
-def get_service_command(action):
-    os_version = common.get_os_version()
-    return env.apache_service_commands[action][os_version.distro]
-
-@task_or_dryrun
-def enable():
-    cmd = get_service_command(common.ENABLE)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def disable():
-    cmd = get_service_command(common.DISABLE)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def start():
-    cmd = get_service_command(common.START)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def stop():
-    cmd = get_service_command(common.STOP)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def reload():
-    cmd = get_service_command(common.RELOAD)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def restart():
-    cmd = get_service_command(common.RESTART)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def visitors(force=0):
-    """
-    Generates an Apache access report using the Visitors command line tool.
-    Requires the APACHE2_VISITORS service to be enabled for the current host.
-    """
-    if not int(force):
-        assert APACHE2_VISITORS.upper() in env.services or APACHE2_VISITORS.lower() in env.services, \
-            'Visitors has not been configured for this host.'
-    run('visitors -o text /var/log/apache2/%(apache_application_name)s-access.log* | less' % env)
-
-def check_required():
-    for name in ['apache_application_name', 'apache_server_name']:
-        assert env[name], 'Missing %s.' % (name,)
-
+#DEPRECATED
 def set_apache_site_specifics(site):
+    from burlap.common import env
     from burlap.dj import get_settings
+    
+    warnings.warn("Use ApacheSatchel instead.", DeprecationWarning)
     
     site_data = env.sites[site]
     
@@ -355,379 +79,685 @@ def set_apache_site_specifics(site):
 #    print 'env.apache_enforce_subdomain:',env.apache_enforce_subdomain
 #    raw_input('<enter>')
 
-@task_or_dryrun
-def configure(full=1, site=None, delete_old=0, verbose=0):
-    """
-    Configures Apache to host one or more websites.
-    """
-    from burlap.common import get_current_hostname
-    from burlap import service
+class ApacheSatchel(ServiceSatchel):
     
-    print>>sys.stderr, 'Configuring Apache...'
-    
-    verbose = int(verbose)
-    
-    site = site or env.SITE
-    
-    apache_specifics = set_apache_specifics()
-    hostname = get_current_hostname()
-    target_sites = env.available_sites_by_host.get(hostname, None)
-    
-    if int(delete_old):
-        # Delete all existing enabled and available sites.
-        cmd = 'rm -f %(apache_sites_available)s/*' % env
-        sudo_or_dryrun(cmd)
-        cmd = 'rm -f %(apache_sites_enabled)s/*' % env
-        sudo_or_dryrun(cmd)
-    
-    for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
-        print>>sys.stderr, '-'*80
-        print>>sys.stderr, 'Site:',site
-        print>>sys.stderr, '-'*80
-        
-        # Only load site configurations that are allowed for this host.
-        if target_sites is None:
-            pass
-        else:
-            assert isinstance(target_sites, (tuple, list))
-            if site not in target_sites:
-                continue
-                
-        print>>sys.stderr, 'env.apache_ssl_domain:',env.apache_ssl_domain
-        print>>sys.stderr, 'env.apache_ssl_domain_template:',env.apache_ssl_domain_template
-        print>>sys.stderr, 'env.django_settings_module:',env.django_settings_module
-#        raw_input('enter')
-        fn = common.render_to_file('django.template.wsgi', verbose=verbose)
-        remote_dir = os.path.split(env.apache_django_wsgi)[0]
-        cmd = 'mkdir -p %s' % remote_dir
-        sudo_or_dryrun(cmd)
-        
-        print>>sys.stderr, fn
-        put_or_dryrun(local_path=fn, remote_path=env.apache_django_wsgi, use_sudo=True)
-        
-        if env.apache_ssl:
-            env.apache_ssl_certificates = list(iter_certificates())
-        
-        fn = common.render_to_file('apache_site.template.conf', verbose=verbose)
-        env.apache_site_conf = site+'.conf'
-        env.apache_site_conf_fqfn = os.path.join(env.apache_sites_available, env.apache_site_conf)
-        put_or_dryrun(local_path=fn, remote_path=env.apache_site_conf_fqfn, use_sudo=True)
-        
-        cmd = 'a2ensite %(apache_site_conf)s' % env
-        sudo_or_dryrun(cmd)
-    
-    if service.is_selected(APACHE2_MODEVASIVE):
-        configure_modevasive()
-        
-    if service.is_selected(APACHE2_MODSECURITY):
-        configure_modsecurity()
-    
-    for mod_enabled in env.apache_mods_enabled:
-        env.apache_mod_enabled = mod_enabled
-        cmd = 'a2enmod %(apache_mod_enabled)s' % env
-        with settings(warn_only=True):
-            sudo_or_dryrun(cmd)
-        
-    if int(full):
-        # Write master Apache configuration file.
-        fn = common.render_to_file('apache_httpd.template.conf', verbose=verbose)
-        put_or_dryrun(local_path=fn, remote_path=env.apache_conf, use_sudo=True)
-        
-        # Write Apache listening ports configuration.
-        fn = common.render_to_file('apache_ports.template.conf', verbose=verbose)
-        put_or_dryrun(local_path=fn, remote_path=env.apache_ports, use_sudo=True)
-        
-    #sudo_or_dryrun('mkdir -p %(apache_app_log_dir)s' % env)
-    #sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_app_log_dir)s' % env)
-#    sudo_or_dryrun('mkdir -p %(apache_log_dir)s' % env)
-#    sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_log_dir)s' % env)
-    cmd = 'chown -R %(apache_user)s:%(apache_group)s %(apache_root)s' % env
-    sudo_or_dryrun(cmd)
-#    sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_docroot)s' % env)
-#    sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_pid)s' % env)
-
-    #restart()#break apache? run separately?
-
-@task_or_dryrun
-def configure_modsecurity():
-    get_apache_settings()
-    
-    env.apache_mods_enabled.append('mod-security')
-    env.apache_mods_enabled.append('headers')
-    
-    # Write modsecurity.conf.
-    fn = common.render_to_file('apache_modsecurity.template.conf')
-    put_or_dryrun(local_path=fn, remote_path='/etc/modsecurity/modsecurity.conf', use_sudo=True)
-    
-    # Write OWASP rules.
-    env.apache_modsecurity_download_filename = '/tmp/owasp-modsecurity-crs.tar.gz'
-    sudo_or_dryrun('cd /tmp; wget --output-document=%(apache_modsecurity_download_filename)s %(apache_modsecurity_download_url)s' % env)
-    env.apache_modsecurity_download_top = sudo_or_dryrun("cd /tmp; tar tzf %(apache_modsecurity_download_filename)s | sed -e 's@/.*@@' | uniq" % env)
-    sudo_or_dryrun('cd /tmp; tar -zxvf %(apache_modsecurity_download_filename)s' % env)
-    sudo_or_dryrun('cd /tmp; cp -R %(apache_modsecurity_download_top)s/* /etc/modsecurity/' % env)
-    sudo_or_dryrun('mv /etc/modsecurity/modsecurity_crs_10_setup.conf.example  /etc/modsecurity/modsecurity_crs_10_setup.conf' % env)
-    
-    sudo_or_dryrun('rm -f /etc/modsecurity/activated_rules/*')
-    sudo_or_dryrun('cd /etc/modsecurity/base_rules; for f in * ; do ln -s /etc/modsecurity/base_rules/$f /etc/modsecurity/activated_rules/$f ; done')
-    sudo_or_dryrun('cd /etc/modsecurity/optional_rules; for f in * ; do ln -s /etc/modsecurity/optional_rules/$f /etc/modsecurity/activated_rules/$f ; done')
-    
-    env.apache_httpd_conf_append.append('Include "/etc/modsecurity/activated_rules/*.conf"')
-
-@task_or_dryrun
-def configure_modrpaf():
-    get_apache_settings()
-    env.apache_mods_enabled.append('rpaf')
-
-@task_or_dryrun
-def configure_modevasive():
-    get_apache_settings()
-    
-    env.apache_mods_enabled.append('mod-evasive')#Ubuntu 12.04
-    env.apache_mods_enabled.append('evasive')#Ubuntu 14.04
-    
-    # Write conf.
-    fn = common.render_to_file('apache_modevasive.template.conf')
-    put_or_dryrun(local_path=fn, remote_path='/etc/apache2/mods-available/mod-evasive.conf', use_sudo=True)#Ubuntu 12.04
-    put_or_dryrun(local_path=fn, remote_path='/etc/apache2/mods-available/evasive.conf', use_sudo=True)#Ubuntu 14.04
-    
-def iter_certificates():
-    get_apache_settings()
-    
-    print>>sys.stderr, 'apache_ssl_domain:',env.apache_ssl_domain
-    for cert_type, cert_file_template in env.apache_ssl_certificates_templates:
-        print>>sys.stderr, 'cert_type, cert_file_template:',cert_type, cert_file_template
-        _local_cert_file = os.path.join(env.apache_ssl_dir_local, cert_file_template % env)
-        local_cert_file = find_template(_local_cert_file)
-        assert local_cert_file, 'Unable to find local certificate file: %s' % (_local_cert_file,)
-        remote_cert_file = os.path.join(env.apache_ssl_dir, cert_file_template % env)
-        yield cert_type, local_cert_file, remote_cert_file
-
-@task_or_dryrun
-def install_ssl(site=ALL):
-    get_apache_settings()
-    apache_specifics = set_apache_specifics()
-    
-    for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
-#        print 'site:',site
-#        continue
-        
-        site_secure = site+'_secure'
-        if site_secure not in env.sites:
-            continue
-        set_apache_site_specifics(site_secure)
-    
-        sudo_or_dryrun('mkdir -p %(apache_ssl_dir)s' % env)
-        
-        if env.apache_ssl:
-            for cert_type, local_cert_file, remote_cert_file in iter_certificates():
-                print '='*80
-                print 'Installing certificate %s...' % (remote_cert_file,)
-                put_or_dryrun(
-                    local_path=local_cert_file,
-                    remote_path=remote_cert_file, use_sudo=True)
-    
-    sudo_or_dryrun('mkdir -p %(apache_ssl_dir)s' % env)
-    sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_ssl_dir)s' % env)
-    sudo_or_dryrun('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s' % env)
-    
-#@task_or_dryrun
-#def unconfigure():
-#    """
-#    Removes all custom configurations for Apache hosted websites.
-#    """
-#    check_required()
-#    print 'Un-configuring Apache...'
-#    os_version = get_os_version()
-#    env.apache_root = env.apache_roots[os_type][os_distro]
-#    with settings(warn_only=True):
-#        sudo_or_dryrun("[ -f %(apache_root)s/sites-enabled/%(apache_server_name)s ] && rm -f %(apache_root)s/sites-enabled/%(apache_server_name)s" % env)
-#        sudo_or_dryrun("[ -f %(apache_root)s/sites-available/%(apache_server_name)s ] && rm -f %(apache_root)s/sites-available/%(apache_server_name)s" % env)
-
-@task_or_dryrun
-def install_auth_basic_user_file(site=None):
-    """
-    Installs users for basic httpd auth.
-    """
-    get_apache_settings()
-    print>>sys.stderr, 'env.apache_auth_basic0:',env.apache_auth_basic
-    apache_specifics = set_apache_specifics()
-    print>>sys.stderr, 'env.apache_auth_basic1:',env.apache_auth_basic
-    
-    for site, site_data in common.iter_sites(site=site, setter=set_apache_site_specifics):
-        print>>sys.stderr, '~'*80
-        print>>sys.stderr, 'Site:',site
-        #env.update(env_default)
-        #env.update(env.sites[site])
-        #set_apache_site_specifics(site)
-        
-        print>>sys.stderr, 'env.apache_auth_basic:',env.apache_auth_basic
-        if not env.apache_auth_basic:
-            continue
-        
-        #assert env.apache_auth_basic, 'This site is not configured for Apache basic authenticated.'
-        assert env.apache_auth_basic_users, 'No apache auth users specified.'
-        for username,password in env.apache_auth_basic_users:
-            env.apache_auth_basic_username = username
-            env.apache_auth_basic_password = password
-            if files.exists(env.apache_auth_basic_authuserfile):
-                sudo_or_dryrun('htpasswd -b %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
-            else:
-                sudo_or_dryrun('htpasswd -b -c %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % env)
-
-@task_or_dryrun
-def install_auth_basic_user_file_all():
-    get_apache_settings()
-    install_auth_basic_user_file(site='all')
-    
-@task_or_dryrun
-def sync_media(sync_set=None, clean=0, iter_local_paths=0):
-    """
-    Uploads select media to an Apache accessible directory.
-    """
-    get_apache_settings()
-    from burlap.dj import render_remote_paths
-    apache_specifics = set_apache_specifics()
-    
-    render_remote_paths()
-    
-    clean = int(clean)
-    site_data = env.sites[env.SITE]
-    env.update(site_data)
-    
-    sync_sets = env.apache_sync_sets
-    if sync_set:
-        sync_sets = [sync_set]
-    
-    ret_paths = []
-    for sync_set in sync_sets:
-        for paths in env.apache_sync_sets[sync_set]:
-            #print 'paths:',paths
-            env.apache_sync_local_path = os.path.abspath(paths['local_path'] % env)
-            if paths['local_path'].endswith('/') and not env.apache_sync_local_path.endswith('/'):
-                env.apache_sync_local_path += '/'
-                
-            if iter_local_paths:
-                ret_paths.append(env.apache_sync_local_path)
-                continue
-                
-            env.apache_sync_remote_path = paths['remote_path'] % env
-            
-            if clean:
-                sudo_or_dryrun('rm -Rf %(apache_sync_remote_path)s' % env) 
-            
-            print 'Syncing %s to %s...' % (env.apache_sync_local_path, env.apache_sync_remote_path)
-            
-            env.apache_tmp_chmod = paths.get('chmod',  env.apache_chmod)
-            #with settings(warn_only=True):
-            sudo_or_dryrun('mkdir -p %(apache_sync_remote_path)s' % env, user=env.apache_user)
-            sudo_or_dryrun('chmod -R %(apache_tmp_chmod)s %(apache_sync_remote_path)s' % env, user=env.apache_user)
-            cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % env
-#            print '!'*80
-#            print cmd
-            local_or_dryrun(cmd)
-            sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % env)
-            
-    if iter_local_paths:
-        return ret_paths
-
-@task_or_dryrun
-def view_error_log():
-    run_or_dryrun('tail -f %(apache_error_log)s' % env)
-    
-@task_or_dryrun
-def configure_all():
-    """
-    Installs the Apache site configurations for both secure and non-secure
-    sites.
-    """
-    get_apache_settings()
-    configure(full=1, site=ALL, delete_old=1)
-    
-    install_auth_basic_user_file(site=ALL)
-    install_ssl(site=ALL)
-
-# These tasks are run when the service.configure task is run.
-# common.service_configurators[APACHE2] = [
-#     configure_all,
-#     lambda: install_auth_basic_user_file(site=ALL),
-#     lambda: install_ssl(site=ALL),
-#     sync_media,
-# ]
-
-class ApacheSatchel(Satchel, Service):
-    
-    name = APACHE2
+    name = 'apache'
     
     ## Service options.
     
     #ignore_errors = True
     
-    # {action: {os_version_distro: command}}
-    commands = env.apache_service_commands
-    
     post_deploy_command = 'reload'
     
+    required_system_packages = {
+        FEDORA: ['httpd'],
+        UBUNTU: ['apache2'],
+        (UBUNTU, '12.04'): ['apache2', 'libapache2-mod-wsgi'],
+        (UBUNTU, '14.04'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'],
+    }
+    
+    tasks = (
+        'configure',
+        'configure_site',
+        'install_auth_basic_user_file',
+        'install_auth_basic_user_file_all',
+        'view_error_log',
+        'install_ssl',
+        'visitors',
+        'optimize_wsgi_processes',
+        'enable_site',
+        'disable_site',
+    )
+    
+    def set_defaults(self):
+        
+        self.env.service_commands = {
+#             START:{
+#                 UBUNTU: 'service network-manager start',
+#             },
+#             STOP:{
+#                 UBUNTU: 'service network-manager stop',
+#             },
+#             DISABLE:{
+#                 UBUNTU: 'chkconfig network-manager off',
+#             },
+#             ENABLE:{
+#                 UBUNTU: 'chkconfig network-manager on',
+#             },
+#             RESTART:{
+#                 UBUNTU: 'service network-manager restart',
+#             },
+#             STATUS:{
+#                 UBUNTU: 'service network-manager status',
+#             },
+            START:{
+                FEDORA: 'systemctl start httpd.service',
+                UBUNTU: 'service apache2 start',
+            },
+            STOP:{
+                FEDORA: 'systemctl stop httpd.service',
+                UBUNTU: 'service apache2 stop',
+            },
+            DISABLE:{
+                FEDORA: 'systemctl disable httpd.service',
+                UBUNTU: 'chkconfig apache2 off',
+                (UBUNTU, '14.04'): 'update-rc.d -f apache2 remove',
+            },
+            ENABLE:{
+                FEDORA: 'systemctl enable httpd.service',
+                UBUNTU: 'chkconfig apache2 on',
+                (UBUNTU, '14.04'): 'update-rc.d apache2 defaults',
+            },
+            RELOAD:{
+                FEDORA: 'systemctl reload httpd.service',
+                UBUNTU: 'service apache2 reload',
+            },
+            RESTART:{
+                FEDORA: 'systemctl restart httpd.service',
+                #UBUNTU: 'service apache2 restart',
+                # Note, the sleep 5 is necessary because the stop/start appears to
+                # happen in the background but gets aborted if Fabric exits before
+                # it completes.
+                UBUNTU: 'service apache2 restart; sleep 3',
+            },
+        }
+        
+        # An Apache-conf file and filename friendly string that uniquely identifies
+        # your web application.
+        self.env.application_name = None
+        
+        self.env.error_log = '/var/log/apache2/error.log'
+        self.env.log_level = 'warn'
+        
+        self.env.auth_basic = False
+        self.env.auth_basic_authuserfile_template = '%(apache_docroot)s/.htpasswd_%(apache_site)s'
+        self.env.auth_basic_users = [] # [(user,password)]
+        
+        # If true, activates a rewrite rule that causes domain.com to redirect
+        # to www.domain.com.
+        self.env.enforce_subdomain = True
+        
+        self.env.ssl = False
+        self.env.ssl_port = 443
+        self.env.ssl_chmod = 440
+        self.env.listen_ports = [80, 443]
+        
+        # A list of path patterns that should have HTTPS enforced.
+        self.env.ssl_secure_paths_enforce = True
+        self.env.ssl_secure_paths = ['/admin/(.*)']
+        
+        # Defines the expected name of the SSL certificates.
+        self.env.ssl_domain_template = '%(apache_domain)s'
+        
+        self.env.user = 'www-data'
+        self.env.group = 'www-data'
+        self.env.wsgi_user = 'www-data'
+        self.env.wsgi_group = 'www-data'
+        self.env.chmod = 775
+        
+        self.env.mods_enabled = ['rewrite', 'wsgi', 'ssl']
+        
+        # The value of the Apache's ServerName field. Usually should be set
+        # to the domain.
+        self.env.server_name = None
+        
+        self.env.server_aliases_template = ''
+        
+        self.env.docroot_template = '/usr/local/%(apache_application_name)s'
+        self.env.wsgi_dir_template = '/usr/local/%(apache_application_name)s/src/wsgi'
+        self.env.django_wsgi_template = '%(apache_wsgi_dir)s/%(apache_site)s.wsgi'
+        self.env.ports_template = '%(apache_root)s/ports.conf'
+        self.env.ssl_dir_template = '%(apache_root)s/ssl'
+        
+        self.env.domain_with_sub_template = ''
+        self.env.domain_without_sub_template = ''
+        self.env.domain_with_sub = None
+        self.env.domain_without_sub = None
+        
+        self.env.wsgi_server_memory_gb = 8
+        self.env.wsgi_processes = 5
+        self.env.wsgi_threads = 15
+        
+        self.env.domain_redirect_templates = [] # [(wrong_domain,right_domain)]
+        self.env.domain_redirects = [] # [(wrong_domain,right_domain)]
+        
+        self.env.extra_rewrite_rules = ''
+        
+        self.env.modevasive_DOSEmailNotify = 'admin@localhost'
+        self.env.modevasive_DOSPageInterval = 1 # seconds
+        self.env.modevasive_DOSPageCount = 2
+        self.env.modevasive_DOSSiteCount = 50
+        self.env.modevasive_DOSSiteInterval = 1 # seconds
+        self.env.modevasive_DOSBlockingPeriod = 10 # seconds
+        
+        self.env.modsecurity_download_url = 'https://github.com/SpiderLabs/owasp-modsecurity-crs/tarball/master'
+        
+        self.env.wsgi_python_path_template = '%(apache_docroot)s/.env/lib/python%(pip_python_version)s/site-packages'
+        
+        # OS specific default settings.
+        self.env.specifics = type(self.genv)()
+        self.env.specifics[LINUX] = type(self.genv)()
+        
+        self.env.specifics[LINUX][FEDORA] = type(self.genv)()
+        self.env.specifics[LINUX][FEDORA].root = '/etc/httpd'
+        self.env.specifics[LINUX][FEDORA].conf = '/etc/httpd/conf/httpd.conf'
+        self.env.specifics[LINUX][FEDORA].sites_available = '/etc/httpd/sites-available'
+        self.env.specifics[LINUX][FEDORA].sites_enabled = '/etc/httpd/sites-enabled'
+        self.env.specifics[LINUX][FEDORA].log_dir = '/var/log/httpd'
+        self.env.specifics[LINUX][FEDORA].pid = '/var/run/httpd/httpd.pid'
+        
+        self.env.specifics[LINUX][UBUNTU] = type(self.genv)()
+        self.env.specifics[LINUX][UBUNTU].root = '/etc/apache2'
+        self.env.specifics[LINUX][UBUNTU].conf = '/etc/apache2/httpd.conf'
+        self.env.specifics[LINUX][UBUNTU].sites_available = '/etc/apache2/sites-available'
+        self.env.specifics[LINUX][UBUNTU].sites_enabled = '/etc/apache2/sites-enabled'
+        self.env.specifics[LINUX][UBUNTU].log_dir = '/var/log/apache2'
+        self.env.specifics[LINUX][UBUNTU].pid = '/var/run/apache2/apache2.pid'
+        
+        self.env.ssl_certificates = None
+        self.env.ssl_certificates_templates = []
+        
+        # The local and remote relative directory where the SSL certificates are stored.
+        self.env.ssl_dir_local = 'ssl'
+        
+        # An optional segment to insert into the domain, customizable by role.
+        # Useful for easily keying domain-local.com/domain-dev.com/domain-staging.com.
+        self.env.locale = ''
+        
+        self.env.sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
+        
+        # This will be appended to the custom Apache configuration file.
+        self.env.httpd_conf_append = []
+
+    def get_apache_settings(self):
+        if not self.genv.get('_apache_settings'):
+            self.set_apache_specifics()
+        return self.genv._apache_settings
+    
+    def enable_site(self, name):
+        self.sudo_or_dryrun('a2ensite %s' % name)
+        
+    def disable_site(self, name):
+        self.sudo_or_dryrun('a2dissite %s' % name)
+    
+    def set_apache_specifics(self):
+        from burlap import common
+        
+        if not self.genv.get('_apache_settings'):
+            self.genv._apache_settings = type(self.genv)()
+            for _k, _v in self.genv.iteritems():
+                if _k.startswith('apache_') and _k not in ignore_keys:
+                    self.genv._apache_settings[_k] = _v
+                    
+        os_version = self.os_version
+        apache_specifics = self.genv.apache_specifics[os_version.type][os_version.distro]
+        
+        self.genv.apache_root = apache_specifics.root
+        self.genv.apache_conf = apache_specifics.conf
+        self.genv.apache_sites_available = apache_specifics.sites_available
+        self.genv.apache_sites_enabled = apache_specifics.sites_enabled
+        self.genv.apache_log_dir = apache_specifics.log_dir
+        self.genv.apache_pid = apache_specifics.pid
+    
+        self.genv.apache_ports = self.genv.apache_ports_template % self.genv
+        self.genv.apache_ssl_dir = self.genv.apache_ssl_dir_template % self.genv
+    
+        return apache_specifics
+    
+    def optimize_wsgi_processes(self):
+        """
+        Based on the number of sites per server and the number of resources on the server,
+        calculates the optimal number of processes that should be allocated for each WSGI site.
+        """
+        from burlap.common import iter_sites
+        #self.env.wsgi_processes = 5
+        self.env.wsgi_server_memory_gb = 8
+        
+        verbose = self.verbose
+        self.get_apache_settings()
+        apache_specifics = self.set_apache_specifics()
+        
+        all_sites = list(iter_sites(site=ALL, setter=self.set_apache_site_specifics))
+        
+        #(current_mem/current_sites)/current_process = ()
+        #(16/x)/(8/16) = y
+        #(16/x)*(16/8) = y
+        #(16*16)/(num_sites*8) = y
+        
+    def visitors(self, force=0):
+        """
+        Generates an Apache access report using the Visitors command line tool.
+        Requires the APACHE2_VISITORS service to be enabled for the current host.
+        """
+        if not int(force):
+            assert APACHE2_VISITORS.upper() in self.genv.services or APACHE2_VISITORS.lower() in self.genv.services, \
+                'Visitors has not been configured for this host.'
+        self.run_or_dryrun('visitors -o text /var/log/apache2/%(apache_application_name)s-access.log* | less' % self.genv)
+    
+    def check_required(self):
+        for name in ['apache_application_name', 'apache_server_name']:
+            assert self.genv[name], 'Missing %s.' % (name,)
+    
+    def set_apache_site_specifics(self, site):
+        from burlap.dj import get_settings
+        
+        site_data = self.genv.sites[site]
+        
+        get_settings(site=site)
+        
+        # Set site specific values.
+        self.genv.apache_site = site
+        self.genv.update(site_data)
+        self.genv.apache_docroot = self.genv.apache_docroot_template % self.genv
+        self.genv.apache_wsgi_dir = self.genv.apache_wsgi_dir_template % self.genv
+        #self.genv.apache_app_log_dir = self.genv.apache_app_log_dir_template % self.genv
+        self.genv.apache_domain = self.genv.apache_domain_template % self.genv
+        self.genv.apache_server_name = self.genv.apache_domain
+        self.genv.apache_wsgi_python_path = self.genv.apache_wsgi_python_path_template % self.genv
+        self.genv.apache_django_wsgi = self.genv.apache_django_wsgi_template % self.genv
+        self.genv.apache_django_wsgi = self.genv.apache_django_wsgi.replace('-', '_')
+        self.genv.apache_server_aliases = self.genv.apache_server_aliases_template % self.genv
+        self.genv.apache_ssl_domain = self.genv.apache_ssl_domain_template % self.genv
+        self.genv.apache_auth_basic_authuserfile = self.genv.apache_auth_basic_authuserfile_template % self.genv
+        self.genv.apache_domain_with_sub = self.genv.apache_domain_with_sub_template % self.genv
+        self.genv.apache_domain_without_sub = self.genv.apache_domain_without_sub_template % self.genv
+        
+        self.genv.apache_domain_redirects = []
+        for _wrong, _right in self.genv.apache_domain_redirect_templates:
+            self.genv.apache_domain_redirects.append((_wrong % self.genv, _right % self.genv))
+        
+    def iter_certificates(self):
+        verbose = self.verbose
+        self.get_apache_settings()
+        
+        if verbose:
+            print>>sys.stderr, 'apache_ssl_domain:', self.genv.apache_ssl_domain
+        for cert_type, cert_file_template in self.genv.apache_ssl_certificates_templates:
+            if verbose:
+                print>>sys.stderr, 'cert_type, cert_file_template:',cert_type, cert_file_template
+            _local_cert_file = os.path.join(self.genv.apache_ssl_dir_local, cert_file_template % self.genv)
+            local_cert_file = self.find_template(_local_cert_file)
+            assert local_cert_file, 'Unable to find local certificate file: %s' % (_local_cert_file,)
+            remote_cert_file = os.path.join(self.genv.apache_ssl_dir, cert_file_template % self.genv)
+            yield cert_type, local_cert_file, remote_cert_file
+    
+    def install_ssl(self, site=ALL):
+        from burlap.common import iter_sites
+        verbose = self.verbose
+        self.get_apache_settings()
+        apache_specifics = self.set_apache_specifics()
+        
+        for site, site_data in iter_sites(site=site, setter=self.set_apache_site_specifics):
+    #        print 'site:',site
+    #        continue
+            
+            site_secure = site+'_secure'
+            if site_secure not in self.genv.sites:
+                continue
+            self.set_apache_site_specifics(site_secure)
+        
+            self.sudo_or_dryrun('mkdir -p %(apache_ssl_dir)s' % self.genv)
+            
+            if self.genv.apache_ssl:
+                for cert_type, local_cert_file, remote_cert_file in self.iter_certificates():
+                    if verbose:
+                        print '='*80
+                        print 'Installing certificate %s...' % (remote_cert_file,)
+                    self.put_or_dryrun(
+                        local_path=local_cert_file,
+                        remote_path=remote_cert_file,
+                        use_sudo=True)
+        
+        self.sudo_or_dryrun('mkdir -p %(apache_ssl_dir)s' % self.genv)
+        self.sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_ssl_dir)s' % self.genv)
+        self.sudo_or_dryrun('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s' % self.genv)
+    
+    def install_auth_basic_user_file(self, site=None):
+        """
+        Installs users for basic httpd auth.
+        """
+        from burlap.common import iter_sites
+        
+        self.get_apache_settings()
+        
+        apache_specifics = self.set_apache_specifics()
+        
+        for site, site_data in iter_sites(site=site, setter=self.set_apache_site_specifics):
+            if self.verbose:
+                print>>sys.stderr, '~'*80
+                print>>sys.stderr, 'Site:',site
+                print>>sys.stderr, 'env.apache_auth_basic:', self.genv.apache_auth_basic
+                
+            if not self.genv.apache_auth_basic:
+                continue
+            
+            #assert self.genv.apache_auth_basic, 'This site is not configured for Apache basic authenticated.'
+            assert self.genv.apache_auth_basic_users, 'No apache auth users specified.'
+            for username,password in self.genv.apache_auth_basic_users:
+                self.genv.apache_auth_basic_username = username
+                self.genv.apache_auth_basic_password = password
+                if self.files.exists(self.genv.apache_auth_basic_authuserfile):
+                    self.sudo_or_dryrun('htpasswd -b %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % self.genv)
+                else:
+                    self.sudo_or_dryrun('htpasswd -b -c %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % self.genv)
+    
+    def install_auth_basic_user_file_all(self):
+        self.get_apache_settings()
+        self.install_auth_basic_user_file(site='all')
+    
+    def view_error_log(self):
+        self.run_or_dryrun('tail -f %(apache_error_log)s' % self.genv)
+    
     def record_manifest(self):
         """
         Called after a deployment to record any data necessary to detect changes
         for a future deployment.
         """
-        verbose = common.get_verbose()
-        data = get_apache_settings()
-        if verbose:
+        data = self.get_apache_settings()
+        if self.verbose:
             pprint(data, indent=4)
         return data
-        
-    def get_deployers(self):
-        """
-        Returns one or more Deployer instances, representing tasks to run during a deployment.
-        """
-#         from burlap.package import PACKAGER
-#         from burlap.user import USER
-        return [
-            Deployer(
-                func='apache.configure_all',
-                # if they need to be run, these must be run before this deployer
-                before=['packager', 'user'],
-                # if they need to be run, these must be run after this deployer
-                after=[],
-                takes_diff=False)
-        ]
 
+    def configure_site(self, full=1, site=None, delete_old=0):
+        """
+        Configures Apache to host one or more websites.
+        """
+        from burlap.common import get_current_hostname, iter_sites
+        from burlap import service
+        
+        print>>sys.stderr, 'Configuring Apache...'
+        
+        verbose = self.verbose
+        
+        site = site or self.genv.SITE
+        
+        apache_specifics = self.set_apache_specifics()
+        hostname = get_current_hostname()
+        target_sites = self.genv.available_sites_by_host.get(hostname, None)
+        
+        if int(delete_old):
+            # Delete all existing enabled and available sites.
+            cmd = 'rm -f %(apache_sites_available)s/*' % self.genv
+            self.sudo_or_dryrun(cmd)
+            cmd = 'rm -f %(apache_sites_enabled)s/*' % self.genv
+            self.sudo_or_dryrun(cmd)
+        
+        for site, site_data in iter_sites(site=site, setter=self.set_apache_site_specifics):
+            if self.verbose:
+                print>>sys.stderr, '-'*80
+                print>>sys.stderr, 'Site:',site
+                print>>sys.stderr, '-'*80
+            
+            # Only load site configurations that are allowed for this host.
+            if target_sites is None:
+                pass
+            else:
+                assert isinstance(target_sites, (tuple, list))
+                if site not in target_sites:
+                    continue
+            
+            if self.verbose:
+                print>>sys.stderr, 'env.apache_ssl_domain:', self.genv.apache_ssl_domain
+                print>>sys.stderr, 'env.apache_ssl_domain_template:', self.genv.apache_ssl_domain_template
+                print>>sys.stderr, 'env.django_settings_module:', self.genv.django_settings_module
+            
+    #        raw_input('enter')
+            fn = self.render_to_file('django/django.template.wsgi', verbose=verbose)
+            remote_dir = os.path.split(self.genv.apache_django_wsgi)[0]
+            cmd = 'mkdir -p %s' % remote_dir
+            self.sudo_or_dryrun(cmd)
+            
+            if self.verbose:
+                print>>sys.stderr, fn
+            self.put_or_dryrun(local_path=fn, remote_path=self.genv.apache_django_wsgi, use_sudo=True)
+            
+            if self.genv.apache_ssl:
+                self.genv.apache_ssl_certificates = list(self.iter_certificates())
+            
+            fn = self.render_to_file('apache/apache_site.template.conf', verbose=verbose)
+            self.genv.apache_site_conf = site+'.conf'
+            self.genv.apache_site_conf_fqfn = os.path.join(self.genv.apache_sites_available, self.genv.apache_site_conf)
+            self.put_or_dryrun(local_path=fn, remote_path=self.genv.apache_site_conf_fqfn, use_sudo=True)
+            
+            cmd = 'a2ensite %(apache_site_conf)s' % self.genv
+            self.sudo_or_dryrun(cmd)
+        
+#         if service.is_selected(APACHE2_MODEVASIVE):
+#             configure_modevasive()
+#             
+#         if service.is_selected(APACHE2_MODSECURITY):
+#             configure_modsecurity()
+        
+        for mod_enabled in self.genv.apache_mods_enabled:
+            self.genv.apache_mod_enabled = mod_enabled
+            cmd = 'a2enmod %(apache_mod_enabled)s' % self.genv
+            with settings(warn_only=True):
+                self.sudo_or_dryrun(cmd)
+            
+        if int(full):
+            # Write master Apache configuration file.
+            fn = self.render_to_file('apache/apache_httpd.template.conf', verbose=verbose)
+            self.put_or_dryrun(local_path=fn, remote_path=self.genv.apache_conf, use_sudo=True)
+            
+            # Write Apache listening ports configuration.
+            fn = self.render_to_file('apache/apache_ports.template.conf', verbose=verbose)
+            self.put_or_dryrun(local_path=fn, remote_path=self.genv.apache_ports, use_sudo=True)
+            
+        #sudo_or_dryrun('mkdir -p %(apache_app_log_dir)s' % self.genv)
+        #sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_app_log_dir)s' % self.genv)
+    #    self.sudo_or_dryrun('mkdir -p %(apache_log_dir)s' % self.genv)
+    #    self.sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_log_dir)s' % self.genv)
+        cmd = 'chown -R %(apache_user)s:%(apache_group)s %(apache_root)s' % self.genv
+        self.sudo_or_dryrun(cmd)
+    #    self.sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_docroot)s' % self.genv)
+    #    self.sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_pid)s' % self.genv)
+    
+        #restart()#break apache? run separately?
+
+    def configure(self):
+            
+        self.get_apache_settings()
+        self.configure_site(full=1, site=ALL, delete_old=1)
+        
+        self.install_auth_basic_user_file(site=ALL)
+        self.install_ssl(site=ALL)
+        
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'user']
+
+class ApacheModEvasiveSatchel(Satchel):
+    
+    name = 'apachemodevasive'
+    
+    tasks = (
+        'configure',
+    )
+    
+    required_system_packages = {
+        (UBUNTU, '12.04'): ['libapache2-mod-evasive'],
+        (UBUNTU, '14.04'): ['libapache2-mod-evasive'],
+    }
+    
+        
+    def configure():
+        self.get_apache_settings()
+        
+        self.genv.apache_mods_enabled.append('mod-evasive')#Ubuntu 12.04
+        self.genv.apache_mods_enabled.append('evasive')#Ubuntu 14.04
+        
+        # Write conf.
+        fn = self.render_to_file('apache_modevasive.template.conf')
+        self.put_or_dryrun(local_path=fn, remote_path='/etc/apache2/mods-available/mod-evasive.conf', use_sudo=True)#Ubuntu 12.04
+        self.put_or_dryrun(local_path=fn, remote_path='/etc/apache2/mods-available/evasive.conf', use_sudo=True)#Ubuntu 14.04
+        
+    configure.is_deployer = True
+    configure.deploy_before = ['apache']
+    
+class ApacheModRPAFSatchel(Satchel):
+    
+    name = 'apachemodrpaf'
+    
+    tasks = (
+        'configure',
+    )
+    
+    required_system_packages = {
+        (UBUNTU, '12.04'): ['libapache2-mod-rpaf'],
+        (UBUNTU, '14.04'): ['libapache2-mod-rpaf'],
+    }
+    
+    def configure():
+        self.get_apache_settings()
+        self.genv.apache_mods_enabled.append('rpaf')
+        
+    configure.is_deployer = True
+    configure.deploy_before = ['apache']
+    
+class ApacheModSecurity(Satchel):
+    
+    name = 'apachemodsecurity'
+    
+    tasks = (
+        'configure',
+    )
+    
+    required_system_packages = {
+        (UBUNTU, '12.04'): ['libapache2-modsecurity'],
+        (UBUNTU, '14.04'): ['libapache2-modsecurity'],
+    }
+    
+    def configure():
+        self.get_apache_settings()
+        
+        self.genv.apache_mods_enabled.append('mod-security')
+        self.genv.apache_mods_enabled.append('headers')
+        
+        # Write modsecurity.conf.
+        fn = self.render_to_file('apache_modsecurity.template.conf')
+        self.put_or_dryrun(local_path=fn, remote_path='/etc/modsecurity/modsecurity.conf', use_sudo=True)
+        
+        # Write OWASP rules.
+        self.genv.apache_modsecurity_download_filename = '/tmp/owasp-modsecurity-crs.tar.gz'
+        self.sudo_or_dryrun('cd /tmp; wget --output-document=%(apache_modsecurity_download_filename)s %(apache_modsecurity_download_url)s' % self.genv)
+        self.genv.apache_modsecurity_download_top = self.sudo_or_dryrun("cd /tmp; tar tzf %(apache_modsecurity_download_filename)s | sed -e 's@/.*@@' | uniq" % self.genv)
+        self.sudo_or_dryrun('cd /tmp; tar -zxvf %(apache_modsecurity_download_filename)s' % self.genv)
+        self.sudo_or_dryrun('cd /tmp; cp -R %(apache_modsecurity_download_top)s/* /etc/modsecurity/' % self.genv)
+        self.sudo_or_dryrun('mv /etc/modsecurity/modsecurity_crs_10_setup.conf.example  /etc/modsecurity/modsecurity_crs_10_setup.conf' % self.genv)
+        
+        self.sudo_or_dryrun('rm -f /etc/modsecurity/activated_rules/*')
+        self.sudo_or_dryrun('cd /etc/modsecurity/base_rules; for f in * ; do ln -s /etc/modsecurity/base_rules/$f /etc/modsecurity/activated_rules/$f ; done')
+        self.sudo_or_dryrun('cd /etc/modsecurity/optional_rules; for f in * ; do ln -s /etc/modsecurity/optional_rules/$f /etc/modsecurity/activated_rules/$f ; done')
+        
+        self.genv.apache_httpd_conf_append.append('Include "/etc/modsecurity/activated_rules/*.conf"')
+        
+    configure.is_deployer = True
+    configure.deploy_before = ['apache']
+    
+class ApacheVisitors(Satchel):
+    
+    name = 'apachevisitors'
+
+    tasks = (
+        'configure',
+    )
+    
+    required_system_packages = {
+        (UBUNTU, '12.04'): ['visitors'],
+        (UBUNTU, '14.04'): ['visitors'],
+    }
+    
 class ApacheMediaSatchel(Satchel):
     
-    name = APACHE2_MEDIA
+    name = 'apachemedia'
     
+    tasks = (
+        'configure_apache_media',
+    )
+    
+    def sync_media(self, sync_set=None, clean=0, iter_local_paths=0):
+        """
+        Uploads select media to an Apache accessible directory.
+        """
+        apache.get_apache_settings()
+        
+        from burlap.dj import render_remote_paths
+        
+        apache_specifics = apache.set_apache_specifics()
+        
+        render_remote_paths()
+        
+        clean = int(clean)
+        site_data = self.genv.sites[self.genv.SITE]
+        self.genv.update(site_data)
+        
+        sync_sets = self.genv.apache_sync_sets
+        if sync_set:
+            sync_sets = [sync_set]
+        
+        ret_paths = []
+        for sync_set in sync_sets:
+            for paths in self.genv.apache_sync_sets[sync_set]:
+                #print 'paths:',paths
+                self.genv.apache_sync_local_path = os.path.abspath(paths['local_path'] % self.genv)
+                if paths['local_path'].endswith('/') and not self.genv.apache_sync_local_path.endswith('/'):
+                    self.genv.apache_sync_local_path += '/'
+                    
+                if iter_local_paths:
+                    ret_paths.append(self.genv.apache_sync_local_path)
+                    continue
+                    
+                self.genv.apache_sync_remote_path = paths['remote_path'] % self.genv
+                
+                if clean:
+                    self.sudo_or_dryrun('rm -Rf %(apache_sync_remote_path)s' % self.genv) 
+                
+                print 'Syncing %s to %s...' % (self.genv.apache_sync_local_path, self.genv.apache_sync_remote_path)
+                
+                self.genv.apache_tmp_chmod = paths.get('chmod',  self.genv.apache_chmod)
+                #with settings(warn_only=True):
+                self.sudo_or_dryrun('mkdir -p %(apache_sync_remote_path)s' % self.genv, user=self.genv.apache_user)
+                self.sudo_or_dryrun('chmod -R %(apache_tmp_chmod)s %(apache_sync_remote_path)s' % self.genv, user=self.genv.apache_user)
+                cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % self.genv
+    #            print '!'*80
+    #            print cmd
+                self.local_or_dryrun(cmd)
+                self.sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % self.genv)
+                
+        if iter_local_paths:
+            return ret_paths
+
     def record_manifest(self):
         """
         Called after a deployment to record any data necessary to detect changes
         for a future deployment.
         """
-        verbose = common.get_verbose()
+        from burlap.common import get_last_modified_timestamp
         data = 0
-        for path in sync_media(iter_local_paths=1):
-            data = min(data, common.get_last_modified_timestamp(path) or data)
+        for path in self.sync_media(iter_local_paths=1):
+            data = min(data, get_last_modified_timestamp(path) or data)
         #TODO:hash media names and content
-        if verbose:
+        if self.verbose:
             print data
         return data
         
-    def get_deployers(self):
-        """
-        Returns one or more Deployer instances, representing tasks to run during a deployment.
-        """
-#         from burlap.package import PACKAGER
-#         from burlap.tarball import TARBALL
-#         from burlap.pip import PIP
-        return [
-            Deployer(
-                func='apache.sync_media',
-                # if they need to be run, these must be run before this deployer
-                before=['packager', 'apache', 'apache2', 'pip', 'tarball'],
-                # if they need to be run, these must be run after this deployer
-                after=[],
-                takes_diff=False)
-        ]
+    def configure_apache_media(self):
+        self.sync_media()
+    configure_apache_media.is_deployer = True
+    configure_apache_media.deploy_before = ['packager', 'apache', 'apache2', 'pip', 'tarball']
             
-ApacheSatchel()
-ApacheMediaSatchel()
+apache = ApacheSatchel()
+
+# apache_modevasive = ApacheModEvasiveSatchel()
+# apache_modevasive.requires_satchel(apache)
+# 
+# apache_modrpaf = ApacheModRPAFSatchel()
+# apache_modrpaf.requires_satchel(apache)
+# 
+# apache_modsecurity = ApacheModSecurity()
+# apache_modsecurity.requires_satchel(apache)
+# 
+# apache_visitors = ApacheVisitors()
+# apache_visitors.requires_satchel(apache)
+# 
+apachemedia = ApacheMediaSatchel()
+apachemedia.requires_satchel(apache)

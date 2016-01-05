@@ -1,31 +1,16 @@
 import os
-import re
 
 from fabric.api import (
     env,
-    require,
     settings,
     cd,
     runs_once,
     execute,
 )
 
-from fabric.contrib import files
-from fabric.tasks import Task
-
 from burlap import common
 from burlap.common import (
-    run_or_dryrun,
-    put_or_dryrun,
-    sudo_or_dryrun,
-    local_or_dryrun,
-    SITE,
-    ROLE,
-    render_to_file,
-    find_template,
-    get_verbose,
     Satchel,
-    Deployer,
 )
 from burlap.decorators import task_or_dryrun
 
@@ -35,13 +20,9 @@ if 'host_hostname' not in env:
     env.host_os_type = None # Linux/Windows/etc
     env.host_os_distro = None # Ubuntu/Fedora/etc
     env.host_os_release = None # 12.04/14.04/etc
-    
-    env.media_mount_dirs = []
-
-HOSTNAME = 'hostname'
 
 def iter_hostnames():
-    from burlap.common import get_hosts_retriever
+    from burlap.common import get_hosts_retriever, get_verbose
     
     verbose = get_verbose()
     
@@ -62,98 +43,6 @@ def list_hostnames():
         print hostname
 
 @task_or_dryrun
-def set_hostname(name=None):
-    """
-    Assigns a name to the server accessible from user space.
-    
-    Note, we add the name to /etc/hosts since not all programs use
-    /etc/hostname to reliably identify the server hostname.
-    """
-    from burlap.common import get_hosts_retriever
-    
-    verbose = get_verbose()
-    
-    retriever = get_hosts_retriever()
-    
-    hosts = list(retriever(verbose=verbose, extended=1))
-#     print 'hosts:',hosts
-    
-    #assert not env.hosts or len(env.hosts) == 1, 'Too many hosts.'
-    
-    hostname = name
-    if not hostname:
-        for _hostname, _data in hosts:
-            if _data.ip == env.host_string:
-                hostname = _hostname
-                break
-            elif _data.public_dns_name == env.host_string:
-                hostname = _hostname
-                break
-    
-    #env.host_hostname = name or env.host_hostname or env.host_string or env.hosts[0]
-    env.host_hostname = hostname
-    
-    sudo_or_dryrun('echo "%(host_hostname)s" > /etc/hostname' % env)
-    sudo_or_dryrun('echo "127.0.0.1 %(host_hostname)s" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts' % env)
-    sudo_or_dryrun('service hostname restart; sleep 3')
-
-#TODO:deprecated?
-@task_or_dryrun
-def mount():
-    """
-    Mounts file systems.
-    
-    TODO:Remove? This should be no longer be an issue now that
-    /etc/fstab has the proper mount settings.
-    
-    remote_host:remote_path  /data/media             nfs     _netdev,soft,intr,rw,bg        0 0
-    """
-    #TODO:these are temporary commands, change to auto-mount in /etc/fstab?
-    for data in env.media_mount_dirs:
-        if isinstance(data, (list, tuple)):
-            from_path, to_path, owner, group, perms = data
-        else:
-            assert isinstance(data, dict)
-            from_path = data['src']
-            to_path = data['dst']
-            owner = data['owner']
-            group = data['group']
-            perms = data['perms']
-            
-        with settings(warn_only=1):
-            
-            cmd = 'umount %s' % to_path
-            sudo_or_dryrun(cmd)
-                
-            cmd = 'rm -Rf %s' % to_path
-            sudo_or_dryrun(cmd)
-                
-            cmd = 'mkdir -p %s' % to_path
-            sudo_or_dryrun(cmd)
-                
-        cmd = 'mount -t nfs %s %s' % (from_path, to_path)
-        sudo_or_dryrun(cmd)
-        
-        if owner and group:
-            env.mount_owner = owner
-            env.mount_group = group
-            cmd = 'chown -R %(mount_owner)s:%(mount_group)s /data/ops' % env
-            sudo_or_dryrun(cmd)
-        
-        if perms:
-            env.mount_perms = perms
-            cmd = 'chmod -R %(mount_perms)s /data/ops' % env
-            sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def get_public_ip():
-    """
-    Gets the public IP for a host.
-    """
-    ret = run_or_dryrun('wget -qO- http://ipecho.net/plain ; echo')
-    return ret
-
-@task_or_dryrun
 @runs_once
 def list_public_ips(show_hostname=0):
     """
@@ -168,52 +57,69 @@ def list_public_ips(show_hostname=0):
             print hn, output
         else:
             print output
-            
-# @task_or_dryrun
-# def record_manifest_hostname():
-#     """
-#     Called after a deployment to record any data necessary to detect changes
-#     for a future deployment.
-#     """
-#     data = {}
-#     data['hostnames'] = set(iter_hostnames())
-#     return data
-
-# def compare_manifest_hostname(old):
-#     old = old or {}
-#     new = record_manifest_hostname()
-#     
-#     has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
-#     if has_diffs:
-#         methods.append(QueuedCommand('rabbitmq.configure_all', pre=pre))
-#     return methods
 
 class HostnameSatchel(Satchel):
     
-    name = HOSTNAME
+    name = 'hostname'
+    
+    tasks = (
+        'configure',
+        'get_public_ip',
+    )
     
     def record_manifest(self):
         """
         Returns a dictionary representing a serialized state of the service.
         """
         data = {}
-        data['hostnames'] = set(iter_hostnames())
+        data['hostnames'] = sorted(list(set(iter_hostnames())))
         return data
+    
+    def set_defaults(self):
+        self.env.hostname = None
+        self.env.get_public_ip_command = 'wget -qO- http://ipecho.net/plain ; echo'
+
+    def get_public_ip(self):
+        """
+        Gets the public IP for a host.
+        """
+        ret = self.run_or_dryrun(self.env.get_public_ip_command)
+        return ret
         
-    def get_deployers(self):
+    def configure(self):
         """
-        Returns one or more Deployer instances, representing tasks to run during a deployment.
+        Assigns a name to the server accessible from user space.
+        
+        Note, we add the name to /etc/hosts since not all programs use
+        /etc/hostname to reliably identify the server hostname.
         """
-        return [
-            Deployer(
-                func='host.set_hostname',
-                before=[],
-                after=[],
-                takes_diff=False)
-        ]
+        from burlap.common import get_hosts_retriever
+        
+        verbose = self.verbose
+        
+        retriever = get_hosts_retriever()
+        
+        hostname = self.env.hostname
+        hosts = list(retriever(verbose=verbose, extended=1))
+        for _hostname, _data in hosts:
+            if _data.ip == env.host_string:
+                hostname = _hostname
+                break
+            elif _data.public_dns_name == env.host_string:
+                hostname = _hostname
+                break
+                
+        assert hostname, 'Unable to lookup hostname.'
+    
+        #env.host_hostname = name or env.host_hostname or env.host_string or env.hosts[0]
+        self.env.hostname = hostname
+        
+        kwargs = dict(hostname=hostname)
+        self.sudo_or_dryrun('echo "%(hostname)s" > /etc/hostname' % kwargs)
+        self.sudo_or_dryrun('echo "127.0.0.1 %(hostname)s" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts' % kwargs)
+        self.sudo_or_dryrun('service hostname restart; sleep 3')
+        
+    configure.is_deployer = True
+    configure.deploy_before = []
 
 HostnameSatchel()
-
-#common.manifest_recorder[HOSTNAME] = record_manifest_hostname
-
-#common.add_deployer(HOSTNAME, 'host.set_hostname', before=[])

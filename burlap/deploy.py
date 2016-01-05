@@ -11,6 +11,7 @@ import json
 import yaml
 import shutil
 import functools
+import traceback
 from collections import defaultdict
 from pprint import pprint
 
@@ -46,6 +47,7 @@ if not 'plan_init' in env:
     env.plan_root = None
     env.plan_originals = {}
     env.plan_storage = STORAGE_REMOTE
+    env.plan_lockfile_path = '/var/lock/burlap_deploy.lock'
 _originals = env.plan_originals
 
 env.plan = None
@@ -484,11 +486,12 @@ class Plan(object):
             yaml.dump(data, fout, default_flow_style=False, indent=4)
             fout.flush()
     
-    def record_thumbprint(self):
+    def record_thumbprint(self, only_components=None):
         """
         Creates a thumbprint file for the current host in the current role and name.
         """
-        data = get_current_thumbprint(role=self.role, name=self.name)
+        only_components = only_components or []
+        data = get_current_thumbprint(role=self.role, name=self.name, only_components=only_components)
         print('Recording thumbprint for host %s with deployment %s on %s.' \
             % (env.host_string, self.name, self.role))
         self.thumbprint = data
@@ -683,19 +686,35 @@ def status(name=None):
             output = ongoing(output)
         print(output)
 
-def get_current_thumbprint(role=None, name=None):
+def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None):
     """
     Retrieves a snapshot of the current code state.
     """
     if name == INITIAL:
         name = '0'*env.plan_digits
-        
+    
+    last = get_last_thumbprint()
+    only_components = only_components or []
+    only_components = [_.upper() for _ in only_components]
     data = {} # {component:data}
-    manifest_data = {}
+    manifest_data = (last and last.copy()) or {}
+#     print('manifest_data:', manifest_data.keys())
+#     print('only_components:', only_components)
+#     raw_input('enter')
     for component_name, func in common.manifest_recorder.iteritems():
         component_name = component_name.upper()
         #print('component_name:',component_name)
-        manifest_data[component_name] = func()
+        if only_components and component_name not in only_components:
+            if common.get_verbose():
+                print('Skipping:', component_name)
+            continue
+        try:
+            manifest_data[component_name] = func()
+#             print('manifest:', component_name, manifest_data[component_name])
+        except Exception as e:
+            if int(reraise):
+                raise
+            print(traceback.format_exc(), file=sys.stderr)
         
     return manifest_data
 
@@ -756,6 +775,7 @@ def truncate():
     """
     Compacts all deployment records into a single initial deployment.
     """
+    #TODO:add support for remote storage
     d = os.path.join(init_plan_data_dir(), env.ROLE)
     local_or_dryrun('rm -Rf "%s"' % d)
     local_or_dryrun('mkdir -p "%s"' % d)
@@ -763,19 +783,25 @@ def truncate():
         fabric.api.execute(thumbprint, hosts=env.hosts)
 
 @task_or_dryrun
-def thumbprint(name=None):
+def thumbprint(name=None, components=None):
     """
     Creates a manifest file for the current host, listing all current settings
     so that a future deployment can use it as a reference to perform an
     idempotent deployment.
     """
+    
+    only_components = components or []
+    if isinstance(only_components, basestring):
+        only_components = [_.strip() for _ in only_components.split(',') if _.strip()]
+    
     if name:
         plan = Plan.load(name=name)
     else:
         plan = get_last_plan()
+        print('last plan:', plan)
         if not plan:
             plan = Plan.get_or_create_next()
-    plan.record_thumbprint()
+    plan.record_thumbprint(only_components=only_components)
     
 @task_or_dryrun
 @runs_once
@@ -805,7 +831,7 @@ def get_last_current_diffs(target_component):
     return last, current
 
 @task_or_dryrun
-def auto(fake=0, preview=0, check_outstanding=1):
+def auto(fake=0, preview=0, check_outstanding=1, components=None):
     """
     Generates a plan based on the components that have changed since the last deployment.
     
@@ -818,14 +844,31 @@ def auto(fake=0, preview=0, check_outstanding=1):
     fake := If true, generates the plan and records the run as successful, but does not apply any
         changes to the hosts.
     
+    components := list of names of components found in the services list
+    
     """
+    
+    only_components = components or []
+    if isinstance(only_components, basestring):
+        only_components = [_.strip().upper() for _ in only_components.split(',') if _.strip()]
     
     def get_deploy_funcs(components):
         for component in components:
+            
+            if only_components and component not in only_components:
+                continue
+            
             funcs = common.manifest_deployers.get(component, [])
             for func_name in funcs:
+                
+                #TODO:remove this after burlap.* naming prefix bug fixed
+                if func_name.startswith('burlap.'):
+                    print('skipping %s' % func_name)
+                    continue
+                    
                 takes_diff = common.manifest_deployers_takes_diff.get(func_name, False)
-                #print(func_name, takes_diff)
+#                 print(func_name, takes_diff)
+                
                 if preview:
                     #print(success((' '*4)+func_name))
                     #continue
@@ -900,7 +943,8 @@ def auto(fake=0, preview=0, check_outstanding=1):
             print(_c, component_dependences[_c])
         
     components = list(common.topological_sort(component_dependences.items()))
-    #print('components:',components)
+#     print('components:',components)
+#     raw_input('enter')
     plan_funcs = list(get_deploy_funcs(components))
     if components and plan_funcs:
         if preview:
@@ -924,8 +968,9 @@ def auto(fake=0, preview=0, check_outstanding=1):
                 plan_func()
     
     # Create thumbprint.
-    plan = Plan.get_or_create_next(last_plan=last_plan)
-    plan.record_thumbprint()
+    if not common.get_dryrun():
+        plan = Plan.get_or_create_next(last_plan=last_plan)
+        plan.record_thumbprint(only_components=only_components)
 
 @task_or_dryrun
 def run(*args, **kwargs):
@@ -934,7 +979,8 @@ def run(*args, **kwargs):
     """
     from burlap import service, notifier
     
-    assume_yes = int(kwargs.pop('assume_yes', 0))
+    assume_yes = int(kwargs.pop('assume_yes', 0)) or int(kwargs.pop('yes', 0))
+    fake = int(kwargs.get('fake', 0))
     
     if env.host_string == env.hosts[0]:
         pending = preview(*args, **kwargs)
@@ -947,10 +993,15 @@ def run(*args, **kwargs):
             # There are no changes pending, so abort all further tasks.
             sys.exit(1)
     
-    service.pre_deploy()
-    auto(check_outstanding=0, *args, **kwargs)
-    service.post_deploy()
-    notifier.notify_post_deployment()
+    if not fake:
+        service.pre_deploy()
+        
+    kwargs['check_outstanding'] = 0
+    auto(*args, **kwargs)
+    
+    if not fake:
+        service.post_deploy()
+        notifier.notify_post_deployment()
 
 @task_or_dryrun
 def test_remotefile():

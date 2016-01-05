@@ -21,14 +21,16 @@ class PostfixSatchel(ServiceSatchel):
     
     required_system_packages = {
         common.UBUNTU: [
-#         'postfix',
-#         'mailutils',
-#         'libsasl2-2',
-#         'ca-certificates',
-#         'libsasl2-modules',
-#         'nano',
+            'postfix',
+            'mailutils',
+            'libsasl2-2',
+            'ca-certificates',
+            'libsasl2-modules',
+            'nano',
         ],
     }
+    
+    install_required_system_packages = False 
     
     def set_defaults(self):
         self.env.service_commands = {

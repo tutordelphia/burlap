@@ -21,6 +21,7 @@ from burlap.common import (
     sudo_or_dryrun,
     run_or_dryrun,
     local_or_dryrun,
+    put_or_dryrun,
 )
 from burlap.decorators import task_or_dryrun
 
@@ -54,6 +55,8 @@ if 'dj_settings_loaded' not in env:
     #./manage migrate <app> --fake
     #./manage migrate --database=<database> <app>
     env.django_migrate_fakeouts = [] # [{database:<database>, app:<app>}]
+    
+    env.django_install_sql_path_template = '%(src_dir)s/%(app_name)s/*/sql/*'
 
 DJANGO = 'DJANGO'
 DJANGO_MEDIA = 'DJANGO_MEDIA'
@@ -69,7 +72,10 @@ def check_remote_paths(verbose=1):
 @task_or_dryrun
 def render_remote_paths(verbose=0):
     verbose = int(verbose)
-    env.django_settings_module = env.django_settings_module_template % env
+    try:
+        env.django_settings_module = env.django_settings_module_template % env
+    except KeyError:
+        pass
     env.remote_app_dir = env.remote_app_dir_template % env
     env.remote_app_src_dir = env.remote_app_src_dir_template % env
     env.remote_app_src_package_dir = env.remote_app_src_package_dir_template % env
@@ -223,25 +229,48 @@ def manage(cmd, *args, **kwargs):
     run_or_dryrun(cmd)
     
 @task_or_dryrun
-def migrate(app='', migration='', site=None, fake=0, ignore_errors=0):
+def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_databases=None, database=None, migrate_apps='', delete_ghosts=1):
     """
     Runs the standard South migrate command for one or more sites.
     """
     
     ignore_errors = int(ignore_errors)
     
+    delete_ghosts = int(delete_ghosts)
+    
+    skip_databases = (skip_databases or '')
+    if isinstance(skip_databases, basestring):
+        skip_databases = [_.strip() for _ in skip_databases.split(',') if _.strip()]
+        
+    migrate_apps = [
+        _.strip().split('.')[-1]
+        for _ in migrate_apps.strip().split(',')
+        if _.strip()
+    ]
+    if app:
+        migrate_apps.append(app)
+
     render_remote_paths()
-    env.django_migrate_migration = migration
-    env.django_migrate_fake_str = '--fake' if int(fake) else ''
+    
+    _env = type(env)(env)
+    _env.django_migrate_migration = migration or ''
+    _env.django_migrate_fake_str = '--fake' if int(fake) else ''
+    _env.django_migrate_database = '--database=%s' % database if database else ''
+    _env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts else ''
     for site, site_data in iter_unique_databases(site=site):
-        if app in env.django_settings.INSTALLED_APPS:
-            env.django_migrate_app = app
+        
+        print 'migrate_apps:',migrate_apps
+        if migrate_apps:
+            _env.django_migrate_app = ' '.join(migrate_apps)
         else:
-            env.django_migrate_app = ''
+            _env.django_migrate_app = ''
+        
+        _env.SITE = site
         cmd = (
             'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
-            '%(django_manage)s migrate %(django_migrate_app)s %(django_migrate_migration)s '
-            '%(django_migrate_fake_str)s') % env
+            '%(django_manage)s migrate --noinput %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
+            '%(django_migrate_fake_str)s'
+        ) % _env
         cmd = cmd.strip()
         with settings(warn_only=ignore_errors):
             run_or_dryrun(cmd)
@@ -291,13 +320,14 @@ def has_database(name, site=None, role=None):
     return name in settings.DATABASES
 
 @task_or_dryrun
-def get_settings(site=None, role=None, verbose=1):
+def get_settings(site=None, role=None):
     """
     Retrieves the Django settings dictionary.
     """
+    from burlap.common import get_verbose
     stdout = sys.stdout
     stderr = sys.stderr
-    verbose = int(verbose)
+    verbose = get_verbose()
     if not verbose:
         sys.stdout = StringIO()
         sys.stderr = StringIO()
@@ -381,6 +411,167 @@ def get_settings(site=None, role=None, verbose=1):
     return module
 
 @task_or_dryrun
+def execute_sql(fn, name='default', site=None):
+    """
+    Executes an arbitrary SQL file.
+    """
+    from burlap.dj import set_db
+    from burlap.db import load_db_set
+    
+    assert os.path.isfile(fn), 'Missing file: %s' % fn
+    
+    site_summary = {} # {site: ret}
+    
+    for site, site_data in common.iter_sites(site=site, no_secure=True):
+        try:
+                    
+            set_db(name=name, site=site)
+            load_db_set(name=name)
+            env.SITE = site
+                    
+            put_or_dryrun(local_path=fn)
+            
+            with settings(warn_only=True):
+                ret = None
+                if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
+                    ret = run_or_dryrun("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s" % env)
+                                
+                elif 'mysql' in env.db_engine:
+                    ret = run_or_dryrun("mysql -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s" % env)
+                    
+                else:
+                    raise NotImplementedError, 'Unknown database type: %s' % env.db_engine
+                
+            print 'ret:', ret
+            site_summary[site] = ret
+                    
+        except KeyError as e:
+            site_summary[site] = 'Error: %s' % str(e) 
+            pass
+            
+    print '-'*80
+    print 'Site Summary:'
+    for site, ret in sorted(site_summary.items(), key=lambda o: o[0]):
+        print site, ret
+    
+@task_or_dryrun
+def install_sql(name='default', site=None):
+    """
+    Installs all custom SQL.
+    """
+    from burlap.dj import set_db
+    from burlap.db import load_db_set
+    
+    set_db(name=name, site=site)
+    load_db_set(name=name)
+    paths = glob.glob(env.django_install_sql_path_template % env)
+    #paths = glob.glob('%(src_dir)s/%(app_name)s/*/sql/*' % env)
+    
+    def cmp_paths(d0, d1):
+        if d0[1] and d0[1] in d1[2]:
+            return -1
+        if d1[1] and d1[1] in d0[2]:
+            return +1
+        return cmp(d0[0], d1[0])
+    
+    def get_paths(t):
+        """
+        Returns SQL file paths in an execution order that respect dependencies.
+        """
+        data = [] # [(path, view_name, content)]
+        for path in paths:
+            #print path
+            parts = path.split('.')
+            if len(parts) == 3 and parts[1] != t:
+                continue
+            if not path.lower().endswith('.sql'):
+                continue
+            content = open(path, 'r').read()
+            matches = re.findall('[\s\t]+VIEW[\s\t]+([a-zA-Z0-9_]+)', content, flags=re.IGNORECASE)
+            #assert matches, 'Unable to find view name: %s' % (p,)
+            view_name = ''
+            if matches:
+                view_name = matches[0]
+            data.append((path, view_name, content))
+        for d in sorted(data, cmp=cmp_paths):
+            yield d[0]
+    
+    def run_paths(paths, cmd_template, max_retries=3):
+        paths = list(paths)
+        error_counts = defaultdict(int) # {path:count}
+        terminal = set()
+        while paths:
+            path = paths.pop(0)
+            with settings(warn_only=True):
+                put_or_dryrun(local_path=path)
+                cmd = cmd_template % env
+                error_code = run_or_dryrun(cmd)
+                if error_code:
+                    error_counts[path] += 1
+                    if error_counts[path] < max_retries:
+                        paths.append(path)
+                    else:
+                        terminal.add(path)
+        if terminal:
+            print>>sys.stderr, '%i files could not be loaded.' % len(terminal)
+            for path in sorted(list(terminal)):
+                print>>sys.stderr, path
+            print>>sys.stderr
+    
+    if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
+        run_paths(
+            paths=get_paths('postgresql'),
+            cmd_template="psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s")
+                    
+    elif 'mysql' in env.db_engine:
+        run_paths(
+            paths=get_paths('mysql'),
+            cmd_template="mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s")
+            
+    else:
+        raise NotImplementedError
+
+@task_or_dryrun
+def createsuperuser(username='admin', email=None, password=None, site=None):
+    """
+    Runs the Django createsuperuser management command.
+    """
+    from burlap.dj import render_remote_paths
+    
+    set_site(site)
+    
+    render_remote_paths()
+    
+    env.db_createsuperuser_username = username
+    env.db_createsuperuser_email = email or username
+    run_or_dryrun('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s createsuperuser --username=%(db_createsuperuser_username)s --email=%(db_createsuperuser_email)s' % env)
+
+@task_or_dryrun
+def install_fixtures(name, site=None):
+    """
+    Installs a set of Django fixtures.
+    """
+    from burlap.dj import render_remote_paths
+    set_site(site)
+    
+    render_remote_paths()
+    
+    fixtures_paths = env.db_fixture_sets.get(name, [])
+    for fixture_path in fixtures_paths:
+        env.db_fq_fixture_path = os.path.join(env.remote_app_src_package_dir, fixture_path)
+        print 'Loading %s...' % (env.db_fq_fixture_path,)
+        if not env.is_local and not files.exists(env.db_fq_fixture_path):
+            put_or_dryrun(
+                local_path=env.db_fq_fixture_path,
+                remote_path='/tmp/data.json',
+                use_sudo=True,
+                )
+            env.db_fq_fixture_path = env.put_remote_path
+        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s loaddata %(db_fq_fixture_path)s' % env
+        print cmd
+        run_or_dryrun(cmd)
+
+@task_or_dryrun
 def loaddata(path, site=None):
     """
     Runs the Dango loaddata management command.
@@ -404,12 +595,46 @@ def loaddata(path, site=None):
             pass
 
 @task_or_dryrun
+def post_db_create(name=None, site=None):
+    assert env[ROLE]
+    require('app_name')
+    site = site or env.SITE
+    #print 'site:',site
+    set_db(name=name, site=site, verbose=1)
+    load_db_set(name=name)
+#    print 'site:',env[SITE]
+#    print 'role:',env[ROLE]
+    
+    syncdb(all=True, site=site)
+    migrate(fake=True, site=site)
+    install_sql(name=name, site=site)
+    #createsuperuser()
+
+@task_or_dryrun
+def database_files_dump(site=None):
+    """
+    Runs the Django management command to export files stored in the database to the filesystem.
+    Assumes the app django_database_files is installed.
+    """
+    from burlap.dj import render_remote_paths
+    set_site(site or env.SITE)
+    
+    render_remote_paths()
+    
+    cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s database_files_dump' % env
+    if env.is_local:
+        local_or_dryrun(cmd)
+    else:
+        run_or_dryrun(cmd)
+
+@task_or_dryrun
 def record_manifest_media(verbose=0):
     latest_timestamp = -1e9999999999999999
-    for path in iter_static_paths():
-        latest_timestamp = max(
-            latest_timestamp,
-            common.get_last_modified_timestamp(path) or latest_timestamp)
+    if 'dj' in env.services:
+        for path in iter_static_paths():
+            latest_timestamp = max(
+                latest_timestamp,
+                common.get_last_modified_timestamp(path) or latest_timestamp)
     if int(verbose):
         print latest_timestamp
     return latest_timestamp
@@ -417,22 +642,74 @@ def record_manifest_media(verbose=0):
 @task_or_dryrun
 def record_manifest_migrations(verbose=0):
     data = {} # {app: latest_migration_name}
-    for app_name, _dir in iter_app_directories():
-        migration_dir = os.path.join(_dir, 'migrations')
-        if not os.path.isdir(migration_dir):
-            continue
-        for migration_name in iter_migrations(migration_dir):
-            data[app_name] = migration_name
-    if int(verbose):
-        print data
+    if 'dj' in env.services:
+        for app_name, _dir in iter_app_directories():
+            migration_dir = os.path.join(_dir, 'migrations')
+            if not os.path.isdir(migration_dir):
+                continue
+            for migration_name in iter_migrations(migration_dir):
+                data[app_name] = migration_name
+        if int(verbose):
+            print data
     return data
+
+@task_or_dryrun
+#@runs_once
+def update(name=None, site=None, skip_databases=None, do_install_sql=0, migrate_apps=''):
+    """
+    Updates schema and custom SQL.
+    """
+    #from burlap.dj import set_db
     
+    set_db(name=name, site=site)
+    syncdb(site=site) # Note, this loads initial_data fixtures.
+    migrate(
+        site=site,
+        skip_databases=skip_databases,
+        migrate_apps=migrate_apps)
+    if int(do_install_sql):
+        install_sql(name=name, site=site)
+    #TODO:run syncdb --all to force population of new content types?
+
+@task_or_dryrun
+#@runs_once
+def update_all(skip_databases=None, do_install_sql=0, migrate_apps=''):
+    """
+    Runs the Django migrate command for all unique databases
+    for all available sites.
+    """
+    from burlap.common import get_current_hostname
+    hostname = get_current_hostname()
+    
+    if env.available_sites_by_host:
+        sites = env.available_sites_by_host.get(hostname, [])
+    else:
+        sites = env.available_sites
+    
+    for site in sites:
+        update(
+            site=site,
+            skip_databases=skip_databases,
+            do_install_sql=do_install_sql,
+            migrate_apps=migrate_apps)
+
+@task_or_dryrun
+def update_all_from_diff(last=None, current=None):
+    migrate_apps = []
+    if last and current:
+        last = last['DJANGO_MIGRATIONS']
+        current = current['DJANGO_MIGRATIONS']
+        for app_name in current:
+            if current[app_name] != last.get(app_name):
+                migrate_apps.append(app_name)
+    return update_all(migrate_apps=','.join(migrate_apps))
+
 common.manifest_recorder[DJANGO_MEDIA] = record_manifest_media
 common.manifest_recorder[DJANGO_MIGRATIONS] = record_manifest_migrations
 
 # DJANGO_SYNCDB = 'DJANGO_SYNCDB'
 # DJANGO_MIGRATIONS = 'DJANGO_MIGRATIONS'
 
-common.add_deployer(DJANGO_MIGRATIONS, 'db.update_all_from_diff',
+common.add_deployer(DJANGO_MIGRATIONS, 'dj.update_all_from_diff',
     before=['packager', 'apache', 'apache2', 'pip', 'tarball', 'django_media'],
     takes_diff=True)

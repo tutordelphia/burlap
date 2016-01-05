@@ -117,13 +117,13 @@ def create_supervisor_services():
     render_paths()
     
     conf_name = 'celery_%s.conf' % env.SITE
-    ret = common.render_to_string('celery_supervisor.template.conf')
+    ret = common.render_to_string('celery/celery_supervisor.template.conf')
     #print ret
     return conf_name, ret
 
 def register_callbacks():
-    from burlap.supervisor import register_callback
-    register_callback(create_supervisor_services)
+    from burlap.supervisor import supervisor_satchel
+    supervisor_satchel.register_callback(create_supervisor_services)
 
 env.post_callbacks.append(register_callbacks)
 

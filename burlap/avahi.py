@@ -1,60 +1,50 @@
 
-from fabric.api import env
-
-from burlap import common
-from burlap.common import (
-    ServiceSatchel,
-)
-
-AVAHI = 'avahi'
-
-if 'avahi_enabled' not in env:
-    
-    env.avahi_enabled = True
-    env.avahi_daemon_name = 'avahi-daemon'
-
-    env.avahi_service_commands = {
-        common.START:{
-            common.UBUNTU: 'service %s start' % env.avahi_daemon_name,
-        },
-        common.STOP:{
-            common.UBUNTU: 'service %s stop' % env.avahi_daemon_name,
-        },
-        common.DISABLE:{
-            common.UBUNTU: 'chkconfig %s off' % env.avahi_daemon_name,
-        },
-        common.ENABLE:{
-            common.UBUNTU: 'chkconfig %s on' % env.avahi_daemon_name,
-        },
-        common.RESTART:{
-            common.UBUNTU: 'service %s restart' % env.avahi_daemon_name,
-        },
-        common.STATUS:{
-            common.UBUNTU: 'service %s status' % env.avahi_daemon_name,
-        },
-    }
-    
-common.required_system_packages[AVAHI] = {
-    common.UBUNTU: ['avahi-daemon'],
-}
+from burlap import ServiceSatchel
+from burlap.constants import *
 
 class AvahiSatchel(ServiceSatchel):
     
-    name = AVAHI
+    name = 'avahi'
     
     ## Service options.
     
     #ignore_errors = True
     
-    # {action: {os_version_distro: command}}
-    commands = env.avahi_service_commands
-    
+    required_system_packages = {
+        UBUNTU: ['avahi-daemon'],
+    }
+
     tasks = (
         'configure',
     )
     
+    def set_defaults(self):
+            
+        self.env.daemon_name = 'avahi-daemon'
+    
+        self.env.service_commands = {
+            START:{
+                UBUNTU: 'service %s start' % self.env.daemon_name,
+            },
+            STOP:{
+                UBUNTU: 'service %s stop' % self.env.daemon_name,
+            },
+            DISABLE:{
+                UBUNTU: 'chkconfig %s off' % self.env.daemon_name,
+            },
+            ENABLE:{
+                UBUNTU: 'chkconfig %s on' % self.env.daemon_name,
+            },
+            RESTART:{
+                UBUNTU: 'service %s restart' % self.env.daemon_name,
+            },
+            STATUS:{
+                UBUNTU: 'service %s status' % self.env.daemon_name,
+            },
+        }
+    
     def configure(self):
-        if env.avahi_enabled:
+        if self.env.enabled:
             self.enable()
             self.restart()
         else:
