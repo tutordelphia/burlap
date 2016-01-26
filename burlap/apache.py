@@ -166,6 +166,9 @@ class ApacheSatchel(ServiceSatchel):
         # your web application.
         self.env.application_name = None
         
+        # The Jinja-formatted template file used to render site configurations.
+        self.env.site_template = 'apache/apache_site.template.conf'
+        
         self.env.error_log = '/var/log/apache2/error.log'
         self.env.log_level = 'warn'
         
@@ -454,6 +457,7 @@ class ApacheSatchel(ServiceSatchel):
         for a future deployment.
         """
         data = self.get_apache_settings()
+        data['site_template_contents'] = self.get_template_contents(self.env.site_template)
         if self.verbose:
             pprint(data, indent=4)
         return data
@@ -514,7 +518,7 @@ class ApacheSatchel(ServiceSatchel):
             if self.genv.apache_ssl:
                 self.genv.apache_ssl_certificates = list(self.iter_certificates())
             
-            fn = self.render_to_file('apache/apache_site.template.conf', verbose=verbose)
+            fn = self.render_to_file(self.env.site_template, verbose=verbose)
             self.genv.apache_site_conf = site+'.conf'
             self.genv.apache_site_conf_fqfn = os.path.join(self.genv.apache_sites_available, self.genv.apache_site_conf)
             self.put_or_dryrun(local_path=fn, remote_path=self.genv.apache_site_conf_fqfn, use_sudo=True)

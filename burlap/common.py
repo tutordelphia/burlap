@@ -382,6 +382,9 @@ class Satchel(object):
     def find_template(self, template):
         return find_template(template)
     
+    def get_template_contents(self, template):
+        return get_template_contents(template)
+    
     def install_packages(self):
         os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
 #         print('os_version:', os_version)
@@ -1098,6 +1101,10 @@ def find_template(template):
             if verbose:
                 print('Template not found: %s' % (fqfn,))
     return final_fqfn
+
+def get_template_contents(template):
+    final_fqfn = find_template(template)
+    return open(final_fqfn).read()
 
 def render_to_string(template, extra=None):
     """

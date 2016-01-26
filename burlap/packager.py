@@ -19,6 +19,7 @@ class PackagerSatchel(Satchel):
         'upgrade',
         'list_required',
         'install_required',
+        'kill_apt_get',
     )
     
     def set_defaults(self):
@@ -112,6 +113,10 @@ class PackagerSatchel(Satchel):
         else:
             raise Exception, 'Unknown packager: %s' % (packager,)
     
+    def kill_apt_get(self):
+        self.sudo_or_dryrun('killall apt-get')
+        self.sudo_or_dryrun('dpkg --configure -a')
+    
     def refresh(self, *args, **kwargs):
         """
         Updates/upgrades all system packages.
@@ -128,13 +133,14 @@ class PackagerSatchel(Satchel):
     def refresh_apt(self):
         self.sudo_or_dryrun('apt-get update -y --fix-missing')
     
-    def upgrade(*args, **kwargs):
+    def upgrade(self, *args, **kwargs):
         """
         Updates/upgrades all system packages.
         """
         packager = self.packager
         if packager == APT:
-            return self.upgrade_apt(*args, **kwargs)
+            #return self.upgrade_apt(*args, **kwargs)
+            return self.sudo_or_dryrun('apt-get upgrade -y')
         elif package == YUM:
             raise NotImplementedError
             #return upgrade_yum(*args, **kwargs)

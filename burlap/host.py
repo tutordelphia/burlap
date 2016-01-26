@@ -58,6 +58,10 @@ def list_public_ips(show_hostname=0):
         else:
             print output
 
+@task_or_dryrun
+def reboot():
+    common.sudo_or_dryrun('reboot now; sleep 10;')
+
 class HostnameSatchel(Satchel):
     
     name = 'hostname'

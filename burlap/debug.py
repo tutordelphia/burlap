@@ -172,7 +172,7 @@ def info():
 
 @task_or_dryrun
 @runs_once
-def shell(gui=0):
+def shell(gui=0, command=''):
     """
     Opens a UNIX shell.
     """
@@ -203,7 +203,11 @@ def shell(gui=0):
     _env.shell_check_host_key_str = '-o StrictHostKeyChecking=no'
     
     _env.shell_default_dir = _env.shell_default_dir_template % _env
-    _env.shell_interactive_shell_str = _env.shell_interactive_shell % _env
+    if command:
+        _env.shell_interactive_shell_str = command
+    else:
+        _env.shell_interactive_shell_str = _env.shell_interactive_shell % _env
+    
     if _env.is_local:
         cmd = '%(shell_interactive_shell_str)s' % _env
     elif _env.key_filename:
