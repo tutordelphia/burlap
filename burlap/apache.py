@@ -675,7 +675,7 @@ class ApacheMediaSatchel(Satchel):
     name = 'apachemedia'
     
     tasks = (
-        'configure_apache_media',
+        'configure',
     )
     
     def sync_media(self, sync_set=None, clean=0, iter_local_paths=0):
@@ -744,10 +744,10 @@ class ApacheMediaSatchel(Satchel):
             print data
         return data
         
-    def configure_apache_media(self):
+    def configure(self):
         self.sync_media()
-    configure_apache_media.is_deployer = True
-    configure_apache_media.deploy_before = ['packager', 'apache', 'apache2', 'pip', 'tarball']
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'apache', 'apache2', 'pip', 'tarball']
             
 apache = ApacheSatchel()
 

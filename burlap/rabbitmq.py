@@ -9,10 +9,10 @@ class RabbitMQBleedingSatchel(Satchel):
     name = 'rabbitmqbleeding'
     
     tasks = (
-        'configure_bleeding',
+        'configure',
     )
     
-    def configure_bleeding(self):
+    def configure(self):
         """
         Enables the repository for a most current version on Debian systems.
         
@@ -25,8 +25,8 @@ class RabbitMQBleedingSatchel(Satchel):
             'apt-key add rabbitmq-signing-key-public.asc')
         self.sudo_or_dryrun('apt-get update')
         
-    configure_bleeding.is_deployer = True
-    configure_bleeding.deploy_before = ['packager', 'rabbitmq']
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'rabbitmq']
     
 class RabbitMQSatchel(ServiceSatchel):
     

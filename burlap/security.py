@@ -10,7 +10,7 @@ class UnattendedUpgradesSatchel(Satchel):
     Enables various degrees of automatic package download and installation.
     """
     
-    name = 'securityunattendedupgrades'
+    name = 'unattendedupgrades'
     
     required_system_packages = {
         UBUNTU: ['unattended-upgrades'],

@@ -259,6 +259,11 @@ def populate_fabfile():
         # Put all debug commands into the global namespace.
         for _debug_name in dir(debug):
             locals_[_debug_name] = getattr(debug, _debug_name)
+        
+        # Put all virtual satchels in the global namespace so Fabric can find them.
+        for _module_alias in common._post_import_modules:
+            exec "import %s" % _module_alias
+            locals_[_module_alias] = locals()[_module_alias]
             
 #         locals_['shell'] = debug.shell
 #         locals_['info'] = debug.info

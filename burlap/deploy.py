@@ -779,10 +779,15 @@ def truncate():
     """
     Compacts all deployment records into a single initial deployment.
     """
-    #TODO:add support for remote storage
     d = os.path.join(init_plan_data_dir(), env.ROLE)
-    local_or_dryrun('rm -Rf "%s"' % d)
-    local_or_dryrun('mkdir -p "%s"' % d)
+    if env.plan_storage == STORAGE_REMOTE:
+        sudo_or_dryrun('rm -Rf "%s"' % d)
+        sudo_or_dryrun('mkdir -p "%s"' % d)
+    elif env.plan_storage == STORAGE_LOCAL:
+        local_or_dryrun('rm -Rf "%s"' % d)
+        local_or_dryrun('mkdir -p "%s"' % d)
+    else:
+        raise NotImplementedError
     if not common.get_dryrun():
         fabric.api.execute(thumbprint, hosts=env.hosts)
 

@@ -74,7 +74,7 @@ class LoginNotifierSatchel(Satchel):
     name = 'loginnotifier'
     
     tasks = (
-        'configure_loginnotifier',
+        'configure',
     )
     
     def set_defaults(self):
@@ -85,7 +85,7 @@ class LoginNotifierSatchel(Satchel):
         self.env.script_group = 'root'
         self.env.script_chmod = 'u+rx,g+rx'
         
-    def configure_loginnotifier(self):
+    def configure(self):
         
         if self.env.enabled:
             fn = self.render_to_file(self.env.script_template)
@@ -102,8 +102,8 @@ class LoginNotifierSatchel(Satchel):
         else:
             self.sudo_or_dryrun('rm {script_installation_path}')
             
-    configure_loginnotifier.is_deployer = True
-    configure_loginnotifier.deploy_before = ['packager', 'user']
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'user']
 
 deployment_notifier = DeploymentNotifierSatchel()
 notify_post_deployment = deployment_notifier.notify_post_deployment

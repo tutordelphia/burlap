@@ -89,6 +89,8 @@ manifest_deployers_befores = type(env)() #{component:[pending components that mu
 #manifest_deployers_afters = type(env)() #{component:[pending components that must be run last]}
 manifest_deployers_takes_diff = type(env)()
 
+_post_import_modules = set()
+
 class Colors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -111,19 +113,26 @@ def print_fail(s, file=None):
 def print_success(s, file=None):
     print(Colors.OKGREEN + str(s) + Colors.ENDC, file=file or sys.stdout)
 
-def create_module(name):
+def create_module(name, code=None):
     """
     Dynamically creates a module with the given name.
     """
     import sys, imp
 
-    assert name not in sys.modules, 'Module %s has already been registered!' % name
-    module = imp.new_module(name)
-    sys.modules[name] = module
+    if name not in sys.modules:
+        sys.modules[name] = imp.new_module(name)
+
+    module = sys.modules[name]
+    
+    if code:
+        print('executing code for %s: %s' % (name, code))
+        exec code in module.__dict__
+        exec "from %s import %s" % (name, '*')
 
     return module
 
 #http://www.saltycrane.com/blog/2010/09/class-based-fabric-scripts-metaprogramming-hack/
+#http://stackoverflow.com/questions/3799545/dynamically-importing-python-module/3799609#3799609
 def add_class_methods_as_module_level_functions_for_fabric(instance, module_name, method_name, module_alias=None):
     '''
     Utility to take the methods of the instance of a class, instance,
@@ -151,31 +160,31 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
         # get the bound method
         func = getattr(instance, method_name)
         
-        #http://stackoverflow.com/questions/3799545/dynamically-importing-python-module/3799609#3799609
-#         if module_alias and module_alias not in sys.modules:
-#             module_obj = imp.new_module(module_alias)
-#             #exec "" in module_obj.__dict__
-#             sys.modules[module_alias] = module_obj
-        print('-'*80)
-        print('module_name:', module_name)
-        print('method_name:', method_name)
-        print('module_alias:', module_alias)
-        print('module_obj:', module_obj)
-        print('func.module:', func.__module__)
+#         print('-'*80)
+#         print('module_name:', module_name)
+#         print('method_name:', method_name)
+#         print('module_alias:', module_alias)
+#         print('module_obj:', module_obj)
+#         print('func.module:', func.__module__)
         
         # Convert executable to a Fabric task, if not done so already.
         if not hasattr(func, 'is_task_or_dryrun'):
-#             if module_alias:
-#                 func = task_or_dryrun(func)#, alias='%s.%s' % (module_alias, method_name))
-#             else:
-            func = task_or_dryrun(func)#, real_module=module_obj)
+            func = task_or_dryrun(func)
 
-        # add the function to the current module
-#         print('setattr:', module_obj, method_name, module_alias)
-        setattr(module_obj, method_name, func)
+        if module_name == module_alias:
+
+            # add the function to the current module
+            setattr(module_obj, method_name, func)
+            
+        else:
+            
+            # Dynamically create a module for the virtual satchel.
+            _module_obj = module_obj
+            module_obj = create_module(module_alias)
+            setattr(module_obj, method_name, func)
+            _post_import_modules.add(module_alias)
         
         fabric_name = '%s.%s' % (module_alias or module_name, method_name)
-#         print('fabric_name:', fabric_name)
         func.wrapped.__func__.fabric_name = fabric_name
         
         return func

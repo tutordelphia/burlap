@@ -16,7 +16,7 @@ class PostfixSatchel(ServiceSatchel):
 #     commands = env.postfix_service_commands
     
     tasks = (
-        'configure_postfix',
+        'configure',
     )
     
     required_system_packages = {
@@ -54,7 +54,7 @@ class PostfixSatchel(ServiceSatchel):
             },
         }
     
-    def configure_postfix():
+    def configure():
         
         if self.env.postfix_enabled:
             
@@ -93,8 +93,8 @@ class PostfixSatchel(ServiceSatchel):
             self.disable()
             self.stop()
     
-    configure_postfix.is_deployer = True
-    configure_postfix.deploy_before = ['packager', 'user']
-    configure_postfix.deploy_after = []
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'user']
+    configure.deploy_after = []
     
 PostfixSatchel()

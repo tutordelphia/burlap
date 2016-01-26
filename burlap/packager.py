@@ -234,10 +234,10 @@ class UbuntuMultiverseSatchel(Satchel):
     name = 'ubuntumultiverse'
      
     tasks = (
-        'configure_umv',
+        'configure',
     )
          
-    def configure_umv(self):
+    def configure(self):
         """
         Returns one or more Deployer instances, representing tasks to run during a deployment.
         """
@@ -250,8 +250,8 @@ class UbuntuMultiverseSatchel(Satchel):
             self.sudo_or_dryrun('sed -i "/^# // s/^# deb.*multiverse/" /etc/apt/sources.list')
             self.sudo_or_dryrun('apt-get update')
              
-    configure_umv.is_deployer = True
-    configure_umv.deploy_before = []
+    configure.is_deployer = True
+    configure.deploy_before = []
 
 packager = PackagerSatchel()
 umv = UbuntuMultiverseSatchel()
