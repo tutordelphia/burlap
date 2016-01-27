@@ -160,18 +160,20 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
         # get the bound method
         func = getattr(instance, method_name)
         
-#         print('-'*80)
-#         print('module_name:', module_name)
-#         print('method_name:', method_name)
-#         print('module_alias:', module_alias)
-#         print('module_obj:', module_obj)
-#         print('func.module:', func.__module__)
+#         if module_name == 'buildbot' or module_alias == 'buildbot':
+#             print('-'*80)
+#             print('module_name:', module_name)
+#             print('method_name:', method_name)
+#             print('module_alias:', module_alias)
+#             print('module_obj:', module_obj)
+#             print('func.module:', func.__module__)
         
         # Convert executable to a Fabric task, if not done so already.
         if not hasattr(func, 'is_task_or_dryrun'):
             func = task_or_dryrun(func)
 
-        if module_name == module_alias:
+        if module_name == module_alias \
+        or (module_name.startswith('satchels.') and module_name.endswith(module_alias)):
 
             # add the function to the current module
             setattr(module_obj, method_name, func)
