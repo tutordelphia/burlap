@@ -12,6 +12,9 @@ from fabric.api import (
 from fabric.contrib import files
 from fabric.tasks import Task
 
+from burlap.constants import *
+from burlap import Satchel
+
 from burlap import common
 from burlap.common import (
     run_or_dryrun,
@@ -27,16 +30,7 @@ from burlap.common import (
 )
 from burlap.decorators import task_or_dryrun
 
-env.user_tmp_sudoers_fn = '/tmp/sudoers'
-env.user_groups = []
-env.user_key_type = 'rsa' # e.g. rsa|dsa
-env.user_key_bits = 2048 # e.g. 1024, 2048, or 4096
-env.user_key_filename = None
-env.user_home_template = '/home/%(user_username)s'
-env.user_passwordless = True
-
-USER = 'USER'
-
+#DEPRECATED
 @task_or_dryrun
 def create(username):
     """
@@ -44,21 +38,7 @@ def create(username):
     """
     sudo_or_dryrun('adduser %s' % username)
 
-@task_or_dryrun
-def togroups(user=None, groups=None):
-    """
-    Adds the user to the given list of groups.
-    """
-    user = user or env.user
-    groups = groups or env.user_groups
-    if isinstance(groups, basestring):
-        groups = [_ for _ in groups.split(',') if _.strip()]
-    for group in groups:
-        env.user_username = user
-        env.user_group = group
-        sudo_or_dryrun('groupadd --force %(user_group)s' % env)
-        sudo_or_dryrun('adduser %(user_username)s %(user_group)s' % env)
-
+#DEPRECATED
 @task_or_dryrun
 def generate_keys():
     """
@@ -76,6 +56,7 @@ def generate_keys():
         else:
             os.rename(src, dst)
 
+#DEPRECATED
 @task_or_dryrun
 def passwordless(username=None, pubkey=None):
     """
@@ -108,16 +89,7 @@ def passwordless(username=None, pubkey=None):
     print 'You should now be able to login with:'
     print '\tssh -i %(user_pemkey)s %(user_username)s@%(host_string)s' % env
 
-@task_or_dryrun
-def record_manifest():
-    """
-    Called after a deployment to record any data necessary to detect changes
-    for a future deployment.
-    """
-    data = common.get_component_settings(USER)
-    data['user'] = env.user
-    return data
-
+#DEPRECATED
 def compare_manifest(old):
     old = old or {}
     methods = []
@@ -149,8 +121,46 @@ def compare_manifest(old):
     #TODO: Handle switch from passwordless access? Remove old SSH key from remote and local caches?
     
     return methods
-    
-common.manifest_recorder[USER] = record_manifest
-common.manifest_comparer[USER] = compare_manifest
 
-common.add_deployer(USER, 'user.togroups', before=[])
+class UserSatchel(Satchel):
+    
+    name = 'user'
+    
+    tasks = (
+        'configure',
+        'togroups',
+    )
+    
+    def set_defaults(self):
+                
+        self.env.tmp_sudoers_fn = '/tmp/sudoers'
+        self.env.groups = []
+        self.env.key_type = 'rsa' # e.g. rsa|dsa
+        self.env.key_bits = 2048 # e.g. 1024, 2048, or 4096
+        self.env.key_filename = None
+        self.env.home_template = '/home/%(user_username)s'
+        self.env.passwordless = True
+
+    def togroups(self, user=None, groups=None):
+        """
+        Adds the user to the given list of groups.
+        """
+        
+        _env = type(self.genv)(self.genv)
+        
+        user = user or _env.user
+        groups = groups or _env.user_groups
+        if isinstance(groups, basestring):
+            groups = [_ for _ in groups.split(',') if _.strip()]
+        for group in groups:
+            _env.user_username = user
+            _env.user_group = group
+            self.sudo_or_dryrun('groupadd --force %(user_group)s' % _env)
+            self.sudo_or_dryrun('adduser %(user_username)s %(user_group)s' % _env)
+
+    def configure(self):
+        self.togroups()
+    configure.is_deployer = True
+    configure.deploy_before = []
+
+UserSatchel()

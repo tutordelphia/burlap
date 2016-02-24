@@ -217,12 +217,15 @@ class PackagerSatchel(Satchel):
                 fout = open(fn, 'w')
                 fout.write(content)
                 fout.close()
-                install_custom(fn=fn)
+                self.install_custom(fn=fn)
             else:
                 raise NotImplementedError
         return lst
 
     def configure(self, **kwargs):
+        for satchel_name, satchel in self.all_satchels.iteritems():
+            if hasattr(satchel, 'packager_pre_configure'):
+                satchel.packager_pre_configure()
         self.refresh()
         self.install_required(type=SYSTEM, **kwargs)
         self.install_custom(**kwargs)

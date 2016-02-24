@@ -75,14 +75,25 @@ PENDING = 'pending'
 
 PIP = 'PIP'
 
-def render_paths():
+def render_paths(e=None):
     from burlap.dj import render_remote_paths
-    env.pip_path_versioned = env.pip_path % env
-    render_remote_paths()
-    if env.pip_virtual_env_dir_template:
-        env.pip_virtual_env_dir = env.pip_virtual_env_dir_template % env
-    if env.is_local:
-        env.pip_virtual_env_dir = os.path.abspath(env.pip_virtual_env_dir)
+    
+    _global_env = e is None
+    
+    e = e or env
+    e = type(e)(e)
+    
+    e.pip_path_versioned = e.pip_path % e
+    e = render_remote_paths(e)
+    if e.pip_virtual_env_dir_template:
+        e.pip_virtual_env_dir = e.pip_virtual_env_dir_template % e
+    if e.is_local:
+        e.pip_virtual_env_dir = os.path.abspath(e.pip_virtual_env_dir)
+    
+    if _global_env:
+        env.update(e)
+    
+    return e
 
 def clean_virtualenv(virtualenv_dir=None):
     render_paths()
@@ -925,8 +936,8 @@ class PIPSatchel(Satchel):
             print data
         return data
     
-    def configure(self):
-        return update_install()
+    def configure(self, *args, **kwargs):
+        return update_install(*args, **kwargs)
     configure.is_deployer = True
     configure.deploy_before = ['packager', 'user']
         

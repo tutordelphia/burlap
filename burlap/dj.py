@@ -6,6 +6,8 @@ import sys
 import importlib
 import traceback
 import commands
+import glob
+from collections import defaultdict
 from StringIO import StringIO
 
 from fabric.api import (
@@ -15,6 +17,7 @@ from fabric.api import (
     cd,
 )
 
+from burlap import Satchel
 from burlap import common
 from burlap.common import (
     ROLE, QueuedCommand, ALL,
@@ -22,6 +25,7 @@ from burlap.common import (
     run_or_dryrun,
     local_or_dryrun,
     put_or_dryrun,
+    set_site,
 )
 from burlap.decorators import task_or_dryrun
 
@@ -67,38 +71,49 @@ DJANGO_MIGRATIONS = 'DJANGO_MIGRATIONS'
 def check_remote_paths(verbose=1):
     if 'django_settings_module' in env:
         return
-    render_remote_paths(verbose)
+    render_remote_paths()
 
 @task_or_dryrun
-def render_remote_paths(verbose=0):
-    verbose = int(verbose)
+def render_remote_paths(e=None):
+    verbose = common.get_verbose()
+    
+    _global_env = e is None
+    
+    e = e or env
+    e = type(e)(e)
+    
     try:
-        env.django_settings_module = env.django_settings_module_template % env
+        e.django_settings_module = e.django_settings_module_template % e
     except KeyError:
         pass
-    env.remote_app_dir = env.remote_app_dir_template % env
-    env.remote_app_src_dir = env.remote_app_src_dir_template % env
-    env.remote_app_src_package_dir = env.remote_app_src_package_dir_template % env
-    if env.is_local:
-        if env.remote_app_dir.startswith('./') or env.remote_app_dir == '.':
-            env.remote_app_dir = os.path.abspath(env.remote_app_dir)
-        if env.remote_app_src_dir.startswith('./') or env.remote_app_src_dir == '.':
-            env.remote_app_src_dir = os.path.abspath(env.remote_app_src_dir)
-        if env.remote_app_src_package_dir.startswith('./') or env.remote_app_src_package_dir == '.':
-            env.remote_app_src_package_dir = os.path.abspath(env.remote_app_src_package_dir)
-    env.remote_manage_dir = env.remote_manage_dir_template % env
-    env.shell_default_dir = env.shell_default_dir_template % env
+    e.remote_app_dir = e.remote_app_dir_template % e
+    e.remote_app_src_dir = e.remote_app_src_dir_template % e
+    e.remote_app_src_package_dir = e.remote_app_src_package_dir_template % e
+    if e.is_local:
+        if e.remote_app_dir.startswith('./') or e.remote_app_dir == '.':
+            e.remote_app_dir = os.path.abspath(e.remote_app_dir)
+        if e.remote_app_src_dir.startswith('./') or e.remote_app_src_dir == '.':
+            e.remote_app_src_dir = os.path.abspath(e.remote_app_src_dir)
+        if e.remote_app_src_package_dir.startswith('./') or e.remote_app_src_package_dir == '.':
+            e.remote_app_src_package_dir = os.path.abspath(e.remote_app_src_package_dir)
+    e.remote_manage_dir = e.remote_manage_dir_template % e
+    e.shell_default_dir = e.shell_default_dir_template % e
     if verbose:
         print 'render_remote_paths'
-        print 'django_settings_module_template:',env.django_settings_module_template
-        print 'django_settings_module:',env.django_settings_module
-        print 'shell_default_dir:',env.shell_default_dir
-        print 'src_dir:',env.src_dir
-        print 'remote_app_dir:',env.remote_app_dir
-        print 'remote_app_src_dir:',env.remote_app_src_dir
-        print 'remote_app_src_package_dir_template:',env.remote_app_src_package_dir_template
-        print 'remote_app_src_package_dir:',env.remote_app_src_package_dir
-        print 'remote_manage_dir:',env.remote_manage_dir
+        print 'django_settings_module_template:',e.django_settings_module_template
+        print 'django_settings_module:',e.django_settings_module
+        print 'shell_default_dir:',e.shell_default_dir
+        print 'src_dir:',e.src_dir
+        print 'remote_app_dir:',e.remote_app_dir
+        print 'remote_app_src_dir:',e.remote_app_src_dir
+        print 'remote_app_src_package_dir_template:',e.remote_app_src_package_dir_template
+        print 'remote_app_src_package_dir:',e.remote_app_src_package_dir
+        print 'remote_manage_dir:',e.remote_manage_dir
+    
+    if _global_env:
+        env.update(e)
+    
+    return e
 
 def load_django_settings():
     """
@@ -197,16 +212,24 @@ def shell():
     os.system(cmd)
     
 @task_or_dryrun
-def syncdb(site=None):
+def syncdb(site=None, all=0, database=None):
     """
     Runs the standard Django syncdb command for one or more sites.
     """
     
-    render_remote_paths()
+    _env = type(env)(env)
+    
+    _env.db_syncdb_all_flag = '--all' if int(all) else ''
+    
+    _env.db_syncdb_database = ''
+    if database:
+        _env.db_syncdb_database = ' --database=%s' % database
+
+    _env = render_remote_paths(e=_env)
     for site, site_data in iter_unique_databases(site=site):
         cmd = (
             'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
-            '%(django_manage)s syncdb') % env
+            '%(django_manage)s syncdb %(db_syncdb_all_flag)s %(db_syncdb_database)s') % _env
         run_or_dryrun(cmd)
 
 @task_or_dryrun
@@ -280,6 +303,19 @@ def migrate_all(*args, **kwargs):
     kwargs['site'] = 'all'
     return migrate(*args, **kwargs)
     
+@task_or_dryrun
+def create_db(name=None):
+    from burlap.db import create
+    set_db(name=name)
+    create(
+        name=name,
+        db_engine=env.db_engine,
+        db_user=env.db_user,
+        db_host=env.db_host,
+        db_password=env.db_password,
+        db_name=env.db_name,
+    )
+
 def set_db(name=None, site=None, role=None, verbose=0):
     name = name or 'default'
 #    print '!'*80
@@ -704,6 +740,35 @@ def update_all_from_diff(last=None, current=None):
                 migrate_apps.append(app_name)
     return update_all(migrate_apps=','.join(migrate_apps))
 
+class DjangoMediaSatchel(Satchel):
+    
+    name = 'djangomedia'
+    
+    tasks = (
+        'configure',
+    )
+    
+    def set_defaults(self):
+        super(DjangoMediaSatchel, self).set_defaults()
+        
+        self.env.media_dirs = ['static']
+        self.env.manage_dir = 'src'
+    
+    def record_manifest(self):
+        from burlap.common import get_last_modified_timestamp
+        data = 0
+        for path in self.env.media_dirs:
+            data = min(data, get_last_modified_timestamp(path) or data)
+        #TODO:hash media names and content
+        if self.verbose:
+            print data
+        return data
+    
+    def configure(self, *args, **kwargs):
+        self.local_or_dryrun('cd %(manage_dir)s; ./manage collectstatic --noinput' % self.lenv)
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'apache2', 'pip', 'user']
+
 common.manifest_recorder[DJANGO_MEDIA] = record_manifest_media
 common.manifest_recorder[DJANGO_MIGRATIONS] = record_manifest_migrations
 
@@ -713,3 +778,5 @@ common.manifest_recorder[DJANGO_MIGRATIONS] = record_manifest_migrations
 common.add_deployer(DJANGO_MIGRATIONS, 'dj.update_all_from_diff',
     before=['packager', 'apache', 'apache2', 'pip', 'tarball', 'django_media'],
     takes_diff=True)
+
+DjangoMediaSatchel()

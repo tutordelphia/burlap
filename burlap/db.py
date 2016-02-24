@@ -106,14 +106,8 @@ MYSQL = 'MYSQL'
 MYSQLGIS = 'MYSQLGIS'
 MYSQLCLIENT = 'MYSQLCLIENT'
 POSTGRESQL = 'POSTGRESQL'
+POSTGRESQLCLIENT = 'POSTGRESQLCLIENT'
 POSTGIS = 'POSTGIS'
-
-# @task_or_dryrun
-# def test():
-#     import inspect
-#     print 'run:',run,inspect.getsourcefile(run)
-#     run_or_dryrun('who -b')
-#     sudo_or_dryrun('ls /etc/apache/sites-available')
 
 @task_or_dryrun
 def load_db_set(name):
@@ -200,31 +194,39 @@ def exists(name='default', site=None):
         print('%s database on site %s %s exist' % (name, env.SITE, 'DOES' if ret else 'DOES NOT'))
         return ret
 
-
-def set_root_login(db_type=None, db_host=None):
+def set_root_login(db_type=None, db_host=None, e=None):
     """
     Looks up the root login for the given database on the given host and sets
     it to environment variables. 
     """
     
+    if e:
+        _env = e
+        _env = type(_env)(_env)
+    else:
+        _env = env
+    
+    # Check the legacy password location.
     if db_type is None:
-        if 'mysql' in env.db_engine:
+        if 'mysql' in _env.db_engine:
             db_type = 'mysql'
-        elif 'postgres' in env.db_engine or 'postgis' in env.db_engine:
+            _env.db_root_password = _env.mysql_root_password
+        elif 'postgres' in _env.db_engine or 'postgis' in _env.db_engine:
             db_type = 'postgresql'
         else:
             raise NotImplementedError
     
-    db_host = db_host or env.db_host
-    
+    # Check the new password location.
+    db_host = db_host or _env.db_host
     key = '%s-%s' % (db_type, db_host)
-    print 'key:',key
-    if key in env.db_root_logins:
-        data = env.db_root_logins[key]
+    if key in _env.db_root_logins:
+        data = _env.db_root_logins[key]
         if 'username' in data:
-            env.db_root_user = data['username']
+            _env.db_root_user = data['username']
         if 'password' in data:
-            env.db_root_password = data['password']
+            _env.db_root_password = data['password']
+            
+    return _env
 
 @task_or_dryrun
 def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db_user=None, db_host=None, db_password=None, db_name=None):
@@ -872,7 +874,7 @@ def set_max_mysql_packet_size(do_set=1):
         'max_allowed_packet=%(db_mysql_max_allowed_packet)s;"') % env)
 
 @task_or_dryrun
-def prep_mysql_root_password():
+def prep_root_password():
     args = dict(
         db_root_password=env.db_mysql_root_password or env.db_root_password,
     )
@@ -968,7 +970,7 @@ class DatabaseSatchel(ServiceSatchel):
         # If set, allows remote users to connect to the database.
         # This shouldn't be necessary if the webserver and database
         # share the same server.
-        env.allow_remote_connections = False
+        self.env.allow_remote_connections = False
         
     def shell(self, name='default', user=None, password=None, root=0, verbose=1, write_password=1, no_db=0, no_pw=0):
         """
@@ -977,7 +979,7 @@ class DatabaseSatchel(ServiceSatchel):
         """
         from burlap.dj import set_db
         
-        verbose = common.get_verbose()
+        verbose = self.verbose
         
         root = int(root)
         write_password = int(write_password)
@@ -1100,9 +1102,10 @@ class MySQLSatchel(DatabaseSatchel):
     name = 'mysql'
     
     tasks = (
-        'configure_mysql',
-        'set_max_mysql_packet_size',
-        'prep_mysql_root_password',
+        'configure',
+        'set_max_packet_size',
+        'prep_root_password',
+        'set_root_password',
     )
     
     required_system_packages = {
@@ -1118,17 +1121,17 @@ class MySQLSatchel(DatabaseSatchel):
         # You want this to be large, and set in both the client and server.
         # Otherwise, MySQL may silently truncate database dumps, leading to much
         # frustration.
-        env.max_allowed_packet = 524288000 # 500M
+        self.env.max_allowed_packet = 524288000 # 500M
         
-        env.net_buffer_length = 1000000
-        env.conf = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
-        env.dump_command = 'mysqldump --opt --compress --max_allowed_packet=%(mysql_max_allowed_packet)s --force --single-transaction --quick --user %(db_user)s --password=%(db_password)s -h %(db_host)s %(db_name)s | gzip > %(db_dump_fn)s'
-        env.preload_commands = []
-        env.character_set = 'utf8'
-        env.collate = 'utf8_general_ci'
-        env.port = 3306
-        env.root_password = None
-        env.custom_mycnf = False
+        self.env.net_buffer_length = 1000000
+        self.env.conf = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
+        self.env.dump_command = 'mysqldump --opt --compress --max_allowed_packet=%(mysql_max_allowed_packet)s --force --single-transaction --quick --user %(db_user)s --password=%(db_password)s -h %(db_host)s %(db_name)s | gzip > %(db_dump_fn)s'
+        self.env.preload_commands = []
+        self.env.character_set = 'utf8'
+        self.env.collate = 'utf8_general_ci'
+        self.env.port = 3306
+        self.env.root_password = None
+        self.env.custom_mycnf = False
 
         self.env.service_commands = {
             START:{
@@ -1164,7 +1167,7 @@ class MySQLSatchel(DatabaseSatchel):
         for site in env.available_sites:
             set_collation_mysql(name=name, site=site)
         
-    def set_max_mysql_packet_size(self, do_set=1):
+    def set_max_packet_size(self, do_set=1):
         verbose = common.get_verbose()
         from burlap.dj import set_db
     
@@ -1180,40 +1183,61 @@ class MySQLSatchel(DatabaseSatchel):
             'net_buffer_length=%(db_mysql_net_buffer_length)s; SET global '
             'max_allowed_packet=%(db_mysql_max_allowed_packet)s;"') % env)
     
-    @task_or_dryrun
-    def prep_mysql_root_password(self):
+    def packager_pre_configure(self):
+        """
+        Called before packager.configure is run.
+        """
+        prep_root_password()
+        
+    def prep_root_password(self):
         args = dict(
-            db_root_password=env.db_mysql_root_password or env.db_root_password,
+            db_root_password=\
+                self.genv.mysql_root_password or \
+                self.genv.db_mysql_root_password or \
+                self.genv.db_root_password,
         )
         self.sudo_or_dryrun("dpkg --configure -a")
         self.sudo_or_dryrun("debconf-set-selections <<< 'mysql-server mysql-server/root_password password %(db_root_password)s'" % args)
         self.sudo_or_dryrun("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password %(db_root_password)s'" % args)
+        
+    def set_root_password(self):
+        self.prep_root_password()
+        #self.sudo_or_dryrun('dpkg-reconfigure mysql-server-5.5')
+        self.sudo_or_dryrun("dpkg-reconfigure -fnoninteractive `dpkg --list | egrep -o 'mysql-server-([0-9.]+)'`")
+        
+    def configure(self, do_packages=0):
 
-    def configure_mysql_client(self):
+        _env = type(self.genv)(self.genv)
         
-        set_root_login()
+        _env = set_root_login(db_type='mysql', db_host=self.genv.db_host, e=_env)
         
-        if env.custom_mycnf:
-            fn = common.render_to_file('my.template.cnf')
+        if int(do_packages):
+            self.prep_root_password()
+            self.install_packages()
+            
+        self.set_root_password()
+        
+        if _env.mysql_custom_mycnf:
+            fn = self.render_to_file('my.template.cnf', extra=_env)
             self.put_or_dryrun(
                 local_path=fn,
-                remote_path=env.conf,
+                remote_path=_env.mysql_conf,
                 use_sudo=True,
             )
         
-        if env.allow_remote_connections:
+        if _env.mysql_allow_remote_connections:
             
             # Enable remote connections.
-            self.sudo_or_dryrun("sed -i 's/127.0.0.1/0.0.0.0/g' %(db_mysql_conf)s" % env)
+            self.sudo_or_dryrun("sed -i 's/127.0.0.1/0.0.0.0/g' %(mysql_conf)s" % _env)
             
             # Enable root logins from remote connections.
-            cmd = 'mysql -u %(db_root_user)s -p"%(db_root_password)s" --execute="USE mysql; GRANT ALL ON *.* to %(db_root_user)s@\'%%\' IDENTIFIED BY \'%(db_root_password)s\'; FLUSH PRIVILEGES;"' % env
+            cmd = 'mysql -u %(db_root_user)s -p"%(mysql_root_password)s" --execute="USE mysql; GRANT ALL ON *.* to %(db_root_user)s@\'%%\' IDENTIFIED BY \'%(db_root_password)s\'; FLUSH PRIVILEGES;"' % _env
             sudo_or_dryrun(cmd)
             
             self.restart()
         
-    configure_mysql_client.is_deployer = True
-    configure_mysql_client.deploy_before = ['packager', 'user']
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'user']
 
 class MySQLClientSatchel(Satchel):
 
@@ -1234,14 +1258,13 @@ class PostgreSQLSatchel(DatabaseSatchel):
     name = 'postgres'
     
     tasks = (
-        'configure_postgresql',
+        'configure',
         'write_pgpass',
     )
     
     required_system_packages = {
-        FEDORA: ['mysql-client'],
-        (UBUNTU, '12.04'): ['mysql-client', 'libmysqlclient-dev'],
-        (UBUNTU, '14.04'): ['mysql-client', 'libmysqlclient-dev'],
+        (UBUNTU, '12.04'): ['postgresql-9.3'],
+        (UBUNTU, '14.04'): ['postgresql-9.3'],
     }
     
     def set_defaults(self):
@@ -1328,7 +1351,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
                     
         return cmds
 
-    def configure_postgresql(self):
+    def configure(self):
         #TODO:set postgres user password?
         #https://help.ubuntu.com/community/PostgreSQL
         #set postgres ident in pg_hba.conf
@@ -1374,8 +1397,8 @@ class PostgreSQLSatchel(DatabaseSatchel):
         cmd = 'service postgresql restart'
         sudo_or_dryrun(cmd)
 
-    configure_postgresql.is_deployer = True
-    configure_postgresql.deploy_before = ['packager', 'user']
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'user']
     
 class PostgreSQLClientSatchel(Satchel):
 
@@ -1399,3 +1422,8 @@ class PostgreSQLClientSatchel(Satchel):
         ],
     }
     
+mysql = MySQLSatchel()
+MySQLClientSatchel()
+
+postgresql = PostgreSQLSatchel()
+PostgreSQLClientSatchel()

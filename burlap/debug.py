@@ -211,10 +211,19 @@ def shell(gui=0, command=''):
     if _env.is_local:
         cmd = '%(shell_interactive_shell_str)s' % _env
     elif _env.key_filename:
+        # If host_string contains the port, then strip it off and pass separately.
+        port = _env.shell_host_string.split(':')[-1]
+        if port.isdigit():
+            _env.shell_host_string = _env.shell_host_string.split(':')[0] + (' -p %s' % port)
         cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % _env
     elif _env.password:
         cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % _env
     local_or_dryrun(cmd)
+
+@task_or_dryrun
+def run(command):
+    with settings(warn_only=True):
+        run_or_dryrun(command)
 
 @task_or_dryrun
 def disk():

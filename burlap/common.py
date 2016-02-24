@@ -209,13 +209,18 @@ def add_deployer(event, func, before=[], after=[], takes_diff=False):
     manifest_deployers_takes_diff[func] = takes_diff
 
 def resolve_deployer(func_name):
-#     print('func:',func_name)
+    print('resolve deployer:', func_name)
+    
     if '.' in func_name:
         mod_name, func_name = func_name.split('.')
     else:
         mod_name = 'fabfile'
-    ret = getattr(importlib.import_module(mod_name), func_name)
-#     print('ret:',ret)
+        
+    if mod_name.upper() in all_satchels:
+        ret = all_satchels[mod_name.upper()].configure
+    else:
+        ret = getattr(importlib.import_module(mod_name), func_name)
+        
     return ret
 
 class Deployer(object):
@@ -268,6 +273,8 @@ class _EnvProxy(object):
 
 SATCHEL_NAME_PATTERN = re.compile(r'^[a-z][a-z]*$')
 
+all_satchels = {}
+
 class Satchel(object):
     """
     Represents a base unit of functionality that is deployed and maintained on one
@@ -293,6 +300,8 @@ class Satchel(object):
         assert SATCHEL_NAME_PATTERN.findall(self.name), 'Invalid name: %s' % self.name
         
         self._os_version_cache = {} # {host:info}
+        
+        all_satchels[self.name.upper()] = self
         
         # Global environment.
         self.genv = env
@@ -348,6 +357,10 @@ class Satchel(object):
                     before=deployer.before,
                     after=deployer.after,
                     takes_diff=deployer.takes_diff)
+    
+    @property
+    def all_satchels(self):
+        return all_satchels
     
     def requires_satchel(self, satchel):
         self._requires_satchels.add(satchel.name.lower())
@@ -421,6 +434,34 @@ class Satchel(object):
                 self.sudo_or_dryrun('apt-get update --fix-missing; apt-get install --yes %s' % package_list_str)
             elif os_version.distro == FEDORA:
                 self.sudo_or_dryrun('yum install --assumeyes %s' % package_list_str)
+            else:
+                raise NotImplementedError, 'Unknown distro: %s' % os_version.distro
+    
+    def purge_packages(self):
+        os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
+#         print('os_version:', os_version)
+        req_packages = self.required_system_packages
+        patterns = [
+            (os_version.type, os_version.distro, os_version.release),
+            (os_version.distro, os_version.release),
+            (os_version.type, os_version.distro),
+            (os_version.distro,),
+            os_version.distro,
+        ]
+#         print('req_packages:', req_packages)
+        package_list = None
+        for pattern in patterns:
+#             print('pattern:', pattern)
+            if pattern in req_packages:
+                package_list = req_packages[pattern]
+                break
+#         print('package_list:', package_list)
+        if package_list:
+            package_list_str = ' '.join(package_list)
+            if os_version.distro == UBUNTU:
+                self.sudo_or_dryrun('apt-get purge %s' % package_list_str)
+            elif os_version.distro == FEDORA:
+                self.sudo_or_dryrun('yum remove %s' % package_list_str)
             else:
                 raise NotImplementedError, 'Unknown distro: %s' % os_version.distro
     
@@ -626,12 +667,20 @@ env.post_callbacks = []
 
 env.burlap_data_dir = '.burlap'
 
+def env_hosts_retriever(*args, **kwargs):
+    data = {}
+    if env.host_hostname:
+        data[env.host_hostname] = {}
+    return data.items()
+
 def get_hosts_retriever(s=None):
     """
     Given the function name, looks up the method for dynamically retrieving host data.
     """
     s = s or env.hosts_retriever
-    assert s, 'No hosts retriever specified.'
+    #assert s, 'No hosts retriever specified.'
+    if not s:
+        return env_hosts_retriever
     module_name = '.'.join(s.split('.')[:-1])
     func_name = s.split('.')[-1]
     retriever = getattr(importlib.import_module(module_name), func_name)
@@ -821,6 +870,8 @@ def get_last_modified_timestamp(path):
     """
     import commands
     cmd = 'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
+         #'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d " " -f1
+
     ret = commands.getoutput(cmd)
     # Note, we round now to avoid rounding errors later on where some formatters
     # use different decimal contexts.
@@ -1329,6 +1380,14 @@ def get_host_ip(hostname):
 #         print('key:',key,attrs)
         if key == hostname:
             return attrs.get('ip')
+
+def only_hostname(s):
+    """
+    Given an SSH target, returns only the hostname.
+    
+    e.g. only_hostname('user@mydomain:port') == 'mydomain'
+    """
+    return s.split('@')[-1].split(':')[0].strip()
 
 def get_hosts_for_site(site=None):
     """

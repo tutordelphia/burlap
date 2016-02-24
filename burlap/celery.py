@@ -36,6 +36,7 @@ env.celery_celerybeat_log_path_template = '/var/log/celerybeat-%(SITE)s.log'
 env.celery_celeryd_command = 'celeryd'
 env.celery_has_worker = False
 env.celery_daemon_user = 'www-data'
+env.celery_numprocs = 1
 env.celery_force_stop_command = 'pkill -9 -f celery'
 env.celery_celeryd_command_template = '%(celery_supervisor_python)s %(celery_supervisor_django_manage)s %(celery_celeryd_command)s %(celery_daemon_opts)s'
 env.celery_supervisor_django_manage_template = '%(remote_app_src_package_dir)s/manage.py'

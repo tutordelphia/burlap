@@ -12,6 +12,7 @@ import yaml
 import shutil
 import functools
 import traceback
+import time
 from collections import defaultdict
 from pprint import pprint
 
@@ -734,7 +735,8 @@ def get_last_thumbprint():
     if verbose: print('get_last_thumbprint.last_thumbprint:', last_thumbprint)
     return last_thumbprint
 
-def iter_thumbprint_differences():
+def iter_thumbprint_differences(only_components=None):
+    only_components = only_components or []
     verbose = common.get_verbose()
     if verbose: print('getting last thumbprint')
     last = get_last_thumbprint()
@@ -742,6 +744,8 @@ def iter_thumbprint_differences():
     current = get_current_thumbprint()
     if verbose: print('comparing thumbprints')
     for k in current:
+        if only_components and k not in only_components:
+            continue
         if verbose: print('iter_thumbprint_differences:', k)
         if current[k] != last.get(k):
             if verbose:
@@ -774,10 +778,16 @@ def show_diff(only=None):
             print('DIFF:', last, current)
 
 @task_or_dryrun
-@runs_once
-def truncate():
+def info():
+    d = os.path.join(init_plan_data_dir(), env.ROLE)
+    print('storage:', env.plan_storage)
+    print('dir:', d)
+
+@task_or_dryrun
+def reset():
     """
-    Compacts all deployment records into a single initial deployment.
+    Deletes all recorded plan executions.
+    This will cause the planner to think everything needs to be re-deployed.
     """
     d = os.path.join(init_plan_data_dir(), env.ROLE)
     if env.plan_storage == STORAGE_REMOTE:
@@ -788,6 +798,14 @@ def truncate():
         local_or_dryrun('mkdir -p "%s"' % d)
     else:
         raise NotImplementedError
+    
+@task_or_dryrun
+@runs_once
+def truncate():
+    """
+    Compacts all deployment records into a single initial deployment.
+    """
+    reset()
     if not common.get_dryrun():
         fabric.api.execute(thumbprint, hosts=env.hosts)
 
@@ -860,6 +878,8 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None):
     only_components = components or []
     if isinstance(only_components, basestring):
         only_components = [_.strip().upper() for _ in only_components.split(',') if _.strip()]
+    if only_components:
+        print('Limiting deployment to components: %s' % only_components)
     
     def get_deploy_funcs(components):
         for component in components:
@@ -915,7 +935,7 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None):
     
     if verbose:
         print('iter_thumbprint_differences')
-    diffs = list(iter_thumbprint_differences())
+    diffs = list(iter_thumbprint_differences(only_components=only_components))
     if diffs:
         if verbose:
             print('Differences detected!')
@@ -926,15 +946,23 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None):
     for component, last, current in diffs:
         if component not in all_services:
             continue
+#         if only_components and component not in only_components:
+#             continue
         component_thumbprints[component] = last, current
         components.add(component)
     component_dependences = {}
     
     if verbose:
-        print('manifest_deployers_befores:',common.manifest_deployers_befores.keys())
+        print('manifest_deployers_befores:', common.manifest_deployers_befores.keys())
         print('*'*80)
-        print('all components:',components)
-        
+        print('all components:', components)
+    
+    all_components = set(common.all_satchels)
+    if only_components and not all_components.issuperset(only_components):
+        unknown_components = set(only_components).difference(all_components)
+        raise Exception, 'Unknown components: %s' \
+            % ', '.join(sorted(unknown_components))
+    
     for _c in components:
         if verbose:
             print('checking:',_c)
@@ -972,9 +1000,18 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None):
         print('\nTo execute this plan on all hosts run:\n\n    fab %s deploy.run' % env.ROLE)
         return True
     else:
-        for func_name, plan_func in plan_funcs:
-            if callable(plan_func):
-                plan_func()
+        with open('/tmp/burlap.progress', 'w') as fout:
+            print('%s Beginning plan execution!' % (datetime.datetime.now(),), file=fout)
+            fout.flush()
+            for func_name, plan_func in plan_funcs:
+                print('%s Executing step %s...' % (datetime.datetime.now(), func_name), file=fout)
+                fout.flush()
+                if callable(plan_func):
+                    plan_func()
+                print('%s Done!' % (datetime.datetime.now(),), file=fout)
+                fout.flush()
+            print('%s Plan execution complete!' % (datetime.datetime.now(),), file=fout)
+            fout.flush()
     
     # Create thumbprint.
     if not common.get_dryrun():
@@ -985,6 +1022,10 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None):
 def run(*args, **kwargs):
     """
     Performs a full deployment.
+    
+    Parameters:
+    
+        components := name of satchel to limit deployment to
     """
     from burlap import service, notifier
     

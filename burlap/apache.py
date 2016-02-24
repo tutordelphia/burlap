@@ -190,6 +190,7 @@ class ApacheSatchel(ServiceSatchel):
         self.env.ssl_secure_paths = ['/admin/(.*)']
         
         # Defines the expected name of the SSL certificates.
+        self.env.domain_template = 'mydomain'
         self.env.ssl_domain_template = '%(apache_domain)s'
         
         self.env.user = 'www-data'
@@ -691,6 +692,8 @@ class ApacheMediaSatchel(Satchel):
         render_remote_paths()
         
         clean = int(clean)
+        print 'Getting site data for %s...' % self.genv.SITE
+#         print 'sites:', self.genv.sites
         site_data = self.genv.sites[self.genv.SITE]
         self.genv.update(site_data)
         
