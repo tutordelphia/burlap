@@ -46,15 +46,16 @@ def generate_keys():
     """
     env.user_key_filename = env.user_key_filename or env.key_filename
     assert env.user_key_filename, 'env.user_key_filename or env.key_filename must be set. e.g. roles/role/app_name-role.pem'
-    local_or_dryrun("ssh-keygen -t %(user_key_type)s -b %(user_key_bits)s -f %(user_key_filename)s -N ''" % env)
-    if env.user_key_filename.endswith('.pem'):
-        src = env.user_key_filename+'.pub'
-        dst = (env.user_key_filename+'.pub').replace('.pem', '')
-        print 'generate_keys:', src, dst
-        if common.get_dryrun():
-            print_command('mv %s %s' % (src, dst))
-        else:
-            os.rename(src, dst)
+    if not os.path.isfile(env.user_key_filename):
+        local_or_dryrun("ssh-keygen -t %(user_key_type)s -b %(user_key_bits)s -f %(user_key_filename)s -N ''" % env)
+        if env.user_key_filename.endswith('.pem'):
+            src = env.user_key_filename+'.pub'
+            dst = (env.user_key_filename+'.pub').replace('.pem', '')
+            print 'generate_keys:', src, dst
+            if common.get_dryrun():
+                print_command('mv %s %s' % (src, dst))
+            else:
+                os.rename(src, dst)
 
 #DEPRECATED
 @task_or_dryrun
@@ -64,9 +65,9 @@ def passwordless(username=None, pubkey=None):
     Assumes you've run generate_keys() first.
     """
     env.user_username = username or env.user
-    env.user_pubkey = pubkey or env.key_filename
+    env.user_pubkey = str(pubkey or env.key_filename)
     assert os.path.isfile(env.user_pubkey), \
-        'Public key file "%s" does not exist.' % (env.user_pubkey,)
+        'Public key file "%s" does not exist.' % (str(env.user_pubkey),)
     
     first = os.path.splitext(env.user_pubkey)[0]
     env.user_pubkey = first+'.pub'
@@ -129,6 +130,7 @@ class UserSatchel(Satchel):
     tasks = (
         'configure',
         'togroups',
+        'configure_keyless',
     )
     
     def set_defaults(self):
@@ -140,6 +142,11 @@ class UserSatchel(Satchel):
         self.env.key_filename = None
         self.env.home_template = '/home/%(user_username)s'
         self.env.passwordless = True
+        self.env.key_perms = '600'
+
+    def configure_keyless(self):
+        generate_keys()
+        passwordless()
 
     def togroups(self, user=None, groups=None):
         """

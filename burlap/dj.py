@@ -2,6 +2,7 @@
 Django-specific helper utilities.
 """
 import os
+import re
 import sys
 import importlib
 import traceback
@@ -9,6 +10,7 @@ import commands
 import glob
 from collections import defaultdict
 from StringIO import StringIO
+from pprint import pprint
 
 from fabric.api import (
     env,
@@ -63,9 +65,9 @@ if 'dj_settings_loaded' not in env:
     env.django_install_sql_path_template = '%(src_dir)s/%(app_name)s/*/sql/*'
 
 DJANGO = 'DJANGO'
-DJANGO_MEDIA = 'DJANGO_MEDIA'
-DJANGO_SYNCDB = 'DJANGO_SYNCDB'
-DJANGO_MIGRATIONS = 'DJANGO_MIGRATIONS'
+DJANGOMEDIA = 'DJANGOMEDIA'
+DJANGOSYNCDB = 'DJANGOSYNCDB'
+DJANGOMIGRATIONS = 'DJANGOMIGRATIONS'
 
 @task_or_dryrun
 def check_remote_paths(verbose=1):
@@ -216,6 +218,8 @@ def syncdb(site=None, all=0, database=None):
     """
     Runs the standard Django syncdb command for one or more sites.
     """
+    print '('*80
+    print 'Running syncdb...'
     
     _env = type(env)(env)
     
@@ -281,6 +285,16 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
     _env.django_migrate_database = '--database=%s' % database if database else ''
     _env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts else ''
     for site, site_data in iter_unique_databases(site=site):
+        print '-'*80
+        print 'site:', site
+        
+        if env.available_sites_by_host:
+            hostname = common.get_current_hostname()
+#             print 'hostname:', hostname
+            sites_on_host = env.available_sites_by_host.get(hostname, [])
+            if sites_on_host and site not in sites_on_host:
+                print 'skipping site:', site, sites_on_host
+                continue
         
         print 'migrate_apps:',migrate_apps
         if migrate_apps:
@@ -632,6 +646,7 @@ def loaddata(path, site=None):
 
 @task_or_dryrun
 def post_db_create(name=None, site=None):
+    print 'post_db_create'
     assert env[ROLE]
     require('app_name')
     site = site or env.SITE
@@ -663,6 +678,7 @@ def database_files_dump(site=None):
     else:
         run_or_dryrun(cmd)
 
+#DEPRECATED
 @task_or_dryrun
 def record_manifest_media(verbose=0):
     latest_timestamp = -1e9999999999999999
@@ -675,6 +691,7 @@ def record_manifest_media(verbose=0):
         print latest_timestamp
     return latest_timestamp
 
+#DEPRECATED
 @task_or_dryrun
 def record_manifest_migrations(verbose=0):
     data = {} # {app: latest_migration_name}
@@ -696,7 +713,8 @@ def update(name=None, site=None, skip_databases=None, do_install_sql=0, migrate_
     Updates schema and custom SQL.
     """
     #from burlap.dj import set_db
-    
+    print 'update()'
+#     raise Exception
     set_db(name=name, site=site)
     syncdb(site=site) # Note, this loads initial_data fixtures.
     migrate(
@@ -709,11 +727,12 @@ def update(name=None, site=None, skip_databases=None, do_install_sql=0, migrate_
 
 @task_or_dryrun
 #@runs_once
-def update_all(skip_databases=None, do_install_sql=0, migrate_apps=''):
+def update_all(skip_databases=None, do_install_sql=0, migrate_apps='', ignore_errors=0):
     """
     Runs the Django migrate command for all unique databases
     for all available sites.
     """
+    print 'update_all()'
     from burlap.common import get_current_hostname
     hostname = get_current_hostname()
     
@@ -723,23 +742,67 @@ def update_all(skip_databases=None, do_install_sql=0, migrate_apps=''):
         sites = env.available_sites
     
     for site in sites:
-        update(
-            site=site,
-            skip_databases=skip_databases,
-            do_install_sql=do_install_sql,
-            migrate_apps=migrate_apps)
+        with settings(warn_only=int(ignore_errors)):
+            update(
+                site=site,
+                skip_databases=skip_databases,
+                do_install_sql=do_install_sql,
+                migrate_apps=migrate_apps)
 
+#DEPRECATED
 @task_or_dryrun
 def update_all_from_diff(last=None, current=None):
     migrate_apps = []
     if last and current:
-        last = last['DJANGO_MIGRATIONS']
-        current = current['DJANGO_MIGRATIONS']
-        for app_name in current:
-            if current[app_name] != last.get(app_name):
-                migrate_apps.append(app_name)
+        last = last.get(DJANGOMIGRATIONS)
+        current = current.get(DJANGOMIGRATIONS)
+        if last is not None and current is not None:
+            for app_name in current:
+                if current[app_name] != last.get(app_name):
+                    migrate_apps.append(app_name)
     return update_all(migrate_apps=','.join(migrate_apps))
 
+class DjangoMigrations(Satchel):
+    
+    name = 'djangomigrations'
+
+    tasks = (
+        'configure',
+    )
+
+    def set_defaults(self):
+        super(DjangoMigrations, self).set_defaults()
+
+    def record_manifest(self):
+        data = {} # {app: latest_migration_name}
+        for app_name, _dir in iter_app_directories():
+            migration_dir = os.path.join(_dir, 'migrations')
+            if not os.path.isdir(migration_dir):
+                continue
+            for migration_name in iter_migrations(migration_dir):
+                data[app_name] = migration_name
+        if self.verbose:
+            print '%s.migrations:' % self.name
+            pprint(data, indent=4)
+        return data
+        
+    def configure(self):
+        last = self.last_manifest or {}
+        current = self.current_manifest or {}
+        migrate_apps = []
+        if last and current:
+            if self.verbose:
+                print 'djangomigrations.last:', last
+                print 'djangomigrations.current:', current
+            for app_name in current:
+                if current[app_name] != last.get(app_name):
+                    migrate_apps.append(app_name)
+        if migrate_apps:
+            return update_all(migrate_apps=','.join(migrate_apps), ignore_errors=1)
+    configure.is_deployer = True
+    configure.deploy_before = ['packager', 'apache', 'apache2', 'pip', 'tarball', 'djangomedia']
+    #configure.takes_diff = True
+        
 class DjangoMediaSatchel(Satchel):
     
     name = 'djangomedia'
@@ -755,28 +818,39 @@ class DjangoMediaSatchel(Satchel):
         self.env.manage_dir = 'src'
     
     def record_manifest(self):
-        from burlap.common import get_last_modified_timestamp
-        data = 0
-        for path in self.env.media_dirs:
-            data = min(data, get_last_modified_timestamp(path) or data)
-        #TODO:hash media names and content
+#         from burlap.common import get_last_modified_timestamp
+#         data = 0
+#         for path in self.env.media_dirs:
+#             data = min(data, get_last_modified_timestamp(path) or data)
+#         #TODO:hash media names and content
+#         if self.verbose:
+#             print data
+#         return data
+        latest_timestamp = -1e9999999999999999
+        for path in iter_static_paths():
+            if self.verbose:
+                print 'checking timestamp of path:', path
+            latest_timestamp = max(
+                latest_timestamp,
+                common.get_last_modified_timestamp(path) or latest_timestamp)
         if self.verbose:
-            print data
-        return data
+            print 'latest_timestamp:', latest_timestamp
+        return latest_timestamp
     
     def configure(self, *args, **kwargs):
         self.local_or_dryrun('cd %(manage_dir)s; ./manage collectstatic --noinput' % self.lenv)
     configure.is_deployer = True
     configure.deploy_before = ['packager', 'apache2', 'pip', 'user']
 
-common.manifest_recorder[DJANGO_MEDIA] = record_manifest_media
-common.manifest_recorder[DJANGO_MIGRATIONS] = record_manifest_migrations
+# common.manifest_recorder[DJANGOMEDIA] = record_manifest_media
+# common.manifest_recorder[DJANGOMIGRATIONS] = record_manifest_migrations
 
-# DJANGO_SYNCDB = 'DJANGO_SYNCDB'
-# DJANGO_MIGRATIONS = 'DJANGO_MIGRATIONS'
+# DJANGOSYNCDB = 'DJANGOSYNCDB'
+# DJANGOMIGRATIONS = 'DJANGOMIGRATIONS'
 
-common.add_deployer(DJANGO_MIGRATIONS, 'dj.update_all_from_diff',
-    before=['packager', 'apache', 'apache2', 'pip', 'tarball', 'django_media'],
-    takes_diff=True)
+# common.add_deployer(DJANGOMIGRATIONS, 'dj.update_all_from_diff',
+#     before=['packager', 'apache', 'apache2', 'pip', 'tarball', 'djangomedia'],
+#     takes_diff=True)
 
+DjangoMigrations()
 DjangoMediaSatchel()

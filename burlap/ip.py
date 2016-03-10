@@ -87,6 +87,6 @@ class IPSatchel(ServiceSatchel):
         self.restart()
         
     configure.is_deployer = True
-    configure.deploy_before = ['packager', 'user']
+    configure.deploy_before = ['packager', 'user', 'hostname']
     
 IPSatchel()

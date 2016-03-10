@@ -93,6 +93,7 @@ def _get_environ_handler(name, d):
         # Load environment for current role.
         env.update(env_default)
         env[common.ROLE] = os.environ[common.ROLE] = name
+        print('site:', site)
         if site:
             env[common.SITE] = os.environ[common.SITE] = site
         env.update(d)

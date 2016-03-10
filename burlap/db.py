@@ -35,70 +35,72 @@ from burlap.common import (
 from burlap.decorators import task_or_dryrun
 #from burlap.plan import run, sudo
 
-env.db_dump_fn = None
-#env.db_dump_fn_template = '%(db_dump_dest_dir)s/db_%(SITE)s_%(ROLE)s_%(db_date)s.sql.gz'
-env.db_dump_fn_template = '%(db_dump_dest_dir)s/db_%(db_type)s_%(SITE)s_%(ROLE)s_$(date +%%Y%%m%%d).sql.gz'
-
-# This overrides the built-in load command.
-env.db_dump_command = None
-
-env.db_engine = None # postgres|mysql
-env.db_engine_subtype = None # amazon_rds
-
-# This overrides the built-in dump command.
-env.db_load_command = None
-
-env.db_app_migration_order = []
-env.db_dump_dest_dir = '/tmp'
-env.db_dump_archive_dir = 'snapshots'
-
-# The login for performance administrative tasks (e.g. CREATE/DROP database).
-env.db_root_user = 'root'#DEPRECATED
-env.db_root_password = 'root'#DEPRECATED
-env.db_root_logins = {} # {(type,host):{user:?, password:?}}
-
-#DEPRECATED:2015.12.12
-#env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s | gzip -c > %(db_dump_fn)s'
-env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s > %(db_dump_fn)s'
-env.db_postgresql_createlangs = ['plpgsql'] # plpythonu
-env.db_postgresql_postgres_user = 'postgres'
-env.db_postgresql_encoding = 'UTF8'
-env.db_postgresql_custom_load_cmd = ''
-env.db_postgresql_port = 5432
-env.db_postgresql_pgass_path = '~/.pgpass'
-env.db_postgresql_pgpass_chmod = 600
-env.db_postgresql_version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
-
-#DEPRECATED:2015.12.12
-env.db_mysql_max_allowed_packet = 524288000 # 500M
-env.db_mysql_net_buffer_length = 1000000
-env.db_mysql_conf = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
-env.db_mysql_dump_command = 'mysqldump --opt --compress --max_allowed_packet=%(db_mysql_max_allowed_packet)s --force --single-transaction --quick --user %(db_user)s --password=%(db_password)s -h %(db_host)s %(db_name)s | gzip > %(db_dump_fn)s'
-env.db_mysql_preload_commands = []
-env.db_mysql_character_set = 'utf8'
-env.db_mysql_collate = 'utf8_general_ci'
-env.db_mysql_port = 3306
-env.db_mysql_root_password = None
-env.db_mysql_custom_mycnf = False
-
-# Should be set to False for Django >= 1.7.
-env.db_check_ghost_migrations = True
-
-env.db_syncdb_command_template = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --noinput %(db_syncdb_database)s %(db_syncdb_all_flag)s --traceback'
-
-# If true, means we're responsible for installing and configuring
-# the database server.
-# If false, means we can assume the server is not our responsibility.
-env.db_server_managed = True
-
-# If true, means we're responsible for creating the logical database on
-# the database server.
-# If false, means creation of the database is not our responsibility.
-env.db_database_managed = True
-
-env.db_fixture_sets = {} # {name:[list of fixtures]}
-
-env.db_sets = {} # {name:{configs}}
+if 'db_dump_fn' not in env:
+    
+    env.db_dump_fn = None
+    #env.db_dump_fn_template = '%(db_dump_dest_dir)s/db_%(SITE)s_%(ROLE)s_%(db_date)s.sql.gz'
+    env.db_dump_fn_template = '%(db_dump_dest_dir)s/db_%(db_type)s_%(SITE)s_%(ROLE)s_$(date +%%Y%%m%%d).sql.gz'
+    
+    # This overrides the built-in load command.
+    env.db_dump_command = None
+    
+    env.db_engine = None # postgres|mysql
+    env.db_engine_subtype = None # amazon_rds
+    
+    # This overrides the built-in dump command.
+    env.db_load_command = None
+    
+    env.db_app_migration_order = []
+    env.db_dump_dest_dir = '/tmp'
+    env.db_dump_archive_dir = 'snapshots'
+    
+    # The login for performance administrative tasks (e.g. CREATE/DROP database).
+    env.db_root_user = 'root'#DEPRECATED
+    env.db_root_password = 'root'#DEPRECATED
+    env.db_root_logins = {} # {(type,host):{user:?, password:?}}
+    
+    #DEPRECATED:2015.12.12
+    #env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s | gzip -c > %(db_dump_fn)s'
+    env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s > %(db_dump_fn)s'
+    env.db_postgresql_createlangs = ['plpgsql'] # plpythonu
+    env.db_postgresql_postgres_user = 'postgres'
+    env.db_postgresql_encoding = 'UTF8'
+    env.db_postgresql_custom_load_cmd = ''
+    env.db_postgresql_port = 5432
+    env.db_postgresql_pgass_path = '~/.pgpass'
+    env.db_postgresql_pgpass_chmod = 600
+    env.db_postgresql_version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
+    
+    #DEPRECATED:2015.12.12
+    env.db_mysql_max_allowed_packet = 524288000 # 500M
+    env.db_mysql_net_buffer_length = 1000000
+    env.db_mysql_conf = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
+    env.db_mysql_dump_command = 'mysqldump --opt --compress --max_allowed_packet=%(db_mysql_max_allowed_packet)s --force --single-transaction --quick --user %(db_user)s --password=%(db_password)s -h %(db_host)s %(db_name)s | gzip > %(db_dump_fn)s'
+    env.db_mysql_preload_commands = []
+    env.db_mysql_character_set = 'utf8'
+    env.db_mysql_collate = 'utf8_general_ci'
+    env.db_mysql_port = 3306
+    env.db_mysql_root_password = None
+    env.db_mysql_custom_mycnf = False
+    
+    # Should be set to False for Django >= 1.7.
+    env.db_check_ghost_migrations = True
+    
+    env.db_syncdb_command_template = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --noinput %(db_syncdb_database)s %(db_syncdb_all_flag)s --traceback'
+    
+    # If true, means we're responsible for installing and configuring
+    # the database server.
+    # If false, means we can assume the server is not our responsibility.
+    env.db_server_managed = True
+    
+    # If true, means we're responsible for creating the logical database on
+    # the database server.
+    # If false, means creation of the database is not our responsibility.
+    env.db_database_managed = True
+    
+    env.db_fixture_sets = {} # {name:[list of fixtures]}
+    
+    env.db_sets = {} # {name:{configs}}
 
 # Service names.
 DB = 'DB'
@@ -225,7 +227,10 @@ def set_root_login(db_type=None, db_host=None, e=None):
             _env.db_root_user = data['username']
         if 'password' in data:
             _env.db_root_password = data['password']
-            
+    
+    if _env.db_root_password is None and _env.db_mysql_root_password and 'mysql' in _env.db_engine:
+        _env.db_root_password = _env.db_mysql_root_password
+        
     return _env
 
 @task_or_dryrun
@@ -260,8 +265,6 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
         env.db_password = db_password
     if db_name:
         env.db_name = db_name
-#    print 'site:',env[SITE]
-#    print 'role:',env[ROLE]
     
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         
@@ -392,8 +395,8 @@ def update_all(skip_databases=None, do_install_sql=0, migrate_apps=''):
 # def update_all_from_diff(last=None, current=None):
 #     migrate_apps = []
 #     if last and current:
-#         last = last['DJANGO_MIGRATIONS']
-#         current = current['DJANGO_MIGRATIONS']
+#         last = last['DJANGOMIGRATIONS']
+#         current = current['DJANGOMIGRATIONS']
 #         for app_name in current:
 #             if current[app_name] != last.get(app_name):
 #                 migrate_apps.append(app_name)
@@ -1255,7 +1258,7 @@ class MySQLClientSatchel(Satchel):
     
 class PostgreSQLSatchel(DatabaseSatchel):
     
-    name = 'postgres'
+    name = 'postgresql'
     
     tasks = (
         'configure',
@@ -1302,7 +1305,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
             },
         }
 
-    def write_pgpass(name=None, use_sudo=0, verbose=1, commands_only=0):
+    def write_pgpass(self, name=None, use_sudo=0, verbose=1, commands_only=0):
         """
         Write the file used to store login credentials for PostgreSQL.
         """
@@ -1360,28 +1363,30 @@ class PostgreSQLSatchel(DatabaseSatchel):
         #sudo -u postgres psql
         #\password postgres
 
-        pc('Backing up PostgreSQL configuration files...')
+        self.install_packages()
+
+        self.pc('Backing up PostgreSQL configuration files...')
         cmd = 'cp /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf.$(date +%%Y%%m%%d%%H%%M).bak' % env
-        sudo_or_dryrun(cmd)
+        self.sudo_or_dryrun(cmd)
         cmd = 'cp /etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf /etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf.$(date +%%Y%%m%%d%%H%%M).bak' % env
-        sudo_or_dryrun(cmd)
+        self.sudo_or_dryrun(cmd)
         
-        pc('Allowing remote connections...')
-        fn = common.render_to_file('pg_hba.template.conf')
-        put_or_dryrun(local_path=fn,
+        self.pc('Allowing remote connections...')
+        fn = self.render_to_file('postgresql/pg_hba.template.conf')
+        self.put_or_dryrun(local_path=fn,
             remote_path='/etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf' % env,
             use_sudo=True,
-            )
+        )
         
         # Don't do this. Keep it locked down and use an SSH tunnel instead.
         # See common.tunnel()
         #sudo_or_dryrun('sed -i "s/#listen_addresses = \'localhost\'/listen_addresses = \'*\'/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env)
         
-        pc('Enabling auto-vacuuming...')
+        self.pc('Enabling auto-vacuuming...')
         cmd = 'sed -i "s/#autovacuum = on/autovacuum = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env
-        sudo_or_dryrun(cmd)
+        self.sudo_or_dryrun(cmd)
         cmd = 'sed -i "s/#track_counts = on/track_counts = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env
-        sudo_or_dryrun(cmd)
+        self.sudo_or_dryrun(cmd)
         
         # Set UTF-8 as the default database encoding.
         #TODO:fix? throws error code?
@@ -1395,7 +1400,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
 #            'UPDATE pg_database SET datallowconn = FALSE WHERE datname = \'template1\';"')
 
         cmd = 'service postgresql restart'
-        sudo_or_dryrun(cmd)
+        self.sudo_or_dryrun(cmd)
 
     configure.is_deployer = True
     configure.deploy_before = ['packager', 'user']
@@ -1427,3 +1432,5 @@ MySQLClientSatchel()
 
 postgresql = PostgreSQLSatchel()
 PostgreSQLClientSatchel()
+
+write_postgres_pgpass = postgresql.write_pgpass

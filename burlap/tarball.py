@@ -239,7 +239,7 @@ class TarballSatchel(Satchel):
             self.deploy_rsync(*args, **kwargs)
         
     configure.is_deployer = True
-    configure.deploy_before = ['packager', 'apache2', 'pip', 'user', 'djangomedia']
+    configure.deploy_before = ['packager', 'apache2', 'pip', 'user']
             
 tarball_satchel = TarballSatchel()
 

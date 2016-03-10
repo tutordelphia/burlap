@@ -38,8 +38,10 @@ def get_current(name):
 @runs_once
 def get_last(name):
     from burlap.deploy import get_last_thumbprint
-    name = name.strip().lower()
+    name = common.assert_valid_satchel(name)
     last_thumbprint = get_last_thumbprint()
+#     print('get_last:', last_thumbprint.get(name))
+#     raw_input('enter')
     if last_thumbprint:
         if name in last_thumbprint:
             return last_thumbprint.get(name, {})

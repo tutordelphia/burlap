@@ -111,13 +111,19 @@ def has_pip():
         return bool(ret)
     
 @task_or_dryrun
+def has_virtualenv():
+    with settings(warn_only=True):
+        ret = _run('which virtualenv').strip()
+        return bool(ret)
+
+@task_or_dryrun
 def bootstrap(force=0):
     """
     Installs all the necessary packages necessary for managing virtual
     environments with pip.
     """
     force = int(force)
-    if has_pip() and not force:
+    if has_pip() and has_virtualenv() and not force:
         return
         
     _env = type(env)(env)
@@ -168,7 +174,7 @@ def init(clean=0, check_global=0, virtualenv_dir=None, check_permissions=None):
         clean_virtualenv(virtualenv_dir=virtualenv_dir)
     
     if virtualenv_exists(virtualenv_dir=virtualenv_dir):
-#         print 'virtualenv exists'
+        print 'virtualenv exists'
         return
     
     # Important. Default Ubuntu 12.04 package uses Pip 1.0, which

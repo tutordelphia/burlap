@@ -568,7 +568,7 @@ class ApacheSatchel(ServiceSatchel):
         self.install_ssl(site=ALL)
         
     configure.is_deployer = True
-    configure.deploy_before = ['packager', 'user']
+    configure.deploy_before = ['packager', 'user', 'hostname', 'ip']
 
 class ApacheModEvasiveSatchel(Satchel):
     

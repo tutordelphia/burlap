@@ -100,7 +100,8 @@ def is_dir(d):
             output = _sudo(cmd)
             if verbose:
                 print('output:', output)
-            ret = int(output)
+            #ret = int(output)
+            ret = int(re.findall(r'^[0-9]+$', output, flags=re.DOTALL|re.I|re.M)[0])
         else:
             ret = os.path.isdir(d)
         _fs_cache['is_dir'][d] = ret
@@ -115,7 +116,7 @@ def is_file(fqfn):
             output = _sudo(cmd)
             if verbose:
                 print('output:', output)
-            ret = int(output)
+            ret = int(re.findall(r'^[0-9]+$', output, flags=re.DOTALL|re.I|re.M)[0])
         else:
             ret = os.path.isfile(fqfn)
         _fs_cache['is_file'][fqfn] = ret
@@ -735,18 +736,21 @@ def get_last_thumbprint():
     if verbose: print('get_last_thumbprint.last_thumbprint:', last_thumbprint)
     return last_thumbprint
 
-def iter_thumbprint_differences(only_components=None):
+def iter_thumbprint_differences(only_components=None, local_verbose=0):
     only_components = only_components or []
-    verbose = common.get_verbose()
-    if verbose: print('getting last thumbprint')
+    local_verbose = int(local_verbose)
+    verbose = common.get_verbose() or local_verbose
+    #if verbose: print('getting last thumbprint')
     last = get_last_thumbprint()
-    if verbose: print('getting current thumbprint')
+    #if verbose: print('getting current thumbprint')
     current = get_current_thumbprint()
-    if verbose: print('comparing thumbprints')
+    #if verbose: print('comparing thumbprints')
     for k in current:
         if only_components and k not in only_components:
+#             print('iter_thumbprint_differences.skipping:', k)
             continue
-        if verbose: print('iter_thumbprint_differences:', k)
+#         print('iter:',k); raw_input('enter')
+#         if verbose: print('iter_thumbprint_differences.NOT skipping:', k)
         if current[k] != last.get(k):
             if verbose:
                 print('DIFFERENCE! k:', k, current[k], last.get(k))
@@ -754,15 +758,34 @@ def iter_thumbprint_differences(only_components=None):
                 pprint(current[k], indent=4)
                 print('Last:')
                 pprint(last.get(k), indent=4)
-            yield k, last, current
-    if verbose: print('iter_thumbprint_differences done')
+            yield k, (last, current)
+#     if verbose: print('iter_thumbprint_differences done')
+
+@task_or_dryrun
+def explain(name, **kwargs):
+    #common.set_verbose(1)
+    kwargs = kwargs or {}
+    name = common.assert_valid_satchel(name)
+    kwargs['only_components'] = [name]
+    kwargs['local_verbose'] = 1
+    diffs = dict(iter_thumbprint_differences(**kwargs))
+    last, current = diffs.get(name, (None, None))
+    if last is None and current is None:
+        print('There are no differences.')
+#     else:
+#         last = last or {}
+#         last.setdefault(name, {})
+#         print('last:')
+#         pprint(last[name], indent=4)
+#         print('current:')
+#         pprint(current[name], indent=4)
 
 @task_or_dryrun
 def show_diff(only=None):
     """
     Inspects differences between the last deployment and the current code state.
     """
-    for k, last, current in iter_thumbprint_differences():
+    for k, (last, current) in iter_thumbprint_differences():
         if only and k.lower() != only.lower():
             continue
         print('Component %s has changed.' % k)
@@ -848,7 +871,7 @@ def get_last_current_diffs(target_component):
     diffs = list(iter_thumbprint_differences())
     components = set()
     component_thumbprints = {}
-    for component, last, current in diffs:
+    for component, (last, current) in diffs:
         if component not in all_services:
             continue
         component_thumbprints[component] = last, current
@@ -858,7 +881,7 @@ def get_last_current_diffs(target_component):
     return last, current
 
 @task_or_dryrun
-def auto(fake=0, preview=0, check_outstanding=1, components=None):
+def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
     """
     Generates a plan based on the components that have changed since the last deployment.
     
@@ -875,6 +898,7 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None):
     
     """
     
+    explain = int(explain)
     only_components = components or []
     if isinstance(only_components, basestring):
         only_components = [_.strip().upper() for _ in only_components.split(',') if _.strip()]
@@ -943,8 +967,9 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None):
     # Create plan.
     components = set()
     component_thumbprints = {}
-    for component, last, current in diffs:
+    for component, (last, current) in diffs:
         if component not in all_services:
+            print('ignoring component:', component)
             continue
 #         if only_components and component not in only_components:
 #             continue
@@ -953,6 +978,7 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None):
     component_dependences = {}
     
     if verbose:
+        print('all_services:', all_services)
         print('manifest_deployers_befores:', common.manifest_deployers_befores.keys())
         print('*'*80)
         print('all components:', components)
@@ -984,7 +1010,7 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None):
 #     raw_input('enter')
     plan_funcs = list(get_deploy_funcs(components))
     if components and plan_funcs:
-        if preview:
+        if preview or 1:
             print('These components have changed:\n')
             for component in sorted(components):
                 print((' '*4)+component)
@@ -1000,18 +1026,22 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None):
         print('\nTo execute this plan on all hosts run:\n\n    fab %s deploy.run' % env.ROLE)
         return True
     else:
+#         raw_input('enter')
         with open('/tmp/burlap.progress', 'w') as fout:
             print('%s Beginning plan execution!' % (datetime.datetime.now(),), file=fout)
             fout.flush()
             for func_name, plan_func in plan_funcs:
+                print('%s Executing step %s...' % (datetime.datetime.now(), func_name))
                 print('%s Executing step %s...' % (datetime.datetime.now(), func_name), file=fout)
                 fout.flush()
+#                 raw_input('enter'); continue
                 if callable(plan_func):
                     plan_func()
                 print('%s Done!' % (datetime.datetime.now(),), file=fout)
                 fout.flush()
             print('%s Plan execution complete!' % (datetime.datetime.now(),), file=fout)
             fout.flush()
+#         raw_input('final')
     
     # Create thumbprint.
     if not common.get_dryrun():

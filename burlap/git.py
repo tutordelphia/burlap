@@ -72,6 +72,6 @@ def record_manifest_git_tracker(verbose=0):
 common.manifest_recorder[GITTRACKER] = record_manifest_git_tracker
 
 common.add_deployer(GITTRACKER, 'jirahelp.update_tickets_from_git',
-    before=['packager', 'pip', 'tarball', 'django_media', 'django_migrations'],
+    before=['packager', 'pip', 'tarball', 'djangomedia', 'djangomigrations'],
     takes_diff=True)
     

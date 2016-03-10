@@ -271,9 +271,14 @@ class _EnvProxy(object):
             return super(_EnvProxy, self).__setattr__(k, v)
         env[self.satchel.env_prefix + k] = v
 
-SATCHEL_NAME_PATTERN = re.compile(r'^[a-z][a-z]*$')
+SATCHEL_NAME_PATTERN = re.compile(r'^[a-z][a-z0-9]*$')
 
 all_satchels = {}
+
+def assert_valid_satchel(name):
+    name = name.strip().upper()
+    assert name in all_satchels
+    return name
 
 class Satchel(object):
     """
@@ -362,6 +367,9 @@ class Satchel(object):
     def all_satchels(self):
         return all_satchels
     
+    def pc(self, *args, **kwargs):
+        return pc(*args, **kwargs)
+    
     def requires_satchel(self, satchel):
         self._requires_satchels.add(satchel.name.lower())
     
@@ -399,6 +407,12 @@ class Satchel(object):
         if hs not in self._os_version_cache:
             self._os_version_cache[hs] = get_os_version()
         return self._os_version_cache[hs]
+    
+    def reboot_or_dryrun(self):
+        """
+        Reboots the server and waits for it to come back.
+        """
+        reboot_or_dryrun()
     
     def write_to_file(self, *args, **kwargs):
         return write_to_file(*args, **kwargs)
@@ -774,6 +788,19 @@ def sudo_or_dryrun(*args, **kwargs):
         print('%s sudo: %s' % (render_command_prefix(), cmd))
     else:
         return _sudo(*args, **kwargs)
+
+def reboot_or_dryrun(*args, **kwargs):
+    from fabric.operations import reboot
+    dryrun = get_dryrun(kwargs.get('dryrun'))
+    if 'dryrun' in kwargs:
+        del kwargs['dryrun']
+    if dryrun:
+        print('%s sudo: reboot' % (render_command_prefix(),))
+    else:
+        if env.is_local:
+            if raw_input('reboot now? ').strip()[0].lower() != 'y':
+                return
+        reboot(*args, **kwargs)
 
 def put_or_dryrun(**kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
@@ -1271,6 +1298,9 @@ def pc(*args):
     print('echo "%s"' % ' '.join(map(str, args)))
 
 def get_current_hostname():
+    key = '_ip_to_hostname'
+    if key not in env:
+        env[key] = {}
 #    import importlib
 #    
 #    retriever = None
@@ -1288,8 +1318,12 @@ def get_current_hostname():
 #        func_name = env.hostname_translator.split('.')[-1]
 #        translator = getattr(importlib.import_module(module_name), func_name)
     #ret = run_or_dryrun('hostname')#)
-    ret = _run('hostname')#)
-    return str(ret)
+    
+    if env.host_string not in env[key]:
+        ret = _run('hostname')
+        env[key][env.host_string] = str(ret).strip()
+        
+    return env[key][env.host_string]
 
 #http://stackoverflow.com/questions/11557241/python-sorting-a-dependency-list
 def topological_sort(source):
