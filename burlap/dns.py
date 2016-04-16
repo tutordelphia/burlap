@@ -5,6 +5,8 @@ http://docs.fedoraproject.org/en-US/Fedora/13/html/Deployment_Guide/ch-The_BIND_
 http://www.server-world.info/en/note?os=Fedora_16&p=dns
 https://help.ubuntu.com/community/BIND9ServerHowto
 """
+from __future__ import print_function
+
 from burlap import common
 
 from fabric.api import (

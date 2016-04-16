@@ -458,25 +458,6 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
                 if verbose:
                     print(e)
                 time.sleep(3)
-
-#    volume = None
-#    if env.vm_ec2_ebs:
-#        print 'Creating EBS volume from %s...' % (env.vm_ec2_ebs,)
-#        volume = get_ec2_connection().create_volume(10, env.vm_ec2_zone, env.vm_ec2_ebs)
-#        print 'Created EBS volume %s.' % (volume.id,)
-#    if volume:
-#        print 'Attaching EBS volume...',
-#        while instance.state == 'pending':
-#            sys.stdout.write('.')
-#            sys.stdout.flush()
-#            time.sleep(1)
-#            instance.update()
-#        get_ec2_connection().attach_volume(volume.id, instance.id, env.vm_ec2_volume)
-#        print 'EBS volume attached.'
-
-#    delay = 10
-#    print 'Stalling for %is for sshd to start...' % delay
-#    time.sleep(delay)
     
     # Confirm public DNS name was assigned.
     while 1:
@@ -485,9 +466,9 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
             #assert instance.public_dns_name, 'No public DNS name found!'
             if instance.public_dns_name:
                 break
-        except Exception, e:
+        except Exception as e:
             print('error:',e)
-        except SystemExit, e:
+        except SystemExit as e:
             print('systemexit:',e)
             pass
         print('Waiting for public DNS name to be assigned...')
@@ -504,9 +485,9 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
                 #print 'ret.return_code:',ret.return_code
                 if not ret.return_code:
                     break
-        except Exception, e:
+        except Exception as e:
             print('error:',e)
-        except SystemExit, e:
+        except SystemExit as e:
             print('systemexit:',e)
             pass
         print('Waiting for sshd to accept connections...')
@@ -520,7 +501,7 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
     
     ip = socket.gethostbyname(instance.public_dns_name)
     print("")
-    print("""Example hosts entry:
+    print("""Example hosts entry:)
 %(ip)s    www.mydomain.com # %(name)s""" % dict(ip=ip, name=name))
     return instance
 

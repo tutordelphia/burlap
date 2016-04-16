@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function
 
 import os
 import sys
@@ -99,7 +99,7 @@ def clean_virtualenv(virtualenv_dir=None):
     render_paths()
     env.pip_virtual_env_dir = virtualenv_dir or env.pip_virtual_env_dir
     with settings(warn_only=True):
-        print 'Deleting old virtual environment...'
+        print('Deleting old virtual environment...')
         sudo_or_dryrun('rm -Rf %(pip_virtual_env_dir)s' % env)
     assert not files.exists(env.pip_virtual_env_dir), \
         'Unable to delete pre-existing environment.'
@@ -154,9 +154,9 @@ def virtualenv_exists(virtualenv_dir=None):
         
     if common.get_verbose():
         if ret:
-            print 'Yes'
+            print('Yes')
         else:
-            print 'No'
+            print('No')
         
     return ret
 
@@ -174,19 +174,19 @@ def init(clean=0, check_global=0, virtualenv_dir=None, check_permissions=None):
         clean_virtualenv(virtualenv_dir=virtualenv_dir)
     
     if virtualenv_exists(virtualenv_dir=virtualenv_dir):
-        print 'virtualenv exists'
+        print('virtualenv exists')
         return
     
     # Important. Default Ubuntu 12.04 package uses Pip 1.0, which
     # is horribly buggy. Should use 1.3 or later.
     if int(check_global):
-        print 'Ensuring the global pip install is up-to-date.'
+        print('Ensuring the global pip install is up-to-date.')
         sudo_or_dryrun('pip install --upgrade pip')
     
     virtualenv_dir = virtualenv_dir or env.pip_virtual_env_dir
     
     #if not files.exists(env.pip_virtual_env_dir):
-    print 'Creating new virtual environment...'
+    print('Creating new virtual environment...')
     with settings(warn_only=True):
         cmd = 'virtualenv --no-site-packages %s' % virtualenv_dir
         if env.is_local:
@@ -320,19 +320,17 @@ def update_dependency_cache(name=None, output=None):
         if name and name not in line:
             continue
         
-        print>>sys.stderr, 'line %s: %i %i %.02f%%' % (line, i, total, i/float(total)*100)
+        print('line %s: %i %i %.02f%%' % (line, i, total, i/float(total)*100), file=sys.stderr)
         
         env.pip_package = line
         env.pip_download_dir = tempfile.mkdtemp()
         cmd = env.pip_depend_command % env
         #with hide('output', 'running', 'warnings'):
         ret = local_or_dryrun(cmd, capture=True)
-        print 'ret:',ret
+        print('ret:',ret)
         matches = PIP_DEP_PATTERN.findall(ret) # [(child,parent)]
-#         print '~'*80
-        print 'matches:',matches
-#         print '~'*80
-#         return
+        print('matches:',matches)
+        
         for child, parent in matches:
             try:
                 child_line = child.strip()
@@ -343,7 +341,7 @@ def update_dependency_cache(name=None, output=None):
                 #print 'child:',child_name,child_specs
                 parent = Requirement.parse_line(parent.strip().split('->')[0])
                 #print 'parent:',parent.__dict__
-#                 print 'parent.specs:',parent.specs,bool(parent.specs)
+#                 print('parent.specs:',parent.specs,bool(parent.specs)
                 assert not parent.specs \
                 or (parent.specs and parent.specs[0][0] in ('==', '>=', '<=', '!=', '<', '>')), \
                     'Invalid parent: %s (%s)' % (parent, parent.specs)
@@ -391,7 +389,7 @@ def sort_requirements(fn=None):
         try:
             line = line.strip()
             parent = Requirement.parse_line(line)
-            print parent.specs,parent.__dict__
+            print(parent.specs,parent.__dict__)
             package_name, package_version = line.split('==')
             if package_name in ignore_packages:
                 continue
@@ -399,7 +397,7 @@ def sort_requirements(fn=None):
             package_names_req.add(package_name.lower())
             package_name_to_version[package_name.lower()] = package_version
         except Exception as e:
-            print>>sys.stderr, 'Error on line %i.' % i
+            print('Error on line %i.' % i, file=sys.stderr)
             raise
     
     package_to_deps = defaultdict(set) # {package:set(dependencies)}
@@ -440,7 +438,7 @@ def sort_requirements(fn=None):
     
     all_names = common.topological_sort(package_to_deps)
     for name in all_names:
-        print '%s==%s' % (package_name_to_original[name], package_name_to_version[name])
+        print('%s==%s' % (package_name_to_original[name], package_name_to_version[name]))
 
 @task_or_dryrun
 @runs_once
@@ -466,7 +464,7 @@ def pip_to_deps(lines=None):
 #     i = 0
     for line in lines:
 #         i += 1
-#         print '\rChecking requirement %i of %i...' % (i, total),
+#         print('\rChecking requirement %i of %i...' % (i, total),
 #         sys.stdout.flush()
         #if i > 5:break#TODO:remove
         
@@ -497,7 +495,7 @@ def pip_to_deps(lines=None):
             if version.endswith('.tar.gz'):
                 version = version.replace('.tar.gz', '')
         else:
-            raise NotImplementedError, 'Unhandled line: %s' % line
+            raise NotImplementedError('Unhandled line: %s' % line)
         
         # Create the dependency.
         dep = versioner.Dependency(
@@ -521,7 +519,7 @@ def check_for_updates():
     i = 0
     for line in lines:
         i += 1
-        print '\rChecking requirement %i of %i...' % (i, total),
+        print('\rChecking requirement %i of %i...' % (i, total))
         sys.stdout.flush()
         #if i > 5:break#TODO:remove
         
@@ -534,8 +532,6 @@ def check_for_updates():
             dep_type = versioner.PIP
             name = uri = parts[0].strip()
             version = parts[1].strip()
-#            print 'name:',name
-#            print 'version: "%s"' % version
         elif 'github' in line.lower():
             dep_type = versioner.GITHUB_TAG
             matches = GITHUB_TO_PIP_NAME_PATTERN.findall(line)
@@ -548,13 +544,8 @@ def check_for_updates():
                 version = version.replace('.zip', '')
             if version.endswith('.tar.gz'):
                 version = version.replace('.tar.gz', '')
-#            print
-#            print 'name:',name
-#            print 'uri:',uri
-#            print 'tag_name:',tag_name
-#            print 'version: "%s"' % version
         else:
-            raise NotImplementedError, 'Unhandled line: %s' % line
+            raise NotImplementedError('Unhandled line: %s' % line)
         
         # Create the dependency.
         dep = versioner.Dependency(
@@ -568,15 +559,15 @@ def check_for_updates():
         try:
             if dep.is_stale():
                 stale_lines.append(dep)
-        except Exception, e:
-            print
-            print 'Error checking line %s: %s' % (line, e)
+        except Exception as e:
+            print()
+            print('Error checking line %s: %s' % (line, e))
             raise
             
-    print
-    print '='*80
+    print()
+    print('='*80)
     if stale_lines:
-        print 'The following packages have updated versions available:'
+        print('The following packages have updated versions available:')
         spaced_lines = []
         max_lengths = defaultdict(int)
         for dep in sorted(stale_lines, key=lambda _:_.name):
@@ -592,13 +583,13 @@ def check_for_updates():
         columns = ['package', 'installed_version', 'most_recent_version']
         for column in columns:
             max_lengths[column] = max(max_lengths[column], len(column))
-        print ''.join((_+('' if i+1==len(columns) else delimiter)).ljust(max_lengths[_]+2) for i,_ in enumerate(columns))
+        print(''.join((_+('' if i+1==len(columns) else delimiter)).ljust(max_lengths[_]+2) for i,_ in enumerate(columns)))
         for dep in sorted(spaced_lines):
             last = i+1 == len(columns)
             line_data = dict(zip(columns, dep))
-            print ''.join((line_data[_]+('' if i+1==len(columns) else delimiter)).ljust(max_lengths[_]+2) for i,_ in enumerate(columns))
-    print '-'*80
-    print '%i packages have updates' % (len(stale_lines),)
+            print(''.join((line_data[_]+('' if i+1==len(columns) else delimiter)).ljust(max_lengths[_]+2) for i,_ in enumerate(columns)))
+    print('-'*80)
+    print('%i packages have updates' % (len(stale_lines),))
 
 @task_or_dryrun
 def validate_requirements():
@@ -618,7 +609,7 @@ def check(return_type=PENDING):
 #     from burlap.plan import get_original
 #     run0 = get_original('run')
 #     import inspect
-#     print 'run0:',run0, inspect.getsourcefile(run0)
+#     print('run0:',run0, inspect.getsourcefile(run0)
     
     assert env[ROLE]
     
@@ -657,14 +648,14 @@ def check(return_type=PENDING):
             continue
         if not k.strip() or not v.strip():
             continue
-        print 'Installed:',k,v
+        print('Installed:',k,v)
         if k.strip().lower() in ignored_packages:
             continue
         installed_package_versions[k.strip()] = v.strip()
         
     desired_package_version = get_desired_package_versions()
     for k,v in desired_package_version.iteritems():
-        print 'Desired:',k,v
+        print('Desired:',k,v)
     
     pending = [] # (package_line, type)]
     
@@ -674,16 +665,16 @@ def check(return_type=PENDING):
             not_installed[k] = (v, line)
             
     if not_installed:
-        print '!'*80
-        print 'Not installed:'
+        print('!'*80)
+        print('Not installed:')
         for k,(v,line) in sorted(not_installed.iteritems(), key=lambda o:o[0]):
             if k.lower() in ignored_packages:
                 continue
-            print k,v
+            print(k,v)
             pending.append((line,'install'))
     else:
-        print '-'*80
-        print 'All are installed.'
+        print('-'*80)
+        print('All are installed.')
     
     obsolete = {}
     for k,(v,line) in desired_package_version.iteritems():
@@ -691,8 +682,8 @@ def check(return_type=PENDING):
         if v != 'current' and v != installed_package_versions.get(k,v):
             obsolete[k] = (v, line)
     if obsolete:
-        print '!'*80
-        print 'Obsolete:'
+        print('!'*80)
+        print('Obsolete:')
         for k,(v0,line) in sorted(obsolete.iteritems(), key=lambda o:o[0]):
             v0nums = get_version_nums(v0) or v0
             v1 = installed_package_versions[k]
@@ -702,11 +693,11 @@ def check(return_type=PENDING):
             newer_str = ''
             if installed_is_newer:
                 newer_str = ', this is newer!!! Update pip-requirements.txt???'
-            print k,v0,'(Installed is %s%s)' % (v1, newer_str)
+            print(k,v0,'(Installed is %s%s)' % (v1, newer_str))
             pending.append((line,'update'))
     else:
-        print '-'*80
-        print 'None are obsolete.'
+        print('-'*80)
+        print('None are obsolete.')
     
     if return_type == INSTALLED:
         return installed_package_versions
@@ -845,7 +836,7 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
     Installs the local cache of pip packages.
     """
     from burlap.dj import render_remote_paths
-    print 'Installing pip requirements...'
+    print('Installing pip requirements...')
     assert env[ROLE]
     
     require('is_local')
@@ -865,8 +856,8 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
         env.pip_cache_dir = os.path.abspath(env.pip_local_cache_dir % env)
     else:
         env.pip_cache_dir = env.pip_remote_cache_dir % env
-        print 'env.host_string:',env.host_string
-        print 'env.key_filename:',env.key_filename
+        print('env.host_string:',env.host_string)
+        print('env.key_filename:',env.key_filename)
         run_or_dryrun('mkdir -p %(pip_cache_dir)s' % env)
         
         if not env.pip_cache_dir.endswith('/'):
@@ -939,12 +930,12 @@ class PIPSatchel(Satchel):
         desired = get_desired_package_versions(preserve_order=True)
         data = sorted(_raw for _n, (_v, _raw) in desired)
         if get_verbose():
-            print data
+            print(data)
         return data
     
     def configure(self, *args, **kwargs):
         return update_install(*args, **kwargs)
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user']
         
 PIPSatchel()

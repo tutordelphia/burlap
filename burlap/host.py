@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 
 from fabric.api import (
@@ -40,7 +42,7 @@ def iter_hostnames():
 @runs_once
 def list_hostnames():
     for hostname in iter_hostnames():
-        print hostname
+        print(hostname)
 
 @task_or_dryrun
 @runs_once
@@ -50,13 +52,13 @@ def list_public_ips(show_hostname=0):
     """
     show_hostname = int(show_hostname)
     ret = execute(get_public_ip)
-    print '-'*80
+    print('-'*80)
     have_updates = 0
     for hn, output in ret.items():
         if show_hostname:
-            print hn, output
+            print(hn, output)
         else:
-            print output
+            print(output)
 
 @task_or_dryrun
 def reboot():
@@ -123,7 +125,53 @@ class HostnameSatchel(Satchel):
         self.sudo_or_dryrun('echo "127.0.0.1 %(hostname)s" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts' % kwargs)
         self.sudo_or_dryrun('service hostname restart; sleep 3')
         
-    configure.is_deployer = True
+    
     configure.deploy_before = []
 
+class SSHNiceSatchel(Satchel):
+
+    name = 'sshnice'
+    
+    def set_defaults(self):
+        self.env.enabled = False
+        self.env.cron_script_path = '/etc/cron.d/sshnice'
+        self.env.cron_perms = '600'
+    
+    def configure(self):
+        if self.env.enabled:
+            remote_path = self.env.cron_script_path
+            self.put_or_dryrun(
+                local_path=self.find_template('host/etc_crond_sshnice'),
+                remote_path=remote_path, use_sudo=True)
+            self.sudo_or_dryrun('chown root:root %s' % remote_path)
+            # Must be 600, otherwise gives INSECURE MODE error.
+            # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
+            self.sudo_or_dryrun('chmod %s %s' % (self.env.cron_perms, remote_path))#env.put_remote_path)
+            self.sudo_or_dryrun('service cron restart')
+        else:
+            self.sudo_or_dryrun('rm -f {cron_script_path}'.format(**self.lenv))
+            self.sudo_or_dryrun('service cron restart')
+    configure.deploy_before = ['packager']
+
+class TimezoneSatchel(Satchel):
+    """
+    Manages setting the system-wide timezone.
+    
+    For a list of standard timezones see:
+    
+        https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+    """
+
+    name = 'timezone'
+    
+    def set_defaults(self):
+        self.env.timezone = 'America/New_York'
+    
+    def configure(self):
+        self.sudo_or_dryrun("sudo sh -c 'echo \"{timezone}\" > /etc/timezone'".format(**self.lenv))    
+        self.sudo_or_dryrun('dpkg-reconfigure -f noninteractive tzdata')
+    configure.deploy_before = ['packager']
+
 HostnameSatchel()
+SSHNiceSatchel()
+TimezoneSatchel()

@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 import re
@@ -40,17 +42,20 @@ if 'jira_server' not in env:
 
 @task_or_dryrun
 def get_tickets_between_commits(a, b):
-    from burlap.git import get_logs_between_commits
+    from burlap.git import gittracker
+    
+    get_logs_between_commits = gittracker.get_logs_between_commits
+    
     tickets = []
     if env.jira_ticket_pattern:
         verbose = common.get_verbose()
         ret = get_logs_between_commits(a, b)
         pattern = re.compile(env.jira_ticket_pattern, flags=re.I)
         if verbose:
-            print 'pattern:', env.jira_ticket_pattern
+            print('pattern:', env.jira_ticket_pattern)
         tickets.extend(pattern.findall(ret))
     if verbose:
-        print tickets
+        print(tickets)
     return set(_.strip().upper() for _ in tickets)
 
 @task_or_dryrun
@@ -62,7 +67,10 @@ def update_tickets_from_git(last=None, current=None):
     """
     from jira import JIRA, JIRAError
     from burlap.deploy import get_last_current_diffs
-    from burlap.git import get_current_commit, GITTRACKER
+    from burlap.git import gittracker
+    
+    get_current_commit = gittracker.get_current_commit
+    GITTRACKER = gittracker.name.upper()
     
     dryrun = common.get_dryrun()
     verbose = common.get_verbose()
@@ -86,10 +94,10 @@ def update_tickets_from_git(last=None, current=None):
         last, current = get_last_current_diffs(GITTRACKER)
     
     if verbose:
-        print '-'*80
-        print 'last.keys:', last.keys()
-        print '-'*80
-        print 'current.keys:', current.keys()
+        print('-'*80)
+        print('last.keys:', last.keys())
+        print('-'*80)
+        print('current.keys:', current.keys())
     
     try:
         last_commit = last['GITTRACKER']['current_commit']
@@ -100,7 +108,7 @@ def update_tickets_from_git(last=None, current=None):
     # Find all tickets deployed between last deployment and now.
     tickets = get_tickets_between_commits(current_commit, last_commit)
     if verbose:
-        print 'tickets:', tickets
+        print('tickets:', tickets)
     
     # Update all tickets in Jira.
     jira = JIRA({
@@ -110,38 +118,35 @@ def update_tickets_from_git(last=None, current=None):
         
         # Mention this Jira updated.
         comment = env.jira_ticket_update_message_template % dict(role=env.ROLE.lower())
-        print 'Commenting on ticket %s: %s' % (ticket, comment)
+        print('Commenting on ticket %s: %s' % (ticket, comment))
         if not dryrun:
             jira.add_comment(ticket, comment) 
         
         # Update ticket status.
         recheck = False
         while 1:
-            print 'Looking up jira ticket %s...' % ticket
+            print('Looking up jira ticket %s...' % ticket)
             issue = jira.issue(ticket)
-            print 'Ticket %s retrieved.' % ticket
+            print('Ticket %s retrieved.' % ticket)
             transition_to_id = dict((t['name'], t['id']) for t in jira.transitions(issue))
-            print '%i allowable transitions found: %s' % (len(transition_to_id), ', '.join(transition_to_id.keys()))
-#             print 'transition_to_id:', transition_to_id
-#             print 'jira_deploy_workflow:', env.jira_deploy_workflow
-#             print 'issue.fields.status.name:', issue.fields.status.name.title()
+            print('%i allowable transitions found: %s' % (len(transition_to_id), ', '.join(transition_to_id.keys())))
             next_transition_name = env.jira_deploy_workflow.get(issue.fields.status.name.title())
-#             print 'next_transition_name:', next_transition_name
             next_transition_id = transition_to_id.get(next_transition_name)
-#             print 'next_transition_id:', next_transition_id
             if next_transition_name:
                 new_fields = {}
                 
-#                 print 'jira_assignee_by_status:', env.jira_assignee_by_status, issue.fields.status.name.title()
+#                 print('jira_assignee_by_status:', env.jira_assignee_by_status, issue.fields.status.name.title()
                 new_assignee = env.jira_assignee_by_status.get(
                     #issue.fields.status.name.title(),
                     next_transition_name,
                     issue.fields.assignee.name,
                 )
-#                 print 'new_assignee:', new_assignee
+                if new_assignee == 'reporter':
+                    new_assignee = issue.fields.reporter.name
+#                 print('new_assignee:', new_assignee)
                     
-                print 'Updating ticket %s to status %s and assigning it to %s.' \
-                    % (ticket, next_transition_name, new_assignee)
+                print('Updating ticket %s to status %s and assigning it to %s.' \
+                    % (ticket, next_transition_name, new_assignee))
                 if not dryrun:
                     try:
                         jira.transition_issue(
@@ -157,17 +162,17 @@ def update_tickets_from_git(last=None, current=None):
                     # effect remove transitions that we need.
                     try:
                         if new_assignee:
-                            print 'Assigning ticket %s to %s.' % (ticket, new_assignee)
+                            print('Assigning ticket %s to %s.' % (ticket, new_assignee))
                             jira.assign_issue(issue, new_assignee)
                         else:
-                            print 'No new assignee found.'
+                            print('No new assignee found.')
                     except JIRAError as e:
-                        print>>sys.stderr, 'Unable to reassign ticket %s to %s: %s' \
-                            % (ticket, new_assignee, e)
+                        print('Unable to reassign ticket %s to %s: %s' \
+                            % (ticket, new_assignee, e), file=sys.stderr)
             else:
                 recheck = False
-                print 'No transitions found for ticket %s currently in status "%s".' \
-                    % (ticket, issue.fields.status.name)
+                print('No transitions found for ticket %s currently in status "%s".' \
+                    % (ticket, issue.fields.status.name))
                     
             if not recheck:
                 break

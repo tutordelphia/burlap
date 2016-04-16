@@ -1,17 +1,12 @@
 import unittest
 
-try:
-    import pytest
-    from mock import patch
-except ImportError:
-    pass
+from mock import patch
+
 
 class TestVagrantMachines(unittest.TestCase):
 
     def test_machines_one(self):
-#         with patch('fabtools.vagrant._status') as mock_status:
-#             mock_status.return_value = [('default', 'running')]
-#             from fabtools.vagrant import machines
-#             self.assertEqual(machines(), ['default'])
-        pass
-        
+        with patch('burlap.vagrant._status') as mock_status:
+            mock_status.return_value = [('default', 'running')]
+            from burlap.vagrant import machines
+            self.assertEqual(machines(), ['default'])

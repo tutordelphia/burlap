@@ -1,0 +1,32 @@
+from burlap.constants import *
+from burlap import Satchel, ServiceSatchel
+
+class {{ name_camelcase }}Satchel(Satchel):
+    """
+    Enter description here.
+    """
+    
+    name = '{{ name_simple }}'
+
+    tasks = (
+        # Enter additional method names here that should be executable from Fabric.
+        #'mytask'
+    )
+    
+    def set_defaults(self):
+        # Enter custom settings here.
+        #self.env.mysetting = 123
+        pass
+    
+#    def mytask(self):
+#        self.sudo_or_dryrun('echo "hello world"')
+    
+    def configure(self):
+        """
+        Executed when your settings have changed since the last deployment.
+        Run commands to apply changes here.
+        """
+
+    configure.deploy_before = ['packager', 'user']
+                
+{{ name_camelcase }}Satchel()

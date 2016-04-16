@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 from burlap.constants import *
 from burlap import ServiceSatchel
@@ -76,7 +77,7 @@ class NetworkManagerSatchel(ServiceSatchel):
             self.sudo_or_dryrun('rm -f {cron_script_path}'.format(**self.lenv))
             self.sudo_or_dryrun('service cron restart')
             
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user', 'cron']
 
 NetworkManagerSatchel()

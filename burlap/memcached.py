@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 from fabric.api import env
 
 from burlap import common

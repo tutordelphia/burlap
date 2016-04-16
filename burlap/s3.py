@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import re
 
@@ -60,7 +62,7 @@ def get_or_create_bucket(name):
         bucket = conn.create_bucket(name)
         return bucket
     else:
-        print 'boto.connect_s3().create_bucket(%s)' % repr(name)
+        print('boto.connect_s3().create_bucket(%s)' % repr(name))
 
 #S3SYNC_PATH_PATTERN = r'(?:Create|Update)\s+node\s+([^\n]+)'
 S3SYNC_PATH_PATTERN = r'(?:->)\s+([^\n]+)'
@@ -114,7 +116,7 @@ def sync(sync_set, force=0):
             
         env.s3_remote_path = remote_path % env
         
-        print 'Syncing %s to %s...' % (env.s3_local_path, env.s3_remote_path)
+        print('Syncing %s to %s...' % (env.s3_local_path, env.s3_remote_path))
         
         # Old buggy Ruby version.
 #         cmd = ('export AWS_ACCESS_KEY_ID=%(AWS_ACCESS_KEY_ID)s; '\
@@ -137,16 +139,6 @@ def sync(sync_set, force=0):
         else:
             run_or_dryrun(cmd)
     
-#     if auto_invalidate:
-#         for ret in rets:
-#             print 's3sync:', ret
-#             paths = re.findall(
-#                 S3SYNC_PATH_PATTERN,
-#                 ret,
-#                 flags=re.DOTALL|re.MULTILINE|re.IGNORECASE)
-#             print 'paths:', paths
-#             #TODO:handle more than 1000 paths?
-#             invalidate(*paths)
 
 @task_or_dryrun
 def invalidate(*paths):
@@ -163,7 +155,7 @@ def invalidate(*paths):
     # http://boto.readthedocs.org/en/latest/cloudfront_tut.html
     _settings = get_settings()
     if not _settings.AWS_STATIC_BUCKET_NAME:
-        print 'No static media bucket set.'
+        print('No static media bucket set.')
         return
     if isinstance(paths, basestring):
         paths = paths.split(',')
@@ -181,19 +173,19 @@ def invalidate(*paths):
         rs = c.get_all_distributions()
         target_dist = None
         for dist in rs:
-            print dist.domain_name, dir(dist), dist.__dict__
+            print(dist.domain_name, dir(dist), dist.__dict__)
             bucket_name = dist.origin.dns_name.replace('.s3.amazonaws.com', '')
             if bucket_name == _settings.AWS_STATIC_BUCKET_NAME:
                 target_dist = dist
                 break
         if not target_dist:
-            raise Exception, ('Target distribution %s could not be found '
+            raise Exception(('Target distribution %s could not be found '
                 'in the AWS account.') \
-                    % (settings.AWS_STATIC_BUCKET_NAME,)
-        print 'Using distribution %s associated with origin %s.' \
-            % (target_dist.id, _settings.AWS_STATIC_BUCKET_NAME)
+                    % (settings.AWS_STATIC_BUCKET_NAME,))
+        print('Using distribution %s associated with origin %s.' \
+            % (target_dist.id, _settings.AWS_STATIC_BUCKET_NAME))
         inval_req = c.create_invalidation_request(target_dist.id, paths)
-        print 'Issue invalidation request %s.' % (inval_req,)
+        print('Issue invalidation request %s.' % (inval_req,))
         
         i += 1000
         

@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 import datetime
@@ -5,6 +7,13 @@ import warnings
 from pprint import pprint
 
 from fabric.api import settings
+
+from distutils.version import StrictVersion as V
+import posixpath
+
+from burlap.files import is_link
+from burlap.system import UnsupportedFamily, distrib_family, distrib_id, distrib_release
+from burlap.utils import run_as_root
 
 from burlap.constants import *
 from burlap import Satchel, ServiceSatchel
@@ -35,6 +44,157 @@ ignore_keys = [
 #     'apache_pid',
 ]
 
+
+def is_module_enabled(module):
+    """
+    Check if an Apache module is enabled.
+    """
+    return is_link('/etc/apache2/mods-enabled/%s.load' % module)
+
+
+def enable_module(module):
+    """
+    Enable an Apache module.
+
+    This creates a symbolic link from ``/etc/apache2/mods-available/``
+    into ``/etc/apache2/mods-enabled/``.
+
+    This does not cause Apache to reload its configuration.
+
+    ::
+
+        import burlap
+
+        burlap.apache.enable_module('rewrite')
+        burlap.service.reload('apache2')
+
+    .. seealso:: :py:func:`burlap.require.apache.module_enabled`
+    """
+    if not is_module_enabled(module):
+        run_as_root('a2enmod %s' % module)
+
+
+def disable_module(module):
+    """
+    Disable an Apache module.
+
+    This deletes the symbolink link in ``/etc/apache2/mods-enabled/``.
+
+    This does not cause Apache to reload its configuration.
+
+    ::
+
+        import burlap
+
+        burlap.apache.disable_module('rewrite')
+        burlap.service.reload('apache2')
+
+    .. seealso:: :py:func:`burlap.require.apache.module_disabled`
+    """
+    if is_module_enabled(module):
+        run_as_root('a2dismod %s' % module)
+
+
+def is_site_enabled(site_name):
+    """
+    Check if an Apache site is enabled.
+    """
+    return is_link(_site_link_path(site_name))
+
+
+def enable_site(site_name):
+    """
+    Enable an Apache site.
+
+    This creates a symbolic link from ``/etc/apache2/sites-available/``
+    into ``/etc/apache2/sites-enabled/``.
+
+    This does not cause Apache to reload its configuration.
+
+    ::
+
+        import burlap
+
+        burlap.apache.enable_site('default')
+        burlap.service.reload('apache2')
+
+    .. seealso:: :py:func:`burlap.require.apache.site_enabled`
+    """
+    if not is_site_enabled(site_name):
+        run_as_root('a2ensite %s' % _site_config_filename(site_name))
+
+
+def disable_site(site_name):
+    """
+    Disable an Apache site.
+
+    This deletes the symbolink link in ``/etc/apache2/sites-enabled/``.
+
+    This does not cause Apache to reload its configuration.
+
+    ::
+
+        import burlap
+
+        burlap.apache.disable_site('default')
+        burlap.service.reload('apache2')
+
+    .. seealso:: :py:func:`burlap.require.apache.site_disabled`
+    """
+    if is_site_enabled(site_name):
+        run_as_root('a2dissite %s' % _site_config_filename(site_name))
+
+
+def _site_config_path(site_name):
+    config_filename = _site_config_filename(site_name)
+    return posixpath.join('/etc/apache2/sites-available', config_filename)
+
+
+def _site_config_filename(site_name):
+    if site_name == 'default':
+        return _default__site_config_filename()
+    else:
+        return '{0}.conf'.format(site_name)
+
+
+def _site_link_path(site_name):
+    link_filename = _site_link_filename(site_name)
+    return posixpath.join('/etc/apache2/sites-enabled', link_filename)
+
+
+def _site_link_filename(site_name):
+    if site_name == 'default':
+        return _default__site_link_filename()
+    else:
+        return '{0}.conf'.format(site_name)
+
+
+def _default__site_config_filename():
+    return _choose(old_style='default', new_style='000-default.conf')
+
+
+def _default__site_link_filename():
+    return _choose(old_style='000-default', new_style='000-default.conf')
+
+
+def _choose(old_style, new_style):
+    family = distrib_family()
+    if family == 'debian':
+        distrib = distrib_id()
+        at_least_trusty = (distrib == 'Ubuntu' and V(distrib_release()) >= V('14.04'))
+        at_least_jessie = (distrib == 'Debian' and V(distrib_release()) >= V('8.0'))
+        if at_least_trusty or at_least_jessie:
+            return new_style
+        else:
+            return old_style
+    else:
+        raise UnsupportedFamily(supported=['debian'])
+
+
+# backward compatibility (deprecated)
+enable = enable_site
+disable = disable_site
+
 #DEPRECATED
 def set_apache_site_specifics(site):
     from burlap.common import env
@@ -44,13 +204,7 @@ def set_apache_site_specifics(site):
     
     site_data = env.sites[site]
     
-#    print 'env.django_settings_module_template0:',env.django_settings_module_template
-#    print 'env.django_settings_module0:',env.django_settings_module
-    
     get_settings(site=site)
-    
-#    print 'env.django_settings_module_template1:',env.django_settings_module_template
-#    print 'env.django_settings_module1:',env.django_settings_module
     
     # Set site specific values.
     env.apache_site = site
@@ -73,12 +227,6 @@ def set_apache_site_specifics(site):
     for _wrong, _right in env.apache_domain_redirect_templates:
         env.apache_domain_redirects.append((_wrong % env, _right % env))
     
-#    print 'site:',env.SITE
-#    print 'env.apache_domain_with_sub_template:',env.apache_domain_with_sub_template
-#    print 'env.apache_domain_with_sub:',env.apache_domain_with_sub
-#    print 'env.apache_enforce_subdomain:',env.apache_enforce_subdomain
-#    raw_input('<enter>')
-
 class ApacheSatchel(ServiceSatchel):
     
     name = 'apache'
@@ -392,8 +540,6 @@ class ApacheSatchel(ServiceSatchel):
         apache_specifics = self.set_apache_specifics()
         
         for site, site_data in iter_sites(site=site, setter=self.set_apache_site_specifics):
-    #        print 'site:',site
-    #        continue
             
             site_secure = site+'_secure'
             if site_secure not in self.genv.sites:
@@ -405,8 +551,8 @@ class ApacheSatchel(ServiceSatchel):
             if self.genv.apache_ssl:
                 for cert_type, local_cert_file, remote_cert_file in self.iter_certificates():
                     if verbose:
-                        print '='*80
-                        print 'Installing certificate %s...' % (remote_cert_file,)
+                        print('='*80)
+                        print('Installing certificate %s...' % (remote_cert_file,))
                     self.put_or_dryrun(
                         local_path=local_cert_file,
                         remote_path=remote_cert_file,
@@ -567,16 +713,11 @@ class ApacheSatchel(ServiceSatchel):
         self.install_auth_basic_user_file(site=ALL)
         self.install_ssl(site=ALL)
         
-    configure.is_deployer = True
     configure.deploy_before = ['packager', 'user', 'hostname', 'ip']
 
 class ApacheModEvasiveSatchel(Satchel):
     
     name = 'apachemodevasive'
-    
-    tasks = (
-        'configure',
-    )
     
     required_system_packages = {
         (UBUNTU, '12.04'): ['libapache2-mod-evasive'],
@@ -595,16 +736,12 @@ class ApacheModEvasiveSatchel(Satchel):
         self.put_or_dryrun(local_path=fn, remote_path='/etc/apache2/mods-available/mod-evasive.conf', use_sudo=True)#Ubuntu 12.04
         self.put_or_dryrun(local_path=fn, remote_path='/etc/apache2/mods-available/evasive.conf', use_sudo=True)#Ubuntu 14.04
         
-    configure.is_deployer = True
+    
     configure.deploy_before = ['apache']
     
 class ApacheModRPAFSatchel(Satchel):
     
     name = 'apachemodrpaf'
-    
-    tasks = (
-        'configure',
-    )
     
     required_system_packages = {
         (UBUNTU, '12.04'): ['libapache2-mod-rpaf'],
@@ -615,16 +752,12 @@ class ApacheModRPAFSatchel(Satchel):
         self.get_apache_settings()
         self.genv.apache_mods_enabled.append('rpaf')
         
-    configure.is_deployer = True
+    
     configure.deploy_before = ['apache']
     
 class ApacheModSecurity(Satchel):
     
     name = 'apachemodsecurity'
-    
-    tasks = (
-        'configure',
-    )
     
     required_system_packages = {
         (UBUNTU, '12.04'): ['libapache2-modsecurity'],
@@ -655,16 +788,12 @@ class ApacheModSecurity(Satchel):
         
         self.genv.apache_httpd_conf_append.append('Include "/etc/modsecurity/activated_rules/*.conf"')
         
-    configure.is_deployer = True
+    
     configure.deploy_before = ['apache']
     
 class ApacheVisitors(Satchel):
     
     name = 'apachevisitors'
-
-    tasks = (
-        'configure',
-    )
     
     required_system_packages = {
         (UBUNTU, '12.04'): ['visitors'],
@@ -674,10 +803,6 @@ class ApacheVisitors(Satchel):
 class ApacheMediaSatchel(Satchel):
     
     name = 'apachemedia'
-    
-    tasks = (
-        'configure',
-    )
     
     def sync_media(self, sync_set=None, clean=0, iter_local_paths=0):
         """
@@ -692,8 +817,7 @@ class ApacheMediaSatchel(Satchel):
         render_remote_paths()
         
         clean = int(clean)
-        print 'Getting site data for %s...' % self.genv.SITE
-#         print 'sites:', self.genv.sites
+        print('Getting site data for %s...' % self.genv.SITE)
         site_data = self.genv.sites[self.genv.SITE]
         self.genv.update(site_data)
         
@@ -718,15 +842,13 @@ class ApacheMediaSatchel(Satchel):
                 if clean:
                     self.sudo_or_dryrun('rm -Rf %(apache_sync_remote_path)s' % self.genv) 
                 
-                print 'Syncing %s to %s...' % (self.genv.apache_sync_local_path, self.genv.apache_sync_remote_path)
+                print('Syncing %s to %s...' % (self.genv.apache_sync_local_path, self.genv.apache_sync_remote_path))
                 
                 self.genv.apache_tmp_chmod = paths.get('chmod',  self.genv.apache_chmod)
                 #with settings(warn_only=True):
                 self.sudo_or_dryrun('mkdir -p %(apache_sync_remote_path)s' % self.genv, user=self.genv.apache_user)
                 self.sudo_or_dryrun('chmod -R %(apache_tmp_chmod)s %(apache_sync_remote_path)s' % self.genv, user=self.genv.apache_user)
                 cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % self.genv
-    #            print '!'*80
-    #            print cmd
                 self.local_or_dryrun(cmd)
                 self.sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % self.genv)
                 
@@ -744,12 +866,12 @@ class ApacheMediaSatchel(Satchel):
             data = min(data, get_last_modified_timestamp(path) or data)
         #TODO:hash media names and content
         if self.verbose:
-            print data
+            print('date:', data)
         return data
         
     def configure(self):
         self.sync_media()
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'apache', 'apache2', 'pip', 'tarball']
             
 apache = ApacheSatchel()
@@ -768,3 +890,8 @@ apache = ApacheSatchel()
 # 
 apachemedia = ApacheMediaSatchel()
 apachemedia.requires_satchel(apache)
+
+# __all__ = [
+#     'is_module_enabled', 'enable_module', 'disable_module',
+#     'is_site_enabled', 'enable_site', 'disable_site',
+# ]

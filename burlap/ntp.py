@@ -6,6 +6,7 @@ if a system uses this component.
 
 It should be otherwise maintenance-free and have required settings to configure.
 """
+from __future__ import print_function
 
 from burlap import ServiceSatchel
 from burlap.common import FEDORA, UBUNTU, START, STOP, ENABLE, DISABLE, RESTART, STATUS
@@ -57,7 +58,7 @@ class NTPClientSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user']
     
 NTPClientSatchel()

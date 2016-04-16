@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 import datetime
@@ -63,31 +65,31 @@ def get_service_command(action):
 @task_or_dryrun
 def enable():
     cmd = get_service_command(common.ENABLE)
-    print cmd
+    print(cmd)
     run(cmd)
 
 @task_or_dryrun
 def disable():
     cmd = get_service_command(common.DISABLE)
-    print cmd
+    print(cmd)
     run(cmd)
 
 @task_or_dryrun
 def start():
     cmd = get_service_command(common.START)
-    print cmd
+    print(cmd)
     run(cmd)
 
 @task_or_dryrun
 def stop():
     cmd = get_service_command(common.STOP)
-    print cmd
+    print(cmd)
     run(cmd)
 
 @task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
-    print cmd
+    print(cmd)
     run(cmd)
 
 @task_or_dryrun

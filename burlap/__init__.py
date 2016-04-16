@@ -13,7 +13,7 @@ import warnings
 
 from pprint import pprint
 
-VERSION = (0, 7, 4)
+VERSION = (0, 8, 0)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -28,6 +28,7 @@ try:
     from fabric.api import env
     from fabric.tasks import WrappedCallableTask
     from fabric.utils import _AliasDict
+    from fabric.api import hide, settings
 
     import yaml
     
@@ -81,8 +82,23 @@ def _get_environ_handler(name, d):
     """
     
     def func(site=None, **kwargs):
+        from fabric import state
         site = site or d.get('default_site') or env.SITE
         
+        BURLAP_SHELL_PREFIX = int(os.environ.get('BURLAP_SHELL_PREFIX', '0'))
+        if BURLAP_SHELL_PREFIX:
+            print('#!/bin/bash')
+            print('# Generated with:')
+            print('#')
+            print('#     export BURLAP_SHELL_PREFIX=1; export BURLAP_COMMAND_PREFIX=0; fab %s' % (' '.join(sys.argv[1:]),))
+            print('#')
+            
+        BURLAP_COMMAND_PREFIX = int(os.environ.get('BURLAP_COMMAND_PREFIX', '1'))
+        with_args = []
+        if not BURLAP_COMMAND_PREFIX:
+            for k in state.output:
+                state.output[k] = False
+    
         hostname = kwargs.get('hostname')
         hostname = hostname or kwargs.get('name')
         hostname = hostname or kwargs.get('hn')
@@ -93,7 +109,6 @@ def _get_environ_handler(name, d):
         # Load environment for current role.
         env.update(env_default)
         env[common.ROLE] = os.environ[common.ROLE] = name
-        print('site:', site)
         if site:
             env[common.SITE] = os.environ[common.SITE] = site
         env.update(d)
@@ -263,7 +278,7 @@ def populate_fabfile():
         
         # Put all virtual satchels in the global namespace so Fabric can find them.
         for _module_alias in common._post_import_modules:
-            exec "import %s" % _module_alias
+            exec("import %s" % _module_alias)
             locals_[_module_alias] = locals()[_module_alias]
             
 #         locals_['shell'] = debug.shell
@@ -297,7 +312,7 @@ if common and not no_load:
             _var_name = 'role_'+_name
             _f = WrappedCallableTask(_f, name=_name)
             _cmd = "%s = _f" % (_var_name,)
-            exec _cmd
+            exec(_cmd)
             #print('Creating role %s.' % _var_name, file=sys.stderr)
             role_commands[_var_name] = _f
 

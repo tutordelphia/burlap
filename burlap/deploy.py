@@ -1,4 +1,5 @@
 from __future__ import print_function
+
 import os
 import gc
 import re
@@ -16,8 +17,6 @@ import time
 from collections import defaultdict
 from pprint import pprint
 
-from StringIO import StringIO
-
 from fabric.api import (
     env, runs_once, sudo as _sudo, get as _get,
 )
@@ -32,6 +31,7 @@ from burlap.common import (
     sudo_or_dryrun,
 )
 from burlap.decorators import task_or_dryrun
+from burlap import exceptions
 
 STORAGE_LOCAL = 'local'
 STORAGE_REMOTE = 'remote'
@@ -173,9 +173,6 @@ class RemoteFile(object):
             self.fresh = True
             
             if mode in 'ra':
-    #             fin = StringIO()
-    #             _get(remote_path=fqfn, local_path=fin, use_sudo=True)
-    #             self.content = fin.getvalue()
     
                 _, tmp_fn = tempfile.mkstemp()
                 os.remove(tmp_fn)
@@ -717,6 +714,8 @@ def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None
         try:
             manifest_data[component_name] = func()
 #             print('manifest:', component_name, manifest_data[component_name])
+        except exceptions.AbortDeployment as e:
+            raise
         except Exception as e:
             if int(reraise):
                 raise
@@ -986,8 +985,8 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
     all_components = set(common.all_satchels)
     if only_components and not all_components.issuperset(only_components):
         unknown_components = set(only_components).difference(all_components)
-        raise Exception, 'Unknown components: %s' \
-            % ', '.join(sorted(unknown_components))
+        raise Exception('Unknown components: %s' \
+            % ', '.join(sorted(unknown_components)))
     
     for _c in components:
         if verbose:
@@ -1091,12 +1090,4 @@ def test_remotefile():
     print('-'*80)
     f = RemoteFile('/var/log/auth.log')
     print(id(f))
-#     f = RemoteFile('/tmp/test.txt', 'w')
-#     f.write('hello there')
-#     f.close()
-#     print('-'*80)
-#     f = RemoteFile('/tmp/test.txt', 'r')
-#     print('content:', f.read())
-#     fin = StringIO()
-#     _get(remote_path='/var/local/burlap/plans/test1/000/thumbprints/54.175.211.49', local_path=fin)
     

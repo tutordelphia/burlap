@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import hashlib
 
@@ -79,10 +81,10 @@ class TarballSatchel(Satchel):
         self.get_tarball_path()
         fn = self.env.absolute_src_dir
         if self.verbose:
-            print 'tarball.fn:', fn
+            print('tarball.fn:', fn)
         data = get_last_modified_timestamp(fn)
         if self.verbose:
-            print data
+            print(data)
         return data
         
     def get_tarball_path(self):
@@ -106,7 +108,7 @@ class TarballSatchel(Satchel):
         assert self.genv.ROLE, 'Role unspecified.'
         self.env.gzip = bool(int(gzip))
         self.get_tarball_path()
-        print 'Creating tarball...'
+        print('Creating tarball...')
         self.env.exclusions_str = ' '.join(
             "--exclude='%s'" % _ for _ in self.env.exclusions)
         cmd = ("cd %(tarball_absolute_src_dir)s; " \
@@ -126,8 +128,8 @@ class TarballSatchel(Satchel):
         # first few bytes so we strip that off before taking the hash.
         tarball_hash = hashlib.sha512(open(fn).read()[8:]).hexdigest()
         if int(verbose):
-            print fn
-            print tarball_hash
+            print(fn)
+            print(tarball_hash)
         return tarball_hash
     
     def set_permissions(self, d=None):
@@ -135,7 +137,7 @@ class TarballSatchel(Satchel):
         genv = self.render_template_paths(d)
         
         # Mark executables.
-        print 'Marking source files as executable...'
+        print('Marking source files as executable...')
         self.sudo_or_dryrun(
             'chmod +x %(remote_app_src_package_dir)s/*' % genv)
         self.sudo_or_dryrun(
@@ -144,7 +146,7 @@ class TarballSatchel(Satchel):
             'chown -R %(apache_user)s:%(apache_group)s %(remote_app_dir)s' % genv)
     
     def _run_rsync(self, src, dst, genv):
-        print 'rsync %s -> %s' % (src, dst) 
+        print('rsync %s -> %s' % (src, dst))
         
         genv.hostname = only_hostname(genv.host_string)
         
@@ -212,11 +214,11 @@ class TarballSatchel(Satchel):
         genv = self.render_template_paths()
         
         if int(clean):
-            print 'Deleting old remote source...'
+            print('Deleting old remote source...')
             self.sudo_or_dryrun('rm -Rf  %(remote_app_src_dir)s' % genv)
             self.sudo_or_dryrun('mkdir -p %(remote_app_src_dir)s' % genv)
         
-        print 'Extracting tarball...'
+        print('Extracting tarball...')
         self.sudo_or_dryrun('mkdir -p %(remote_app_src_dir)s' % genv)
         self.sudo_or_dryrun('tar -xvzf %(put_remote_path)s -C %(remote_app_src_dir)s' % genv)
         
@@ -238,8 +240,8 @@ class TarballSatchel(Satchel):
         elif self.env.method == RSYNC:
             self.deploy_rsync(*args, **kwargs)
         
-    configure.is_deployer = True
-    configure.deploy_before = ['packager', 'apache2', 'pip', 'user']
+    
+    configure.deploy_before = ['gitchecker', 'packager', 'apache2', 'pip', 'user']
             
 tarball_satchel = TarballSatchel()
 

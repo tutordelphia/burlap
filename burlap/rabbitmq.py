@@ -1,3 +1,11 @@
+"""
+RabbitMQ
+============
+
+https://www.rabbitmq.com/
+
+"""
+from __future__ import print_function
 
 from fabric.api import settings
 
@@ -25,7 +33,7 @@ class RabbitMQBleedingSatchel(Satchel):
             'apt-key add rabbitmq-signing-key-public.asc')
         self.sudo_or_dryrun('apt-get update')
         
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'rabbitmq']
     
 class RabbitMQSatchel(ServiceSatchel):
@@ -134,9 +142,9 @@ class RabbitMQSatchel(ServiceSatchel):
     def enable_management_interface(self):
         self.sudo_or_dryrun('rabbitmq-plugins enable rabbitmq_management')
         self.sudo_or_dryrun('service rabbitmq-server restart')
-        print 'You should not be able to access the RabbitMQ web console from:'
-        print '\n    http://54.83.61.46:15672/'
-        print '\nNote, the default login is guest/guest.'
+        print('You should not be able to access the RabbitMQ web console from:')
+        print('\n    http://54.83.61.46:15672/')
+        print('\nNote, the default login is guest/guest.')
     
     def set_loopback_users(self):
         # This allows guest to login through the management interface.
@@ -163,15 +171,15 @@ class RabbitMQSatchel(ServiceSatchel):
         params = set() # [(user,vhost)]
         for site, site_data in iter_sites(site=site, renderer=self.render_paths, no_secure=True):
             if self.verbose:
-                print '!'*80
-                print 'site:', site
+                print>>sys.stderr, '!'*80
+                print>>sys.stderr, 'site:', site
             _settings = get_settings(site=site)
             #print '_settings:',_settings
             if not _settings:
                 continue
             if hasattr(_settings, 'BROKER_USER') and hasattr(_settings, 'BROKER_VHOST'):
                 if self.verbose:
-                    print 'RabbitMQ:',_settings.BROKER_USER, _settings.BROKER_VHOST
+                    print('RabbitMQ:',_settings.BROKER_USER, _settings.BROKER_VHOST)
                 params.add((_settings.BROKER_USER, _settings.BROKER_PASSWORD, _settings.BROKER_VHOST))
         
         params = sorted(list(params))
@@ -209,7 +217,7 @@ class RabbitMQSatchel(ServiceSatchel):
         
         kwargs['site'] = site or ALL
         return self._configure(**kwargs)
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user']
     configure.takes_diff = True
     

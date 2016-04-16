@@ -5,6 +5,8 @@ Note, we manage Celery through Supervisor, since it's extremely difficult to
 run several instances of Celery for multiple Apache sites.
 
 """
+from __future__ import print_function
+
 import os
 import re
 
@@ -135,37 +137,37 @@ def get_service_command(action):
 @task_or_dryrun
 def enable():
     cmd = get_service_command(common.ENABLE)
-    print cmd
+    print('cmd:', cmd)
     sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def disable():
     cmd = get_service_command(common.DISABLE)
-    print cmd
+    print('cmd:', cmd)
     sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def start():
     cmd = get_service_command(common.START)
-    print cmd
+    print('cmd:', cmd)
     sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def stop():
     cmd = get_service_command(common.STOP)
-    print cmd
+    print('cmd:', cmd)
     sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def restart():
     cmd = get_service_command(common.RESTART)
-    print cmd
+    print('cmd:', cmd)
     sudo_or_dryrun(cmd)
 
 @task_or_dryrun
 def status():
     cmd = get_service_command(common.STATUS)
-    print cmd
+    print('cmd:', cmd)
     sudo_or_dryrun(cmd)
 
 @task_or_dryrun

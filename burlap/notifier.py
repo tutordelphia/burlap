@@ -1,6 +1,7 @@
 """
 Helper functions for sending a notification email after each deployment.
 """
+from __future__ import print_function
 
 from burlap.constants import *
 from burlap import Satchel
@@ -102,7 +103,7 @@ class LoginNotifierSatchel(Satchel):
         else:
             self.sudo_or_dryrun('rm {script_installation_path}')
             
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user']
 
 deployment_notifier = DeploymentNotifierSatchel()

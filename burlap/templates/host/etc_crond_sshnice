@@ -1,0 +1,8 @@
+# /etc/cron.d/anacron: crontab entries for the anacron package
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# minute hour day month weekday (0-6, 0 = Sunday) user command
+ 
+*/5 * * * *   root    ps -o pid -C sshd --no-heading | xargs renice -n -20 -p

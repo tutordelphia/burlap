@@ -140,10 +140,6 @@ updated in your pip-requirements.txt and installed via pip.install.
 Development
 -----------
 
-When developing locally, you can browse documentation locally with:
-
-    mkdocs serve
-
 To run tests:
 
     [tox](http://tox.readthedocs.org/en/latest/)

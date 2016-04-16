@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 from fabric.api import (
     env,
 )
@@ -47,4 +49,4 @@ def get_or_create_distribution(s3_bucket):
             
         return distro
     else:
-        print 'boto.connect_cloudfront().create_distribution(%s)' % repr(name)
+        print('boto.connect_cloudfront().create_distribution(%s)' % repr(name))

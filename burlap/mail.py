@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 from burlap import common
 from burlap.common import (
@@ -93,7 +94,7 @@ class PostfixSatchel(ServiceSatchel):
             self.disable()
             self.stop()
     
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user']
     configure.deploy_after = []
     

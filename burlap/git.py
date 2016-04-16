@@ -6,72 +6,101 @@ if a system uses this component.
 
 It should be otherwise maintenance-free.
 """
+from __future__ import print_function
 
-from fabric.api import (
-    env,
-    local as _local
-)
+import time
 
-from burlap.common import (
-    run_or_dryrun,
-    put_or_dryrun,
-    sudo_or_dryrun,
-    local_or_dryrun,
-    render_to_string,
-    QueuedCommand,
-)
-from burlap import common
-from burlap.decorators import task_or_dryrun
+from burlap import Satchel
+from burlap.constants import *
+from burlap.exceptions import AbortDeployment
 
-# Installs git on host.
-GIT = 'GIT'
-
-# Tracks git versions deployed remotely.
-GITTRACKER = 'GITTRACKER'
-
-common.required_system_packages[GIT] = {
-    common.FEDORA: ['git'],
-    (common.UBUNTU, '12.04'): ['git'],
-    (common.UBUNTU, '14.04'): ['git'],
-}
-
-@task_or_dryrun
-def get_current_commit():
+class GitCheckerSatchel(Satchel):
     """
-    Retrieves the git commit number of the current head branch.
+    Ensures the appropriate Git branch is being deployed.
     """
-    verbose = common.get_verbose()
-    s = str(_local('git rev-parse HEAD', capture=True))
-    if verbose:
-        print 'current commit:', s
-    return s
-
-@task_or_dryrun
-def get_logs_between_commits(a, b):
-    """
-    Retrieves all commit messages for all commits between the given commit numbers
-    on the current branch.
-    """
-    verbose = common.get_verbose()
-    ret = _local('git log --pretty=oneline %s...%s' % (a, b), capture=True)
-    if verbose:
-        print ret
-    return str(ret)
-
-@task_or_dryrun
-def record_manifest_git_tracker(verbose=0):
-    """
-    Called after a deployment to record any data necessary to detect changes
-    for a future deployment.
-    """
-    data = {
-        'current_commit': get_current_commit(),
-    }
-    return data
-
-common.manifest_recorder[GITTRACKER] = record_manifest_git_tracker
-
-common.add_deployer(GITTRACKER, 'jirahelp.update_tickets_from_git',
-    before=['packager', 'pip', 'tarball', 'djangomedia', 'djangomigrations'],
-    takes_diff=True)
     
+    name = 'gitchecker'
+    
+    tasks = (
+        'configure',
+        'check',
+    )
+    
+    required_system_packages = {
+        (UBUNTU, '12.04'): ['git'],
+        (UBUNTU, '14.04'): ['git'],
+    }
+    
+    def set_defaults(self):
+        self.env.branch = 'master'
+    
+    def check(self):
+        branch_name = self._local('git rev-parse --abbrev-ref HEAD', capture=True).strip()
+        if not self.env.branch == branch_name:
+            raise AbortDeployment(
+                'Expected branch "%s" but see branch "%s".' % (self.env.branch, branch_name))
+    
+    def record_manifest(self):
+        self.check()
+        return super(GitCheckerSatchel, self).record_manifest()
+        
+    def configure(self):
+        pass
+    
+
+class GitTrackerSatchel(Satchel):
+    """
+    Tracks changes between Git commits.
+    """
+    
+    name = 'gittracker'
+    
+    tasks = (
+        'configure',
+    )
+    
+    required_system_packages = {
+        (UBUNTU, '12.04'): ['git'],
+        (UBUNTU, '14.04'): ['git'],
+    }
+    
+    def set_defaults(self):
+        pass
+        
+    def get_logs_between_commits(self, a, b):
+        """
+        Retrieves all commit messages for all commits between the given commit numbers
+        on the current branch.
+        """
+        ret = self.local_or_dryrun('git log --pretty=oneline %s...%s' % (a, b), capture=True)
+        if self.verbose:
+            print(ret)
+        return str(ret)
+
+    def get_current_commit(self):
+        """
+        Retrieves the git commit number of the current head branch.
+        """
+        s = str(self.local_or_dryrun('git rev-parse HEAD', capture=True))
+        if self.verbose:
+            print('current commit:', s)
+        return s
+    
+    def record_manifest(self):
+        """
+        Called after a deployment to record any data necessary to detect changes
+        for a future deployment.
+        """
+        data = {
+            'current_commit': self.get_current_commit(),
+        }
+        return data
+    
+    def configure(self):
+        from burlap.jirahelp import update_tickets_from_git
+        update_tickets_from_git()
+    
+    configure.deploy_before = ['packager', 'pip', 'tarball', 'djangomedia', 'djangomigrations']
+
+gitchecker = GitCheckerSatchel()
+gittracker = GitTrackerSatchel()

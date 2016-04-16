@@ -11,6 +11,7 @@ e.g.
 import argparse
 import os
 import sys
+import re
 
 _path = os.path.normpath(os.path.join(os.path.realpath(__file__), '../..'))
 sys.path.insert(0, _path)
@@ -27,15 +28,21 @@ fabfile_template = os.path.join(
 ACTIONS = (
     SKEL,
     ADD_ROLE,
+    CREATE_SATCHEL,
 ) = (
     'skel',
     'add-role',
+    'create-satchel',
 )
 
 def md(d):
     if os.path.isdir(d):
         return
     os.makedirs(d)
+
+def to_camelcase(value):
+    value = re.sub(r'[^a-zA-Z0-9]+', ' ', value).strip()
+    return ''.join(x.capitalize() for x in value.split(' '))
 
 def init_django(args):
     
@@ -158,12 +165,11 @@ if __name__ == "__main__":
     )
     
     skel_parser = subparsers.add_parser(
-        'skel',
+        SKEL,
         help='Creates a skeleton project.')
     skel_parser.add_argument(
-        '--name',
+        'project_name',
         type=str,
-        dest='project_name',
         help='project name')
     skel_parser.add_argument(
         '--pip-requirements',
@@ -182,12 +188,19 @@ if __name__ == "__main__":
         help='The default components to enable (e.g. django).')
         
     add_role_parser = subparsers.add_parser(
-        'add-role',
+        ADD_ROLE,
         help='Adds a new role to the project.')
     add_role_parser.add_argument(
         'roles', metavar='roles', type=str, nargs='+',
         help='Names of roles to add.')
                    
+    create_satchel_parser = subparsers.add_parser(
+        CREATE_SATCHEL,
+        help='Adds a new role to the project.')
+    create_satchel_parser.add_argument(
+        'name', type=str,
+        help='Names of the satchel to create.')
+        
     args = parser.parse_args()
 
     if args.action == SKEL:
@@ -256,7 +269,23 @@ if __name__ == "__main__":
                     'burlap/role_settings.yaml.template',
                     extra=dict(role=_role)))
             print('Added role %s!' % role)
+    
+    elif args.action == CREATE_SATCHEL:
         
+        name_simple = re.sub(r'[^a-z0-9]+', '', args.name.lower())
+        content = common.render_to_string(
+            'burlap/satchel.py.template',
+            extra=dict(
+                name_camelcase=to_camelcase(args.name),
+                name_simple=name_simple,
+            ))
+        if not os.path.isdir('satchels'):
+            os.makedirs('satchels')
+            os.system('touch satchels/__init__.py')
+        satchel_fn = 'satchels/%s.py' % name_simple
+        open(satchel_fn, 'w').write(content.strip()+'\n')
+        print('Wrote %s.' % satchel_fn)
+    
     else:
         raise NotImplementedError, 'Unknown action: %s' % (args.action)
         

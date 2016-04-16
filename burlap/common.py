@@ -1,4 +1,5 @@
 from __future__ import with_statement, print_function
+
 import os
 import re
 import sys
@@ -13,10 +14,11 @@ import pipes
 import json
 import getpass
 import inspect
+import subprocess
 from collections import namedtuple, OrderedDict
-from StringIO import StringIO
 from pprint import pprint
 from datetime import date
+import six
 
 from fabric.api import (
     env,
@@ -30,6 +32,7 @@ from fabric.api import (
     cd,
     hide,
     runs_once,
+    local as _local,
 )
 from fabric.contrib import files
 from fabric import state
@@ -43,6 +46,7 @@ if hasattr(fabric.api, '_run'):
 if hasattr(fabric.api, '_sudo'):
     _sudo = fabric.api._sudo
 
+BURLAP_COMMAND_PREFIX = int(os.environ.get('BURLAP_COMMAND_PREFIX', '1'))
 
 OS = namedtuple('OS', ['type', 'distro', 'release'])
 
@@ -126,8 +130,8 @@ def create_module(name, code=None):
     
     if code:
         print('executing code for %s: %s' % (name, code))
-        exec code in module.__dict__
-        exec "from %s import %s" % (name, '*')
+        exec(code in module.__dict__)
+        exec("from %s import %s" % (name, '*'))
 
     return module
 
@@ -280,6 +284,58 @@ def assert_valid_satchel(name):
     assert name in all_satchels
     return name
 
+class Renderer(object):
+    """
+    Base convenience wrapper around command executioners.
+    """
+    
+    env_type = None
+    
+    def __init__(self, obj):
+        # Satchel instance.
+        self.obj = obj
+        # Copy the environment dictionary so we don't modify the original.
+        self.lenv = type(env)(obj.lenv)
+        self.genv = type(env)(obj.genv)
+    
+    def __getattr__(self, attrname):
+        
+        # Alias .env to the default type.
+        if attrname == 'env':
+            attrname = self.env_type
+        
+        if attrname in ('obj', 'lenv', 'genv', 'env_type'):
+            return super(LocalRenderer, self).__getattribute__(attrname)
+        
+        def wrap(func):
+            
+            def _wrap(cmd, *args, **kwargs):
+                cmd = cmd.format(**getattr(self, self.env_type))
+                return func(cmd, *args, **kwargs)
+            
+            return _wrap
+        
+        ret = getattr(self.obj, attrname)
+        
+        # If we're calling a command executor, wrap it so that it automatically formats
+        # the command string using our preferred environment dictionary when called.
+        if attrname.startswith('local') \
+        or attrname.startswith('run') \
+        or attrname.startswith('comment') \
+        or attrname.startswith('put') \
+        or attrname.startswith('sudo'):
+            ret = wrap(ret)
+            
+        return ret
+        
+class LocalRenderer(Renderer):
+    
+    env_type = 'lenv'
+
+class GlobalRenderer(Renderer):
+    
+    env_type = 'genv'
+    
 class Satchel(object):
     """
     Represents a base unit of functionality that is deployed and maintained on one
@@ -289,10 +345,8 @@ class Satchel(object):
     # This will be used to uniquely identify this unit of functionality.
     name = None
     
-    #TODO:auto-add configure when the multi-methods per module bug is fixed
-    tasks = (
-        #'configure',
-    )
+    # This is the list of Fabric tasks exposed by the instance.
+    tasks = ()
     
     required_system_packages = {
         #OS: [package1, package2, ...],
@@ -333,6 +387,8 @@ class Satchel(object):
         # Add built-in tasks.
         if 'install_packages' not in self.tasks:
             self.tasks += ('install_packages',)
+        if 'configure' not in self.tasks:
+            self.tasks += ('configure',)
         
         # Register select instance methods as Fabric tasks.
         for task_name in self.tasks:
@@ -344,7 +400,7 @@ class Satchel(object):
             )
             
             # If task is marked as a deployer, then add it to the deployer list.
-            if hasattr(task.wrapped, 'is_deployer'):
+            if hasattr(task.wrapped, 'is_deployer') or task_name == 'configure':
                 add_deployer(
                     event=self.name,
                     func=task.wrapped.fabric_name,#deployer.func,
@@ -363,6 +419,14 @@ class Satchel(object):
                     after=deployer.after,
                     takes_diff=deployer.takes_diff)
     
+    @property
+    def local_renderer(self):
+        return LocalRenderer(self)
+    
+    @property
+    def global_renderer(self):
+        return GlobalRenderer(self)
+        
     @property
     def all_satchels(self):
         return all_satchels
@@ -388,7 +452,7 @@ class Satchel(object):
         Returns a version of env filtered to only include the variables in our namespace.
         """
         _env = type(env)()
-        for _k, _v in env.iteritems():
+        for _k, _v in six.iteritems(env.iteritems):
             if _k.startswith(self.name+'_'):
                 _env[_k[len(self.name)+1:]] = _v
         return _env
@@ -407,6 +471,9 @@ class Satchel(object):
         if hs not in self._os_version_cache:
             self._os_version_cache[hs] = get_os_version()
         return self._os_version_cache[hs]
+    
+    def _local(self, *args, **kwargs):
+        return _local(*args, **kwargs)
     
     def reboot_or_dryrun(self):
         """
@@ -449,7 +516,7 @@ class Satchel(object):
             elif os_version.distro == FEDORA:
                 self.sudo_or_dryrun('yum install --assumeyes %s' % package_list_str)
             else:
-                raise NotImplementedError, 'Unknown distro: %s' % os_version.distro
+                raise NotImplementedError('Unknown distro: %s' % os_version.distro)
     
     def purge_packages(self):
         os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
@@ -477,9 +544,10 @@ class Satchel(object):
             elif os_version.distro == FEDORA:
                 self.sudo_or_dryrun('yum remove %s' % package_list_str)
             else:
-                raise NotImplementedError, 'Unknown distro: %s' % os_version.distro
+                raise NotImplementedError('Unknown distro: %s' % os_version.distro)
     
     def set_defaults(self):
+        # Override to specify custom defaults.
         pass
     
     def render_to_file(self, *args, **kwargs):
@@ -489,14 +557,29 @@ class Satchel(object):
         return put_or_dryrun(*args, **kwargs)
     
     def run_or_dryrun(self, *args, **kwargs):
+        warnings.warn('Use self.run() instead.', DeprecationWarning, stacklevel=2)
+        return run_or_dryrun(*args, **kwargs)
+    
+    def run(self, *args, **kwargs):
         return run_or_dryrun(*args, **kwargs)
     
     def local_or_dryrun(self, *args, **kwargs):
+        warnings.warn('Use self.local() instead.', DeprecationWarning, stacklevel=2)
+        return local_or_dryrun(*args, **kwargs)
+        
+    def local(self, *args, **kwargs):
         return local_or_dryrun(*args, **kwargs)
     
     def sudo_or_dryrun(self, *args, **kwargs):
         return sudo_or_dryrun(*args, **kwargs)
-        
+    
+    def sudo(self, *args, **kwargs):
+        warnings.warn('Use self.sudo() instead.', DeprecationWarning, stacklevel=2)
+        return sudo_or_dryrun(*args, **kwargs)
+    
+    def comment(self, *args):
+        print('# ' + (' '.join(map(str, args))))
+    
     def print_command(self, *args, **kwargs):
         return print_command(*args, **kwargs)
         
@@ -512,9 +595,9 @@ class Satchel(object):
         The standard method called to apply functionality when the manifest changes.
         """
         raise NotImplementedError
-    configure.is_deployer = True
+
     configure.deploy_before = []
-    configure.takes_diff = False
+    configure.takes_diff = False #DEPRECATED
     
     #TODO:deprecated, remove?
     def get_deployers(self):
@@ -675,7 +758,7 @@ env.available_sites = []
 env.available_sites_by_host = {}
 
 # The command run to determine the percent of disk usage.
-env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{ print $5 " " $1 }'"
+env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{print $5 " " $1}'"
 
 env.post_callbacks = []
 
@@ -763,6 +846,14 @@ def local_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
+        
+    assign_to = kwargs.pop('assign_to', None)
+    if assign_to:
+        cmd = args[0]
+        cmd = '$%s=`%s`' % (assign_to, cmd)
+        args = list(args)
+        args[0] = cmd
+        
     if dryrun:
         cmd = args[0]
         print('[%s@localhost] local: %s' % (getpass.getuser(), cmd))
@@ -775,7 +866,10 @@ def run_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print('%s run: %s' % (render_command_prefix(), cmd))
+        if BURLAP_COMMAND_PREFIX:
+            print('%s run: %s' % (render_command_prefix(), cmd))
+        else:
+            print(cmd)
     else:
         return _run(*args, **kwargs)
 
@@ -785,7 +879,10 @@ def sudo_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
-        print('%s sudo: %s' % (render_command_prefix(), cmd))
+        if BURLAP_COMMAND_PREFIX:
+            print('%s sudo: %s' % (render_command_prefix(), cmd))
+        else:
+            print(cmd)
     else:
         return _sudo(*args, **kwargs)
 
@@ -895,11 +992,10 @@ def get_last_modified_timestamp(path):
     """
     Recursively finds the most recent timestamp in the given directory.
     """
-    import commands
     cmd = 'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
          #'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d " " -f1
 
-    ret = commands.getoutput(cmd)
+    ret = subprocess.check_output(cmd)
     # Note, we round now to avoid rounding errors later on where some formatters
     # use different decimal contexts.
     try: 
@@ -977,13 +1073,13 @@ def to_dict(obj):
     if isinstance(obj, (tuple, list)):
         return [to_dict(_) for _ in obj]
     elif isinstance(obj, dict):
-        return dict((to_dict(k), to_dict(v)) for k,v in obj.iteritems())
+        return dict((to_dict(k), to_dict(v)) for k,v in six.iteritems(obj))
     elif isinstance(obj, (int, bool, float, basestring)):
         return obj
     elif hasattr(obj, 'to_dict'):
         return obj.to_dict()
     else:
-        raise Exception, 'Unknown type: %s %s' % (obj, type(obj))
+        raise Exception('Unknown type: %s %s' % (obj, type(obj)))
 
 class QueuedCommand(object):
     """
@@ -1013,7 +1109,7 @@ class QueuedCommand(object):
     
     def __repr__(self):
         kwargs = list(map(str, self.args))
-        for k,v in self.kwargs.iteritems():
+        for k,v in six.iteritems(self.kwargs):
             if isinstance(v, bool):
                 kwargs.append('%s=%i' % (k,int(v)))
             elif isinstance(v, basestring) and '=' in v:
@@ -1071,6 +1167,7 @@ def get_template_dirs():
         (env.ROLES_DIR, env[ROLE], 'templates'),
         (env.ROLES_DIR, env[ROLE]),
         (env.ROLES_DIR, '..', 'templates', env[ROLE]),
+        (env.ROLES_DIR, '..', 'satchels', 'templates'),
         (env.ROLES_DIR, ALL, 'templates'),
         (env.ROLES_DIR, ALL),
         (env.ROLES_DIR, '..', 'templates', ALL),
@@ -1088,7 +1185,7 @@ env.template_dirs = get_template_dirs()
 
 def save_env():
     env_default = {}
-    for k, v in env.iteritems():
+    for k, v in six.iteritems(env):
         if k.startswith('_'):
             continue
         elif isinstance(v, (types.GeneratorType, types.ModuleType)):
@@ -1142,7 +1239,7 @@ def get_packager():
                             common_packager = pn
                             break
     if not common_packager:
-        raise Exception, 'Unable to determine packager.'
+        raise Exception('Unable to determine packager.')
     set_rc('common_packager', common_packager)
     return common_packager
 
@@ -1168,9 +1265,9 @@ def get_os_version():
                         distro = FEDORA,
                         release = re.findall('release ([0-9]+)', ret)[0])
                 else:
-                    raise Exception, 'Unable to determine OS version.'
+                    raise Exception('Unable to determine OS version.')
     if not common_os_version:
-        raise Exception, 'Unable to determine OS version.'
+        raise Exception('Unable to determine OS version.')
     set_rc('common_os_version', common_os_version)
     return common_os_version
 
@@ -1235,14 +1332,15 @@ def render_to_file(template, fn=None, extra=None, **kwargs):
     import tempfile
     dryrun = get_dryrun(kwargs.get('dryrun'))
     content = render_to_string(template, extra=extra)
-    if fn:
-        fout = open(fn, 'w')
-    else:
-        fd, fn = tempfile.mkstemp()
-        fout = os.fdopen(fd, 'wt')
+    if not dryrun:
+        if fn:
+            fout = open(fn, 'w')
+        else:
+            fd, fn = tempfile.mkstemp()
+            fout = os.fdopen(fd, 'wt')
+        fout.write(content)
+        fout.close()
     print('echo -e %s > %s' % (shellquote(content), fn))
-    fout.write(content)
-    fout.close()
     return fn
 
 def install_script(local_path=None, remote_path=None):
@@ -1273,7 +1371,7 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
     if sites is None:
         site = site or env.SITE
         if site == ALL:
-            sites = env.sites.iteritems()
+            sites = six.iteritems(env.sites)
         else:
             sites = [(site, env.sites[site])]
         
@@ -1410,7 +1508,7 @@ def get_host_ip(hostname):
     #TODO:use generic host retriever?
     from burlap.vm import list_instances
     data = list_instances(show=0, verbose=0)
-    for key, attrs in data.iteritems():
+    for key, attrs in six.iteritems(data):
 #         print('key:',key,attrs)
         if key == hostname:
             return attrs.get('ip')
@@ -1429,9 +1527,7 @@ def get_hosts_for_site(site=None):
     """
     site = site or env.SITE
     hosts = set()
-#     print('env.available_sites_by_host:',env.available_sites_by_host)
-#     print('site:',site)
-    for hostname, _sites in env.available_sites_by_host.iteritems():
+    for hostname, _sites in six.iteritems(env.available_sites_by_host):
 #         print('checking hostname:',hostname, _sites)
         for _site in _sites:
             if _site == site:

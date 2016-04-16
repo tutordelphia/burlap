@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import re
 
@@ -83,10 +85,10 @@ class IPSatchel(ServiceSatchel):
         elif env.ip_type == DYNAMIC:
             self.dynamic()
         else:
-            raise NotImplementedError, 'Unknown type: %s' % env.ip_type
+            raise NotImplementedError('Unknown type: %s' % env.ip_type)
         self.restart()
         
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user', 'hostname']
     
 IPSatchel()

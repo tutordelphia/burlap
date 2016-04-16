@@ -1,4 +1,5 @@
 from __future__ import print_function
+
 import os
 import sys
 import re
@@ -101,7 +102,7 @@ def generate_csr(domain='', r=None):
     #apache_specifics = set_apache_specifics()
     
     for site, site_data in common.iter_sites(setter=set_apache_site_specifics):
-        print('site:', site)
+        print('site:', site, file=sys.stderr)
 #        
         assert env.ssl_domain, 'No SSL domain defined.'
     
@@ -186,5 +187,5 @@ def verify_certificate_chain(base=None, crt=None, csr=None, key=None):
         print_success('Files look good!')
     else:
         print_fail('Files no not match!')
-        raise Exception, 'Files no not match!'
+        raise Exception('Files no not match!')
         

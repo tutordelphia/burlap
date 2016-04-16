@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 from burlap import ServiceSatchel
 from burlap.constants import *
@@ -14,10 +15,6 @@ class AvahiSatchel(ServiceSatchel):
         UBUNTU: ['avahi-daemon'],
     }
 
-    tasks = (
-        'configure',
-    )
-    
     def set_defaults(self):
             
         self.env.daemon_name = 'avahi-daemon'
@@ -58,7 +55,7 @@ class AvahiSatchel(ServiceSatchel):
         #sudo_or_dryrun('service avahi-daemon restart')
         #sudo_or_dryrun('update-rc.d avahi-daemon defaults')
         
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user']
     
 AvahiSatchel()

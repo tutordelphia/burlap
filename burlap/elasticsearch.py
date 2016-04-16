@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 from burlap import common
 from burlap.common import (
@@ -14,10 +15,6 @@ class ElasticSearchSatchel(ServiceSatchel):
     
     # {action: {os_version_distro: command}}
 #     commands = env.networkmanager_service_commands
-    
-    tasks = (
-        'configure',
-    )
     
     required_system_packages = {
         common.UBUNTU: ['elasticsearch'],
@@ -73,7 +70,7 @@ class ElasticSearchSatchel(ServiceSatchel):
             self.disable()
             self.stop()
         
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user', 'cron']
 
 ElasticSearchSatchel()

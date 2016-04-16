@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 
@@ -11,11 +13,7 @@ class CronSatchel(ServiceSatchel):
     ## Service options.
     
     #ignore_errors = True
-    
-    tasks = (
-        'configure',
-    )
-    
+        
     post_deploy_command = None
     
     required_system_packages = {
@@ -72,7 +70,7 @@ class CronSatchel(ServiceSatchel):
         env = pip_render_paths(env)
         env = dj_render_paths(env)
         
-        print 'remote_app_src_package_dir:', env.remote_app_src_package_dir
+        print('remote_app_src_package_dir:', env.remote_app_src_package_dir)
         
         env.cron_python = os.path.join(env.pip_virtual_env_dir, 'bin', 'python')
         env.cron_django_manage = self.env.django_manage_template % env
@@ -125,7 +123,7 @@ class CronSatchel(ServiceSatchel):
         env.crontabs_rendered = '\n'.join(cron_crontabs)
         fn = self.write_to_file(content=env.crontabs_rendered)
         if self.dryrun:
-            print 'echo %s > %s' % (env.crontabs_rendered, fn)
+            print('echo %s > %s' % (env.crontabs_rendered, fn))
         self.put_or_dryrun(local_path=fn)
         env.put_remote_path = self.genv.put_remote_path
         self.sudo_or_dryrun('crontab -u %(cron_user)s %(put_remote_path)s' % env)
@@ -139,7 +137,7 @@ class CronSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user', 'tarball']
         
 CronSatchel()

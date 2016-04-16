@@ -23,15 +23,15 @@ You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 """
-from __future__ import unicode_literals
+from __future__ import unicode_literals, print_function
 
-import commands
+import subprocess
 import csv
 import os
 import re
 import sys
-import xmlrpclib
-import urllib2
+from six.moves import xmlrpc_client as xmlrpclib
+from six.moves.urllib.request import urlopen
 
 try:
     import feedparser
@@ -110,7 +110,7 @@ class Dependency(object):
         user, repo = get_github_user_repo(self.uri)
         url = 'https://api.github.com/repos/%s/%s/git/refs/heads/master' \
             % (user, repo,)
-        resp = urllib2.urlopen(url).read()
+        resp = urlopen(url).read()
         resp = json.loads(resp)
         return resp['object']['sha']
     
@@ -122,7 +122,7 @@ class Dependency(object):
         user, repo = get_github_user_repo(self.uri)
         url = 'https://api.github.com/repos/%s/%s/tags' % (user, repo,)
         #print 'url:',url
-        resp = urllib2.urlopen(url).read()
+        resp = urlopen(url).read()
         resp = json.loads(resp)
         resp = sorted(
             resp,
@@ -139,11 +139,11 @@ class Dependency(object):
     
     def _get_current_version_apt(self):
 #        cmd = ("apt-get upgrade --dry-run %(uri)s | grep \"Conf %(uri)s\" " + \
-#            "| awk '{gsub(/[()]/,\"\"); print $3;}'") % dict(uri=self.uri)
+#            "| awk '{gsub(/[()]/,\"\"); print($3;}'") % dict(uri=self.uri)
         cmd = ("dpkg -s %(uri)s | grep -E \"Version:\" " + \
-            "| awk '{gsub(/[()]/,\"\"); print $2;}'") % dict(uri=self.uri)
+            "| awk '{gsub(/[()]/,\"\"); print($2;}'") % dict(uri=self.uri)
         #print cmd
-        out = commands.getoutput(cmd)
+        out = subprocess.check_output(cmd)
         #print out
         return out
     
@@ -195,18 +195,18 @@ if __name__ == '__main__':
         done = True
         dep = Dependency(*args.line.split(','))
         if dep.name == dep.uri:
-            print dep.name
+            print(dep.name)
         else:
-            print dep.name, dep.uri
-        print '\tcurrent version:', dep.get_current_version()
-        print '\tyour version:', dep.version
-        print '\tfresh:', dep.is_fresh()
+            print(dep.name, dep.uri)
+        print('\tcurrent version:', dep.get_current_version())
+        print('\tyour version:', dep.version)
+        print('\tfresh:', dep.is_fresh())
         
     if args.file:
         done = True
         fn = args.file
         if not os.path.isfile(fn):
-            print 'Error: Dependency file %s does not exist.\n' % (fn,)
+            print('Error: Dependency file %s does not exist.\n' % (fn,))
             parser.print_help()
             sys.exit(1)
         total_stale = 0
@@ -219,28 +219,28 @@ if __name__ == '__main__':
             if not args.stale or (args.stale and is_stale):
                 if args.pipout:
                     if dep.type == PIP:
-                        print '%s==%s' % (dep.uri, dep.version)
+                        print('%s==%s' % (dep.uri, dep.version))
                     continue
                 if dep.name == dep.uri:
-                    print dep.name
+                    print(dep.name)
                 else:
-                    print dep.name, dep.uri
-                print '\tcurrent version:', dep.get_current_version()
-                print '\tyour version:', dep.version
-                print '\tfresh:', dep.is_fresh()
-        print '='*80
-        print '%i total dependencies' % total
-        print '%i total stale dependencies' % total_stale
-        print '%.0f%% fresh' % ((total-total_stale)/float(total)*100)
+                    print(dep.name, dep.uri)
+                print('\tcurrent version:', dep.get_current_version())
+                print('\tyour version:', dep.version)
+                print('\tfresh:', dep.is_fresh())
+        print('='*80)
+        print('%i total dependencies' % total)
+        print('%i total stale dependencies' % total_stale)
+        print('%.0f%% fresh' % ((total-total_stale)/float(total)*100))
     
     if args.pipin:
         done = True
         fn = args.pipin
         if not os.path.isfile(fn):
-            print 'Error: PIP requirements file %s does not exist.\n' % (fn,)
+            print('Error: PIP requirements file %s does not exist.\n' % (fn,))
             parser.print_help()
             sys.exit(1)
-        print ','.join(DEP_SCHEMA)
+        print(','.join(DEP_SCHEMA))
         for line in open(fn, 'r').readlines():
             parts = line.strip().split('==')
             if not parts:
@@ -254,7 +254,7 @@ if __name__ == '__main__':
                 rss_regex='')
             format = '%(type)s,%(name)s,%(uri)s,%(version)s,%(rss_field)s,' + \
                 '%(rss_regex)s'
-            print format % args
+            print(format % args)
     
     if not done:
         parser.print_help()

@@ -1,3 +1,12 @@
+"""
+Supervisor
+============
+
+http://supervisord.org/
+
+"""
+from __future__ import print_function
+
 import os
 import re
 import time
@@ -126,15 +135,15 @@ class SupervisorSatchel(ServiceSatchel):
             self.stop()
             if self.dryrun or not self.is_running():
                 break
-            print 'Waiting for supervisor to stop (%i of %i)...' % (_, n)
+            print('Waiting for supervisor to stop (%i of %i)...' % (_, n))
             time.sleep(sleep_n)
         self.start()
         for _ in xrange(n):
             if self.dryrun or self.is_running():
                 return
-            print 'Waiting for supervisor to start (%i of %i)...' % (_, n)
+            print('Waiting for supervisor to start (%i of %i)...' % (_, n))
             time.sleep(sleep_n)
-        raise Exception, 'Failed to restart service %s!' % self.name
+        raise Exception('Failed to restart service %s!' % self.name)
     
     def record_manifest(self):
         """
@@ -148,7 +157,7 @@ class SupervisorSatchel(ServiceSatchel):
         # Celery deploys itself through supervisor, so monitor its changes too in Apache site configs.
         for site_name, site_data in self.genv.sites.iteritems():
             if self.verbose:
-                print site_name, site_data
+                print(site_name, site_data)
             data['celery_has_worker_%s' % site_name] = site_data.get('celery_has_worker', False)
         
         data['configured'] = True
@@ -171,7 +180,7 @@ class SupervisorSatchel(ServiceSatchel):
         
         for site, site_data in iter_sites(site=site, renderer=self.render_paths):
             if verbose:
-                print site
+                print(site)
             for cb in self.genv._supervisor_create_service_callbacks:
                 ret = cb()
                 if isinstance(ret, basestring):
@@ -180,8 +189,8 @@ class SupervisorSatchel(ServiceSatchel):
                     assert len(ret) == 2
                     conf_name, conf_content = ret
                     if verbose:
-                        print 'conf_name:', conf_name
-                        print 'conf_content:', conf_content
+                        print('conf_name:', conf_name)
+                        print('conf_content:', conf_content)
                     remote_fn = os.path.join(self.env.conf_dir, conf_name)
                     local_fn = self.write_to_file(conf_content)
                     self.put_or_dryrun(local_path=local_fn, remote_path=remote_fn, use_sudo=True)
@@ -210,7 +219,7 @@ class SupervisorSatchel(ServiceSatchel):
         
         self.deploy_services(**kwargs)
         
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user', 'rabbitmq']
         
 supervisor_satchel = SupervisorSatchel()

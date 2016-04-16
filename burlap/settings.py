@@ -1,6 +1,7 @@
 """
 Inspects and manipulates settings files.
 """
+from __future__ import print_function
 
 import os
 import re
@@ -37,11 +38,11 @@ def list(keyword=''):
             continue
         keyword_found = True
         #print '%s: %s' % (k, env[k])
-        print '%s: ' % (k.ljust(max_len),),
+        print('%s: ' % (k.ljust(max_len),),
         pprint(env[k], indent=4)
     if keyword:
         if not keyword_found:
-            print 'Keyword "%s" not found.' % keyword
+            print('Keyword "%s" not found.' % keyword)
 
 @task_or_dryrun
 def record_manifest():

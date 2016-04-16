@@ -3,6 +3,7 @@ Wrapper around the Motion service.
 
 http://www.lavrsen.dk/foswiki/bin/view/Motion/WebHome
 """
+from __future__ import print_function
 
 from burlap import ServiceSatchel
 from burlap.constants import *
@@ -55,7 +56,7 @@ class MotionSatchel(ServiceSatchel):
     
     def configure(self):
         todo
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user']
     
 motion_satchel = MotionSatchel()

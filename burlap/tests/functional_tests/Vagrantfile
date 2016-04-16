@@ -1,0 +1,10 @@
+Vagrant.configure(2) do |config|
+
+  config.vm.box = "ubuntu/xenial64"
+
+  # Speed up downloads using a shared cache across boxes
+  if Vagrant.has_plugin?("vagrant-cachier")
+    config.cache.scope = :box
+  end
+
+end

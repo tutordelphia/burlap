@@ -1,15 +1,16 @@
 """
 Django-specific helper utilities.
 """
+from __future__ import print_function
+
 import os
 import re
 import sys
 import importlib
 import traceback
-import commands
 import glob
 from collections import defaultdict
-from StringIO import StringIO
+from six import StringIO
 from pprint import pprint
 
 from fabric.api import (
@@ -101,16 +102,16 @@ def render_remote_paths(e=None):
     e.remote_manage_dir = e.remote_manage_dir_template % e
     e.shell_default_dir = e.shell_default_dir_template % e
     if verbose:
-        print 'render_remote_paths'
-        print 'django_settings_module_template:',e.django_settings_module_template
-        print 'django_settings_module:',e.django_settings_module
-        print 'shell_default_dir:',e.shell_default_dir
-        print 'src_dir:',e.src_dir
-        print 'remote_app_dir:',e.remote_app_dir
-        print 'remote_app_src_dir:',e.remote_app_src_dir
-        print 'remote_app_src_package_dir_template:',e.remote_app_src_package_dir_template
-        print 'remote_app_src_package_dir:',e.remote_app_src_package_dir
-        print 'remote_manage_dir:',e.remote_manage_dir
+        print('render_remote_paths')
+        print('django_settings_module_template:',e.django_settings_module_template)
+        print('django_settings_module:',e.django_settings_module)
+        print('shell_default_dir:',e.shell_default_dir)
+        print('src_dir:',e.src_dir)
+        print('remote_app_dir:',e.remote_app_dir)
+        print('remote_app_src_dir:',e.remote_app_src_dir)
+        print('remote_app_src_package_dir_template:',e.remote_app_src_package_dir_template)
+        print('remote_app_src_package_dir:',e.remote_app_src_package_dir)
+        print('remote_manage_dir:',e.remote_manage_dir)
     
     if _global_env:
         env.update(e)
@@ -218,8 +219,7 @@ def syncdb(site=None, all=0, database=None):
     """
     Runs the standard Django syncdb command for one or more sites.
     """
-    print '('*80
-    print 'Running syncdb...'
+    #print 'Running syncdb...'
     
     _env = type(env)(env)
     
@@ -244,16 +244,41 @@ def manage(cmd, *args, **kwargs):
     
     render_remote_paths()
 
+    environs = kwargs.pop('environs', '').strip()
+    if environs:
+        environs = ' '.join('export %s=%s;' % tuple(_.split('=')) for _ in environs.split(','))
+        environs = ' ' + environs + ' '
+
     env.dj_cmd = cmd
     env.dj_args = ' '.join(map(str, args))
     env.dj_kwargs = ' '.join(
-        ('--%s' % _k if _v is True else '--%s=%s' % (_k, _v))
+        ('--%s' % _k if _v in (True, 'True') else '--%s=%s' % (_k, _v))
         for _k, _v in kwargs.iteritems())
+    env.dj_environs = environs
 
     cmd = (
-        'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
+        'export SITE=%(SITE)s; export ROLE=%(ROLE)s;%(dj_environs)scd %(remote_manage_dir)s; '
         '%(django_manage)s %(dj_cmd)s %(dj_args)s %(dj_kwargs)s') % env
     run_or_dryrun(cmd)
+
+@task_or_dryrun
+def manage_all(*args, **kwargs):
+    """
+    Runs manage() across all unique site default databases.
+    """
+    
+    for site, site_data in iter_unique_databases(site='all'):
+        print>>sys.stderr, '-'*80
+        print>>sys.stderr, 'site:', site
+        
+        if env.available_sites_by_host:
+            hostname = common.get_current_hostname()
+            sites_on_host = env.available_sites_by_host.get(hostname, [])
+            if sites_on_host and site not in sites_on_host:
+                print>>sys.stderr, 'skipping site:', site, sites_on_host
+                continue
+            
+        manage(*args, **kwargs)
     
 @task_or_dryrun
 def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_databases=None, database=None, migrate_apps='', delete_ghosts=1):
@@ -285,18 +310,17 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
     _env.django_migrate_database = '--database=%s' % database if database else ''
     _env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts else ''
     for site, site_data in iter_unique_databases(site=site):
-        print '-'*80
-        print 'site:', site
+        print>>sys.stderr, '-'*80
+        print>>sys.stderr, 'site:', site
         
         if env.available_sites_by_host:
             hostname = common.get_current_hostname()
-#             print 'hostname:', hostname
             sites_on_host = env.available_sites_by_host.get(hostname, [])
             if sites_on_host and site not in sites_on_host:
-                print 'skipping site:', site, sites_on_host
+                print>>sys.stderr, 'skipping site:', site, sites_on_host
                 continue
         
-        print 'migrate_apps:',migrate_apps
+        print>>sys.stderr, 'migrate_apps:', migrate_apps
         if migrate_apps:
             _env.django_migrate_app = ' '.join(migrate_apps)
         else:
@@ -305,7 +329,7 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
         _env.SITE = site
         cmd = (
             'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
-            '%(django_manage)s migrate --noinput %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
+            '%(django_manage)s migrate --noinput --traceback %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
             '%(django_migrate_fake_str)s'
         ) % _env
         cmd = cmd.strip()
@@ -332,22 +356,21 @@ def create_db(name=None):
 
 def set_db(name=None, site=None, role=None, verbose=0):
     name = name or 'default'
-#    print '!'*80
     site = site or env.SITE
     role = role or env.ROLE
     verbose = int(verbose)
     if verbose:
-        print 'set_db.site:',site
-        print 'set_db.role:',role
+        print('set_db.site:',site)
+        print('set_db.role:',role)
     settings = get_settings(site=site, role=role, verbose=verbose)
     assert settings, 'Unable to load Django settings for site %s.' % (site,)
     env.django_settings = settings
     if verbose:
-        print 'settings:',settings
-        print 'databases:',settings.DATABASES
+        print('settings:',settings)
+        print('databases:',settings.DATABASES)
     default_db = settings.DATABASES[name]
     if verbose:
-        print 'default_db:',default_db
+        print('default_db:',default_db)
     env.db_name = default_db['NAME']
     env.db_user = default_db['USER']
     env.db_host = default_db['HOST']
@@ -387,69 +410,28 @@ def get_settings(site=None, role=None):
             site = site[:-7]
         site = site or env.SITE
         if verbose:
-            print 'get_settings.site:',env.SITE
-            print 'get_settings.role:',env.ROLE
+            print('get_settings.site:',env.SITE)
+            print('get_settings.role:',env.ROLE)
         common.set_site(site)
         tmp_role = env.ROLE
         if role:
             env.ROLE = os.environ[ROLE] = role
         check_remote_paths(verbose=verbose)
         if verbose:
-            print 'get_settings.django_settings_module_template:',env.django_settings_module_template
-            print 'get_settings.django_settings_module:',env.django_settings_module
+            print('get_settings.django_settings_module_template:',env.django_settings_module_template)
+            print('get_settings.django_settings_module:',env.django_settings_module)
         env.django_settings_module = env.django_settings_module_template % env
         try:
-    #        module = __import__(
-    #            env.django_settings_module,
-    #            fromlist='.'.join(env.django_settings_module.split('.')[:-1]))
-            #print 'env.src_dir:',env.src_dir
-            #settings_dir = os.path.split(os.path.join(env.src_dir, env.django_settings_module.replace('.', '/')))[0]
-            #print 'settings_dir:',settings_dir
             os.environ['SITE'] = env.SITE
             os.environ['ROLE'] = env.ROLE
-#            if verbose:
-#                print 'SITE:',env.SITE
-#                print 'ROLE:',env.ROLE
-#                print 'env.django_settings_module:',env.django_settings_module
             module = importlib.import_module(env.django_settings_module)
-#            print 'module.__name__:',module.__name__
-#            settings_dir = os.path.split(module.__file__)[0]
-#            print 'settings_dir:',settings_dir
-    #        sys.modules[module.__name__] = module # This isn't done automatically by import?!
-    
-            # Note, we have to reload the settings module whenever we change the
-            # SITE or ROLE environment variables.
-            
-            #does not work
-    #        import reimport
-    #        reimport.reimport(module)
-    
-            #does not work
-    #        print 'Reloading...'
-    #        cmd = 'rm -f %s/*.pyc' % (settings_dir,)
-    #        print cmd
-    #        os.system(cmd)
-    #        print os.listdir(settings_dir)
-    #        for fn in os.listdir(settings_dir):
-    #            path = os.path.join(settings_dir, fn)
-    #            os.utime(path, None)
-    #        #module = reload(module)
-    #        module = reload(sys.modules[module.__name__])
-    #        use_reimport = True
-    #        try:
-    #            import reimport
-    #        except ImportError:
-    #            use_reimport = False
-    #        if use_reimport:
-    #            reimport(module)
-    #        print 'Reloaded.'
     
             # Works as long as settings.py doesn't also reload anything.
             import imp
             imp.reload(module)
             
-        except ImportError, e:
-            print 'Warning: Could not import settings for site "%s": %s' % (site, e)
+        except ImportError as e:
+            print('Warning: Could not import settings for site "%s": %s' % (site, e))
             traceback.print_exc(file=sys.stdout)
             #raise # breaks *_secure pseudo sites
             return
@@ -490,19 +472,19 @@ def execute_sql(fn, name='default', site=None):
                     ret = run_or_dryrun("mysql -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s" % env)
                     
                 else:
-                    raise NotImplementedError, 'Unknown database type: %s' % env.db_engine
+                    raise NotImplementedError('Unknown database type: %s' % env.db_engine)
                 
-            print 'ret:', ret
+            print('ret:', ret)
             site_summary[site] = ret
                     
         except KeyError as e:
             site_summary[site] = 'Error: %s' % str(e) 
             pass
             
-    print '-'*80
-    print 'Site Summary:'
+    print('-'*80)
+    print('Site Summary:')
     for site, ret in sorted(site_summary.items(), key=lambda o: o[0]):
-        print site, ret
+        print(site, ret)
     
 @task_or_dryrun
 def install_sql(name='default', site=None):
@@ -609,7 +591,7 @@ def install_fixtures(name, site=None):
     fixtures_paths = env.db_fixture_sets.get(name, [])
     for fixture_path in fixtures_paths:
         env.db_fq_fixture_path = os.path.join(env.remote_app_src_package_dir, fixture_path)
-        print 'Loading %s...' % (env.db_fq_fixture_path,)
+        print('Loading %s...' % (env.db_fq_fixture_path,))
         if not env.is_local and not files.exists(env.db_fq_fixture_path):
             put_or_dryrun(
                 local_path=env.db_fq_fixture_path,
@@ -618,7 +600,7 @@ def install_fixtures(name, site=None):
                 )
             env.db_fq_fixture_path = env.put_remote_path
         cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s loaddata %(db_fq_fixture_path)s' % env
-        print cmd
+        print(cmd)
         run_or_dryrun(cmd)
 
 @task_or_dryrun
@@ -646,15 +628,12 @@ def loaddata(path, site=None):
 
 @task_or_dryrun
 def post_db_create(name=None, site=None):
-    print 'post_db_create'
+    print('post_db_create')
     assert env[ROLE]
     require('app_name')
     site = site or env.SITE
-    #print 'site:',site
     set_db(name=name, site=site, verbose=1)
     load_db_set(name=name)
-#    print 'site:',env[SITE]
-#    print 'role:',env[ROLE]
     
     syncdb(all=True, site=site)
     migrate(fake=True, site=site)
@@ -688,7 +667,7 @@ def record_manifest_media(verbose=0):
                 latest_timestamp,
                 common.get_last_modified_timestamp(path) or latest_timestamp)
     if int(verbose):
-        print latest_timestamp
+        print(latest_timestamp)
     return latest_timestamp
 
 #DEPRECATED
@@ -703,7 +682,7 @@ def record_manifest_migrations(verbose=0):
             for migration_name in iter_migrations(migration_dir):
                 data[app_name] = migration_name
         if int(verbose):
-            print data
+            print(data)
     return data
 
 @task_or_dryrun
@@ -713,7 +692,7 @@ def update(name=None, site=None, skip_databases=None, do_install_sql=0, migrate_
     Updates schema and custom SQL.
     """
     #from burlap.dj import set_db
-    print 'update()'
+#    print('update()'
 #     raise Exception
     set_db(name=name, site=site)
     syncdb(site=site) # Note, this loads initial_data fixtures.
@@ -732,7 +711,7 @@ def update_all(skip_databases=None, do_install_sql=0, migrate_apps='', ignore_er
     Runs the Django migrate command for all unique databases
     for all available sites.
     """
-    print 'update_all()'
+#     print('update_all()'
     from burlap.common import get_current_hostname
     hostname = get_current_hostname()
     
@@ -766,12 +745,8 @@ class DjangoMigrations(Satchel):
     
     name = 'djangomigrations'
 
-    tasks = (
-        'configure',
-    )
-
     def set_defaults(self):
-        super(DjangoMigrations, self).set_defaults()
+        pass
 
     def record_manifest(self):
         data = {} # {app: latest_migration_name}
@@ -782,7 +757,7 @@ class DjangoMigrations(Satchel):
             for migration_name in iter_migrations(migration_dir):
                 data[app_name] = migration_name
         if self.verbose:
-            print '%s.migrations:' % self.name
+            print('%s.migrations:' % self.name)
             pprint(data, indent=4)
         return data
         
@@ -792,14 +767,14 @@ class DjangoMigrations(Satchel):
         migrate_apps = []
         if last and current:
             if self.verbose:
-                print 'djangomigrations.last:', last
-                print 'djangomigrations.current:', current
+                print('djangomigrations.last:', last)
+                print('djangomigrations.current:', current)
             for app_name in current:
                 if current[app_name] != last.get(app_name):
                     migrate_apps.append(app_name)
         if migrate_apps:
             return update_all(migrate_apps=','.join(migrate_apps), ignore_errors=1)
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'apache', 'apache2', 'pip', 'tarball', 'djangomedia']
     #configure.takes_diff = True
         
@@ -812,34 +787,24 @@ class DjangoMediaSatchel(Satchel):
     )
     
     def set_defaults(self):
-        super(DjangoMediaSatchel, self).set_defaults()
-        
         self.env.media_dirs = ['static']
         self.env.manage_dir = 'src'
     
     def record_manifest(self):
-#         from burlap.common import get_last_modified_timestamp
-#         data = 0
-#         for path in self.env.media_dirs:
-#             data = min(data, get_last_modified_timestamp(path) or data)
-#         #TODO:hash media names and content
-#         if self.verbose:
-#             print data
-#         return data
         latest_timestamp = -1e9999999999999999
         for path in iter_static_paths():
             if self.verbose:
-                print 'checking timestamp of path:', path
+                print('checking timestamp of path:', path)
             latest_timestamp = max(
                 latest_timestamp,
                 common.get_last_modified_timestamp(path) or latest_timestamp)
         if self.verbose:
-            print 'latest_timestamp:', latest_timestamp
+            print('latest_timestamp:', latest_timestamp)
         return latest_timestamp
     
     def configure(self, *args, **kwargs):
         self.local_or_dryrun('cd %(manage_dir)s; ./manage collectstatic --noinput' % self.lenv)
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'apache2', 'pip', 'user']
 
 # common.manifest_recorder[DJANGOMEDIA] = record_manifest_media

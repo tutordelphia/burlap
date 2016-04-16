@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 import tempfile
@@ -48,7 +50,7 @@ class PackagerSatchel(Satchel):
         elif package == YUM:
             self.sudo_or_dryrun('yum update')
         else:
-            raise Exception, 'Unknown packager: %s' % (packager,)
+            raise Exception('Unknown packager: %s' % (packager,))
 
     def install_apt(self, fn=None, package_name=None, update=0, list_only=0):
         """
@@ -111,7 +113,7 @@ class PackagerSatchel(Satchel):
         elif package == YUM:
             return self.install_yum(*args, **kwargs)
         else:
-            raise Exception, 'Unknown packager: %s' % (packager,)
+            raise Exception('Unknown packager: %s' % (packager,))
     
     def kill_apt_get(self):
         self.sudo_or_dryrun('killall apt-get')
@@ -128,7 +130,7 @@ class PackagerSatchel(Satchel):
             raise NotImplementedError
             #return upgrade_yum(*args, **kwargs)
         else:
-            raise Exception, 'Unknown packager: %s' % (packager,)
+            raise Exception('Unknown packager: %s' % (packager,))
     
     def refresh_apt(self):
         self.sudo_or_dryrun('apt-get update -y --fix-missing')
@@ -145,7 +147,7 @@ class PackagerSatchel(Satchel):
             raise NotImplementedError
             #return upgrade_yum(*args, **kwargs)
         else:
-            raise Exception, 'Unknown packager: %s' % (packager,)
+            raise Exception('Unknown packager: %s' % (packager,))
 
     def list_required(self, type=None, service=None):
         """
@@ -188,7 +190,7 @@ class PackagerSatchel(Satchel):
                 packages.append(_)
         if self.verbose:
             for package in sorted(packages):
-                print 'package:', package
+                print('package:', package)
         return packages
     
     def install_required(self, type=None, service=None, list_only=0, verbose=0, **kwargs):
@@ -211,7 +213,7 @@ class PackagerSatchel(Satchel):
                 if list_only:
                     lst.extend(_ for _ in content.split('\n') if _.strip())
                     if verbose:
-                        print 'content:', content
+                        print('content:', content)
                     break
                 fd, fn = tempfile.mkstemp()
                 fout = open(fn, 'w')
@@ -229,7 +231,7 @@ class PackagerSatchel(Satchel):
         self.refresh()
         self.install_required(type=SYSTEM, **kwargs)
         self.install_custom(**kwargs)
-    configure.is_deployer = True
+    
     configure.deploy_before = ['user', 'ubuntumultiverse']
 
 class UbuntuMultiverseSatchel(Satchel):
@@ -253,7 +255,7 @@ class UbuntuMultiverseSatchel(Satchel):
             self.sudo_or_dryrun('sed -i "/^# // s/^# deb.*multiverse/" /etc/apt/sources.list')
             self.sudo_or_dryrun('apt-get update')
              
-    configure.is_deployer = True
+    
     configure.deploy_before = []
 
 packager = PackagerSatchel()

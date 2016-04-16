@@ -1,6 +1,7 @@
 """
 General tweaks and services to enhance system security.
 """
+from __future__ import print_function
 
 from burlap import Satchel
 from burlap.constants import *
@@ -54,7 +55,7 @@ class UnattendedUpgradesSatchel(Satchel):
             #TODO:disable
             pass
     
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user']
         
 UnattendedUpgradesSatchel()

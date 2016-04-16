@@ -1,4 +1,5 @@
 from __future__ import print_function
+
 import os
 import sys
 import re
@@ -15,6 +16,10 @@ from fabric.api import (
 from fabric.contrib import files
 from fabric.tasks import Task
 
+from burlap import systemd
+from burlap.system import using_systemd, distrib_family
+from burlap.utils import run_as_root
+
 from burlap import common
 from burlap.common import (
     run_or_dryrun,
@@ -26,6 +31,133 @@ from burlap.common import (
     ROLE,
 )
 from burlap.decorators import task_or_dryrun
+
+def is_running(service):
+    """
+    Check if a service is running.
+
+    ::
+
+        import burlap
+
+        if burlap.service.is_running('foo'):
+            print("Service foo is running!")
+    """
+    with settings(hide('running', 'stdout', 'stderr', 'warnings'),
+                  warn_only=True):
+        if using_systemd():
+            return systemd.is_running(service)
+        else:
+            if distrib_family() != "gentoo":
+                test_upstart = run_as_root('test -f /etc/init/%s.conf' %
+                                           service)
+                status = _service(service, 'status')
+                if test_upstart.succeeded:
+                    return 'running' in status
+                else:
+                    return status.succeeded
+            else:
+                # gentoo
+                status = _service(service, 'status')
+                return ' started' in status
+
+
+def start(service):
+    """
+    Start a service.
+
+    ::
+
+        import burlap
+
+        # Start service if it is not running
+        if not burlap.service.is_running('foo'):
+            burlap.service.start('foo')
+    """
+    _service(service, 'start')
+
+
+def stop(service):
+    """
+    Stop a service.
+
+    ::
+
+        import burlap
+
+        # Stop service if it is running
+        if burlap.service.is_running('foo'):
+            burlap.service.stop('foo')
+    """
+    _service(service, 'stop')
+
+
+def restart(service):
+    """
+    Restart a service.
+
+    ::
+
+        import burlap
+
+        # Start service, or restart it if it is already running
+        if burlap.service.is_running('foo'):
+            burlap.service.restart('foo')
+        else:
+            burlap.service.start('foo')
+    """
+    _service(service, 'restart')
+
+
+def reload(service):
+    """
+    Reload a service.
+
+    ::
+
+        import burlap
+
+        # Reload service
+        burlap.service.reload('foo')
+
+    .. warning::
+
+        The service needs to support the ``reload`` operation.
+    """
+    _service(service, 'reload')
+
+
+def force_reload(service):
+    """
+    Force reload a service.
+
+    ::
+
+        import burlap
+
+        # Force reload service
+        burlap.service.force_reload('foo')
+
+    .. warning::
+
+        The service needs to support the ``force-reload`` operation.
+    """
+    _service(service, 'force-reload')
+
+
+def _service(service, action):
+    """
+    Compatibility layer for distros that use ``service`` and those that don't.
+    """
+    if distrib_family() != "gentoo":
+        status = run_as_root('service %(service)s %(action)s' % locals(),
+                             pty=False)
+    else:
+        # gentoo
+        status = run_as_root('/etc/init.d/%(service)s %(action)s' % locals(),
+                             pty=False)
+    return status
+
 
 @task_or_dryrun
 def configure():
@@ -100,7 +232,7 @@ def restart(name=''):
     #print common.service_restarters
     for service in env.services:
         service = service.strip().upper()
-#         print 'checking', service
+#         print('checking', service)
         if name and service.lower() != name:
             continue
         srv = common.services.get(service)
@@ -116,7 +248,7 @@ def restart(name=''):
                     func()
                     _ran = True
     if not get_dryrun() and not _ran and name:
-        raise Exception, 'No restart command found for service "%s".' % name
+        raise Exception('No restart command found for service "%s".' % name)
 
 @task_or_dryrun
 def stop(name=''):
@@ -138,7 +270,6 @@ def is_running(name):
     #print common.service_restarters
     for service in env.services:
         service = service.strip().upper()
-#         print 'checking', service
         if name and service.lower() != name:
             continue
         srv = common.services.get(service)
@@ -146,7 +277,7 @@ def is_running(name):
             _ran = True
             print('%s.is_running: %s' % (name, srv.is_running()))
     if not get_dryrun() and not _ran and name:
-        raise Exception, 'No restart command found for service "%s".' % name
+        raise Exception('No restart command found for service "%s".' % name)
 
 def is_selected(name):
     name = name.strip().upper()

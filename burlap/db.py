@@ -1,9 +1,12 @@
+from __future__ import print_function
+
 import os
 import re
 import sys
 import datetime
 import glob
 import tempfile
+import subprocess
 from collections import defaultdict
 
 from fabric.api import (
@@ -129,8 +132,8 @@ def exists(name='default', site=None):
     
     verbose = common.get_verbose()
     if verbose:
-        print '!'*80
-        print 'db.exists:', name
+        print('!'*80)
+        print('db.exists:', name)
     
     if name:
         set_db(name=name, site=site, verbose=verbose)
@@ -159,7 +162,7 @@ def exists(name='default', site=None):
         cmd = ('psql --username={db_user} --host={db_host} -l '\
             '| grep {db_name} | wc -l').format(**env)
         if verbose:
-            print cmd
+            print(cmd)
         with settings(warn_only=True):
             ret = run_or_dryrun(cmd)
             #print 'ret:', ret
@@ -184,7 +187,7 @@ def exists(name='default', site=None):
             ' IN(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA), '\
             '\'exists\', \'notexists\') AS found;"').format(**env)
         if verbose:
-            print cmd
+            print(cmd)
         ret = run_or_dryrun(cmd)
         if ret is not None:
             ret = 'notexists' not in (ret or 'notexists')
@@ -245,7 +248,7 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
     drop = int(drop)
     
     # Do nothing if we're not dropping and the database already exists.
-    print 'Checking to see if database already exists...'
+    print('Checking to see if database already exists...')
     if exists(name=name, site=site) and not drop:
         print('Database already exists. Aborting creation. '\
             'Use drop=1 to override.')
@@ -268,22 +271,22 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
     
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         
-        print 'Setting root login...'
+        print('Setting root login...')
         set_root_login()
         
         # Create role/user.
         with settings(warn_only=True):
-            print 'Creating user...'
+            print('Creating user...')
             cmd = 'psql --user={db_postgresql_postgres_user} --no-password --command="CREATE USER {db_user} WITH PASSWORD \'{db_password}\';"'.format(**env)
             run_or_dryrun(cmd)
         
-        print 'Creating database...'
+        print('Creating database...')
         cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --command="CREATE DATABASE %(db_name)s WITH OWNER=%(db_user)s ENCODING=\'%(db_postgresql_encoding)s\'"' % env
         run_or_dryrun(cmd)
         
         #run_or_dryrun('psql --user=postgres -d %(db_name)s -c "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %(db_user)s_ro CASCADE; DROP ROLE IF EXISTS %(db_user)s_ro; DROP USER IF EXISTS %(db_user)s_ro; CREATE USER %(db_user)s_ro WITH PASSWORD \'readonly\'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO %(db_user)s_ro;"')
         with settings(warn_only=True):
-            print 'Enabling plpgsql on database...'
+            print('Enabling plpgsql on database...')
             cmd = 'createlang -U postgres plpgsql %(db_name)s' % env
             run_or_dryrun(cmd)
             
@@ -297,10 +300,7 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
             
         cmd = "mysqladmin -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' create %(db_name)s" % env
         sudo_or_dryrun(cmd)
-            
-#        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
-#            "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
-#        print cmd
+ 
         set_collation_mysql()
             
         # Create user.
@@ -328,26 +328,6 @@ def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db
     
     else:
         raise NotImplemented
-    
-#     if not get_dryrun() and int(post_process):
-#         post_create(name=name, site=site)
-# 
-# @task_or_dryrun
-# def post_create(name=None, site=None):
-#     from burlap.dj import set_db
-#     assert env[ROLE]
-#     require('app_name')
-#     site = site or env.SITE
-#     #print 'site:',site
-#     set_db(name=name, site=site, verbose=1)
-#     load_db_set(name=name)
-# #    print 'site:',env[SITE]
-# #    print 'role:',env[ROLE]
-#     
-#     syncdb(all=True, site=site)
-#     #migrate(fake=True, site=site)
-#     install_sql(name=name, site=site)
-#     #createsuperuser()
 
 #DEPRECATED:use dj.update
 @task_or_dryrun
@@ -460,13 +440,13 @@ def get_free_space():
     """
     Return free space in bytes.
     """
-    cmd = "df -k | grep -vE '^Filesystem|tmpfs|cdrom|none|udev|cgroup' | awk '{ print $1 \" \" $4 }'"
+    cmd = "df -k | grep -vE '^Filesystem|tmpfs|cdrom|none|udev|cgroup' | awk '{ print($1 \" \" $4 }'"
     lines = [_ for _ in run_or_dryrun(cmd).strip().split('\n') if _.startswith('/')]
     assert len(lines) == 1, 'Ambiguous devices: %s' % str(lines)
     device, kb = lines[0].split(' ')
     free_space = int(kb) * 1024
     if int(verbose):
-        print 'free_space (bytes):',free_space
+        print('free_space (bytes):', free_space)
     return free_space
 
 @task_or_dryrun
@@ -483,7 +463,7 @@ def get_size():
         output = run_or_dryrun(cmd)
         output = int(output.strip().split('\n')[-1].strip())
         if int(verbose):
-            print 'database size (bytes):',output
+            print('database size (bytes):', output)
         return output
     else:
         raise NotImplementedError
@@ -524,14 +504,14 @@ def loadable(src, dst):
     
     viable = balance_bytes >= 0
     if int(verbose):
-        print 'src_db_size:',common.pretty_bytes(src_size_bytes)
-        print 'dst_db_size:',common.pretty_bytes(dst_size_bytes)
-        print 'dst_free_space:',common.pretty_bytes(free_space_bytes)
+        print('src_db_size:',common.pretty_bytes(src_size_bytes))
+        print('dst_db_size:',common.pretty_bytes(dst_size_bytes))
+        print('dst_free_space:',common.pretty_bytes(free_space_bytes))
         print
         if viable:
-            print 'Viable! There will be %.02f %s of disk space left.' % (balance_bytes_scaled, units)
+            print('Viable! There will be %.02f %s of disk space left.' % (balance_bytes_scaled, units))
         else:
-            print 'Not viable! We would be %.02f %s short.' % (balance_bytes_scaled, units)
+            print('Not viable! We would be %.02f %s short.' % (balance_bytes_scaled, units))
     
     return viable
 
@@ -562,8 +542,7 @@ def dumpload():
         raise NotImplementedError
 
 def render_fn(fn):
-    import commands
-    return commands.getoutput('echo %s' % fn)
+    return subprocess.check_output('echo %s' % fn)
 
 @task_or_dryrun
 def get_default_db_fn(fn_template=None):
@@ -584,9 +563,6 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0):
     verbose = common.get_verbose()
     from burlap.dj import set_db
     from burlap.common import get_dryrun
-#    print '!'*80
-#    print 'db.load.site:',env.SITE
-#    print 'db.load.role:',env.ROLE
     
     if not db_dump_fn:
         db_dump_fn = get_default_db_fn()
@@ -606,17 +582,13 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0):
         env.db_remote_dump_fn = db_dump_fn
     else:
         env.db_remote_dump_fn = '/tmp/'+os.path.split(env.db_dump_fn)[-1]
-        #env.db_remote_dump_fn = 'snapshots/'+os.path.split(env.db_dump_fn)[-1]
-#    print '~'*80
-#    print 'env.db_remote_dump_fn:',env.db_remote_dump_fn
-#    print 'env.hosts2:',env.hosts,env.host_string
     
     if not prep_only:
         if int(force_upload) or (not get_dryrun() and not env.is_local and not files.exists(env.db_remote_dump_fn)):
             assert os.path.isfile(env.db_dump_fn), \
                 missing_local_dump_error
             if verbose:
-                print 'Uploading database snapshot...'
+                print('Uploading database snapshot...')
             put_or_dryrun(local_path=env.db_dump_fn, remote_path=env.db_remote_dump_fn)
     
     if env.is_local and not get_dryrun() and not prep_only:
@@ -696,7 +668,6 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0):
         # Set collation.
 #        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' "
 #            "--execute='ALTER DATABASE %(db_name)s CHARACTER SET %(db_mysql_character_set)s COLLATE %(db_mysql_collate)s;'") % env
-#        print cmd
         set_collation_mysql()
         
         # Raise max packet limitation.
@@ -723,104 +694,6 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0):
         
     else:
         raise NotImplemented
-
-
-# @task_or_dryrun
-# def syncdb(site=None, all=0, database=None):
-#     """
-#     Wrapper around Django's syncdb command.
-#     """
-# #    
-#     #print 'remote_app_src_package_dir_template:',env.remote_app_src_package_dir_template
-#     from burlap.dj import render_remote_paths
-#     
-#     
-# #    print 'remote_app_src_package_dir_template:',env.remote_app_src_package_dir_template
-# #    print 'remote_app_src_package_dir:',env.remote_app_src_package_dir
-# #    print 'remote_manage_dir:',env.remote_manage_dir
-# #    return
-#     set_site(site)
-#     
-#     render_remote_paths()
-#     
-#     env.db_syncdb_all_flag = '--all' if int(all) else ''
-#     env.db_syncdb_database = ''
-#     if database:
-#         env.db_syncdb_database = ' --database=%s' % database
-#     cmd = env.db_syncdb_command_template % env
-#     run_or_dryrun(cmd)
-
-# @task_or_dryrun
-# def migrate(app_name='', site=None, fake=0, skip_databases=None, do_fake=1, do_real=0, migrate_apps=''):
-#     """
-#     Wrapper around Django's migrate command.
-#     """
-#     from burlap.dj import render_remote_paths, has_database
-#     
-#     # If fake migrations are enabled, then run the real migrations on the real database.
-#     do_real = int(do_real)
-#     do_fake = int(do_fake)
-#     
-#     set_site(site or env.SITE)
-#     
-#     render_remote_paths()
-#     
-#     migrate_apps = [
-#         _.strip()
-#         for _ in migrate_apps.strip().split(',')
-#         if _.strip()
-#     ]
-#     
-#     skip_databases = (skip_databases or '')
-#     if isinstance(skip_databases, basestring):
-#         skip_databases = [_.strip() for _ in skip_databases.split(',') if _.strip()]
-#     
-#     if env.db_check_ghost_migrations:
-#         env.db_check_ghost_migrations_flag = '--delete-ghost-migrations'
-#     else:
-#         env.db_check_ghost_migrations_flag = ''
-#     
-#     # Since South doesn't properly support multi-database applications, we have
-#     # to fake app migrations on every database except the one where they exist.
-#     #TODO:remove this when South fixes this or gets merged into Django core.
-#     if env.django_migrate_fakeouts:
-#         for fakeout in env.django_migrate_fakeouts:
-#             env.db_app_name = fakeout['app']
-#             if migrate_apps and env.db_app_name not in migrate_apps:
-#                 continue
-#             env.db_database_name = fakeout['database']
-#             if env.db_database_name in skip_databases:
-#                 continue
-#             if do_fake:
-#                 cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput %(db_check_ghost_migrations_flag)s --fake --traceback' % env
-#                 run_or_dryrun(cmd)
-#             if do_real and has_database(name=env.db_database_name, site=site):
-# #                cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --database=%(db_database_name)s --traceback' % env
-# #                run_or_dryrun(cmd)
-#                 cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --database=%(db_database_name)s --noinput %(db_check_ghost_migrations_flag)s --traceback' % env
-#                 run_or_dryrun(cmd)
-#     
-#     env.db_migrate_fake = '--fake' if int(fake) else ''
-#     if migrate_apps:
-#         for app_name in migrate_apps:
-#             env.db_app_name = app_name
-#             cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput %(db_check_ghost_migrations_flag)s %(db_migrate_fake)s --traceback' % env
-#             run_or_dryrun(cmd)
-#     elif app_name:
-#         env.db_app_name = app_name
-#         cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate %(db_app_name)s --noinput %(db_check_ghost_migrations_flag)s %(db_migrate_fake)s --traceback' % env
-#         run_or_dryrun(cmd)
-#     else:
-#         
-#         # First migrate apps in a specific order if given.
-#         for app_name in env.db_app_migration_order:
-#             env.db_app_name = app_name
-#             cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput %(db_check_ghost_migrations_flag)s %(db_migrate_fake)s %(db_app_name)s --traceback' % env
-#             run_or_dryrun(cmd)
-#             
-#         # Then migrate everything else remaining.
-#         cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s migrate --noinput %(db_check_ghost_migrations_flag)s %(db_migrate_fake)s --traceback' % env
-#         run_or_dryrun(cmd)
 
 
 #TODO:deprecated? use write_postgres_pgass instead?
@@ -885,81 +758,6 @@ def prep_root_password():
     sudo_or_dryrun("debconf-set-selections <<< 'mysql-server mysql-server/root_password password %(db_root_password)s'" % args)
     sudo_or_dryrun("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password %(db_root_password)s'" % args)
 
-# common.service_configurators[MYSQL] = [configure]
-# common.service_configurators[POSTGRESQL] = [configure]
-# common.service_deployers[MYSQL] = [update]
-# common.service_restarters[POSTGRESQL] = [restart]
-# common.service_restarters[MYSQL] = [restart]
-
-# @task_or_dryrun
-# def record_manifest():
-#     """
-#     Called after a deployment to record any data necessary to detect changes
-#     for a future deployment.
-#     """
-#     from burlap.dj import get_settings
-#         
-#     data = common.get_component_settings(DB)
-#     
-#     data['databases'] = []#{} # {site:django DATABASES}
-#     data['database_users'] = {} # {user:(host,password)}
-#     for site, site_data in common.iter_sites(site=ALL, no_secure=True):
-#         settings = get_settings(site=site)
-#         for _, db_data in settings.DATABASES.iteritems():
-#             #data['databases'][site] = settings.DATABASES
-#             data['databases'].append(dict(
-#                 engine=db_data['ENGINE'],
-#                 name=db_data['NAME'],
-#                 host=db_data['HOST'],
-#                 port=db_data.get('PORT')))
-#             data['database_users'].setdefault(db_data['USER'], [])
-#             data['database_users'][db_data['USER']].append(dict(
-#                 password=db_data['PASSWORD'],
-#                 engine=db_data['ENGINE'],
-#                 name=db_data['NAME'],
-#                 host=db_data['HOST'],
-#                 port=db_data.get('PORT')))
-#     
-#     return data
-# 
-# def compare_manifest(old):
-#     """
-#     Compares the current settings to previous manifests and returns the methods
-#     to be executed to make the target match current settings.
-#     """
-#     old = old or {}
-#     methods = []
-#     pre = ['user', 'ip', 'package']
-#     new = record_manifest()
-#     
-#     old_databases = old.get('databases', {})
-#     del old['databases']
-#     new_databases = new.get('databases', {})
-#     del new['databases']
-#     
-#     old_databases = [tuple(sorted(_.items())) for _ in old_databases]
-#     old_databases = dict(zip(old_databases, old_databases))
-#     new_databases = [tuple(sorted(_.items())) for _ in new_databases]
-#     new_databases = dict(zip(new_databases, new_databases))
-#     added, updated, deleted = common.check_settings_for_differences(old_databases, new_databases, as_tri=True)
-#     for added_db in added:
-#         methods.append(QueuedCommand('db.create', pre=pre))
-# 
-#     old_database_users = old.get('database_users', {})
-#     del old['database_users']
-#     new_database_users = new.get('database_users', {})
-#     del new['database_users']
-# 
-# #    created_dbs = []
-# #    deleted_dbs = []
-# #    updated_dbs = []
-# #    for site_name in set(old_databases.keys()).union(new_databases.keys()):
-# #        print site_name
-#     
-#     has_diffs = common.check_settings_for_differences(old, new, as_bool=True)
-#     if has_diffs:
-#         methods.append(QueuedCommand('db.configure', pre=pre))
-#     return methods
 
 class DatabaseSatchel(ServiceSatchel):
     
@@ -1119,8 +917,6 @@ class MySQLSatchel(DatabaseSatchel):
     
     def set_defaults(self):
     
-        super(MySQLSatchel, self).set_defaults()
-        
         # You want this to be large, and set in both the client and server.
         # Otherwise, MySQL may silently truncate database dumps, leading to much
         # frustration.
@@ -1239,7 +1035,7 @@ class MySQLSatchel(DatabaseSatchel):
             
             self.restart()
         
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user']
 
 class MySQLClientSatchel(Satchel):
@@ -1271,8 +1067,6 @@ class PostgreSQLSatchel(DatabaseSatchel):
     }
     
     def set_defaults(self):
-    
-        super(PostgreSQLSatchel, self).set_defaults()
     
         env.dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s > %(db_dump_fn)s'
         env.createlangs = ['plpgsql'] # plpythonu
@@ -1402,7 +1196,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         cmd = 'service postgresql restart'
         self.sudo_or_dryrun(cmd)
 
-    configure.is_deployer = True
+    
     configure.deploy_before = ['packager', 'user']
     
 class PostgreSQLClientSatchel(Satchel):

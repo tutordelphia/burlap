@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import re
 from pprint import pprint
 
@@ -31,7 +33,7 @@ def list_env(key=None):
     for k,v in sorted(env.iteritems(), key=lambda o:o[0]):
         if key and k != key:
             continue
-        print '%s ' % (k,),
+        print('%s ' % (k,))
         pprint(v, indent=4)
 
 @task_or_dryrun
@@ -39,7 +41,7 @@ def list_sites(site='all', *args, **kwargs):
     from burlap.common import iter_sites
     kwargs['site'] = site
     for site, data in iter_sites(*args, **kwargs):
-        print site
+        print(site)
 
 def list_to_str_or_unknown(lst):
     if len(lst):
@@ -125,8 +127,6 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
                 cmd = 'hdparm -I %s|grep -i "Transport:"' % device
                 ret = sudo_or_dryrun(cmd)
                 if ret and not ret.return_code:
-#                    print dir(ret)
-#                    print ret.__dict__.keys()
                     drive_transports.add(ret.split('Transport:')[-1].strip())
                 
         cmd = "df | grep '^/dev/[mhs]d*' | awk '{s+=$2} END {print s/1048576}'"
@@ -134,41 +134,41 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
         total_logical_storage_gb = float(ret)
     
     if cpu:
-        print '-'*80
-        print 'CPU'
-        print '-'*80
+        print('-'*80)
+        print('CPU')
+        print('-'*80)
         type_str = ', '.join(['%s x %i' % (_type, _count) for _type, _count in cores.items()])
-        print 'Cores: %i' % sum(cores.values())
-        print 'Types: %s' % type_str
+        print('Cores: %i' % sum(cores.values()))
+        print('Types: %s' % type_str)
     
     if memory:
-        print '-'*80
-        print 'MEMORY'
-        print '-'*80
-        print 'Total: %s GB' % total_memory_gb
-        print 'Type: %s' % list_to_str_or_unknown(memory_types)
-        print 'Form: %s' % list_to_str_or_unknown(memory_forms)
-        print 'Speed: %s' % list_to_str_or_unknown(memory_speeds)
-        print 'Slots: %i (%i filled, %i empty)' % (total_slots, total_slots_filled, total_slots - total_slots_filled)
+        print('-'*80)
+        print('MEMORY')
+        print('-'*80)
+        print('Total: %s GB' % total_memory_gb)
+        print('Type: %s' % list_to_str_or_unknown(memory_types))
+        print('Form: %s' % list_to_str_or_unknown(memory_forms))
+        print('Speed: %s' % list_to_str_or_unknown(memory_speeds))
+        print('Slots: %i (%i filled, %i empty)' % (total_slots, total_slots_filled, total_slots - total_slots_filled))
     
     if hdd:
-        print '-'*80
-        print 'STORAGE'
-        print '-'*80
-        print 'Total physical drives: %i' % total_drives
-        print 'Total physical storage: %s GB' % total_physical_storage_gb
-        print 'Total logical storage: %s GB' % total_logical_storage_gb
-        print 'Types: %s' % list_to_str_or_unknown(drive_transports)
+        print('-'*80)
+        print('STORAGE')
+        print('-'*80)
+        print('Total physical drives: %i' % total_drives)
+        print('Total physical storage: %s GB' % total_physical_storage_gb)
+        print('Total logical storage: %s GB' % total_logical_storage_gb)
+        print('Types: %s' % list_to_str_or_unknown(drive_transports))
 
 def list_hosts():
     print('hosts:', env.hosts)
 
 @task_or_dryrun
 def info():
-    print 'Info'
-    print '\tROLE:',env.ROLE
-    print '\tSITE:',env.SITE
-    print '\tdefault_site:',env.default_site
+    print('Info')
+    print('\tROLE:',env.ROLE)
+    print('\tSITE:',env.SITE)
+    print('\tdefault_site:',env.default_site)
 
 @task_or_dryrun
 @runs_once

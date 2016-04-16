@@ -1,7 +1,0 @@
-# PIP
-
-## check
-
-## update
-
-## install
