@@ -171,8 +171,8 @@ class RabbitMQSatchel(ServiceSatchel):
         params = set() # [(user,vhost)]
         for site, site_data in iter_sites(site=site, renderer=self.render_paths, no_secure=True):
             if self.verbose:
-                print>>sys.stderr, '!'*80
-                print>>sys.stderr, 'site:', site
+                print('!'*80, file=sys.stderr)
+                print('site:', site, file=sys.stderr)
             _settings = get_settings(site=site)
             #print '_settings:',_settings
             if not _settings:

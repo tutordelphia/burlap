@@ -523,10 +523,10 @@ class ApacheSatchel(ServiceSatchel):
         self.get_apache_settings()
         
         if verbose:
-            print>>sys.stderr, 'apache_ssl_domain:', self.genv.apache_ssl_domain
+            print('apache_ssl_domain:', self.genv.apache_ssl_domain, file=sys.stderr)
         for cert_type, cert_file_template in self.genv.apache_ssl_certificates_templates:
             if verbose:
-                print>>sys.stderr, 'cert_type, cert_file_template:',cert_type, cert_file_template
+                print('cert_type, cert_file_template:',cert_type, cert_file_template, file=sys.stderr)
             _local_cert_file = os.path.join(self.genv.apache_ssl_dir_local, cert_file_template % self.genv)
             local_cert_file = self.find_template(_local_cert_file)
             assert local_cert_file, 'Unable to find local certificate file: %s' % (_local_cert_file,)
@@ -574,9 +574,9 @@ class ApacheSatchel(ServiceSatchel):
         
         for site, site_data in iter_sites(site=site, setter=self.set_apache_site_specifics):
             if self.verbose:
-                print>>sys.stderr, '~'*80
-                print>>sys.stderr, 'Site:',site
-                print>>sys.stderr, 'env.apache_auth_basic:', self.genv.apache_auth_basic
+                print('~'*80, file=sys.stderr)
+                print('Site:',site, file=sys.stderr)
+                print('env.apache_auth_basic:', self.genv.apache_auth_basic, file=sys.stderr)
                 
             if not self.genv.apache_auth_basic:
                 continue
@@ -607,6 +607,8 @@ class ApacheSatchel(ServiceSatchel):
         data['site_template_contents'] = self.get_template_contents(self.env.site_template)
         if self.verbose:
             pprint(data, indent=4)
+        data['available_sites'] = self.genv.available_sites
+        data['available_sites_by_host'] = self.genv.available_sites_by_host
         return data
 
     def configure_site(self, full=1, site=None, delete_old=0):
@@ -616,7 +618,7 @@ class ApacheSatchel(ServiceSatchel):
         from burlap.common import get_current_hostname, iter_sites
         from burlap import service
         
-        print>>sys.stderr, 'Configuring Apache...'
+        print('Configuring Apache...', file=sys.stderr)
         
         verbose = self.verbose
         
@@ -635,9 +637,9 @@ class ApacheSatchel(ServiceSatchel):
         
         for site, site_data in iter_sites(site=site, setter=self.set_apache_site_specifics):
             if self.verbose:
-                print>>sys.stderr, '-'*80
-                print>>sys.stderr, 'Site:',site
-                print>>sys.stderr, '-'*80
+                print('-'*80, file=sys.stderr)
+                print('Site:',site, file=sys.stderr)
+                print('-'*80, file=sys.stderr)
             
             # Only load site configurations that are allowed for this host.
             if target_sites is None:
@@ -648,9 +650,9 @@ class ApacheSatchel(ServiceSatchel):
                     continue
             
             if self.verbose:
-                print>>sys.stderr, 'env.apache_ssl_domain:', self.genv.apache_ssl_domain
-                print>>sys.stderr, 'env.apache_ssl_domain_template:', self.genv.apache_ssl_domain_template
-                print>>sys.stderr, 'env.django_settings_module:', self.genv.django_settings_module
+                print('env.apache_ssl_domain:', self.genv.apache_ssl_domain, file=sys.stderr)
+                print('env.apache_ssl_domain_template:', self.genv.apache_ssl_domain_template, file=sys.stderr)
+                print('env.django_settings_module:', self.genv.django_settings_module, file=sys.stderr)
             
     #        raw_input('enter')
             fn = self.render_to_file('django/django.template.wsgi', verbose=verbose)
@@ -659,7 +661,7 @@ class ApacheSatchel(ServiceSatchel):
             self.sudo_or_dryrun(cmd)
             
             if self.verbose:
-                print>>sys.stderr, fn
+                print(fn, file=sys.stderr)
             self.put_or_dryrun(local_path=fn, remote_path=self.genv.apache_django_wsgi, use_sudo=True)
             
             if self.genv.apache_ssl:

@@ -39,6 +39,7 @@ from fabric import state
 import fabric.api
 
 from .constants import *
+from .utils import get_file_hash
 
 if hasattr(fabric.api, '_run'):
     _run = fabric.api._run
@@ -264,7 +265,13 @@ class _EnvProxy(object):
     
     def __init__(self, satchel):
         self.satchel = satchel
-        
+    
+    def __contains__(self, k):
+#         if k in ('satchel',):
+#             return k in super(_EnvProxy, self).__contains__(k)
+        k = (self.satchel.env_prefix + k)
+        return k in env
+    
     def __getattr__(self, k):
         if k in ('satchel',):
             return super(_EnvProxy, self).__getattr__(k)
@@ -315,6 +322,14 @@ class Renderer(object):
             
             return _wrap
         
+        def wrap2(func):
+            # For non-command functions.
+            
+            def _wrap(*args, **kwargs):
+                return func(*args, **kwargs)
+            
+            return _wrap
+            
         ret = getattr(self.obj, attrname)
         
         # If we're calling a command executor, wrap it so that it automatically formats
@@ -322,9 +337,10 @@ class Renderer(object):
         if attrname.startswith('local') \
         or attrname.startswith('run') \
         or attrname.startswith('comment') \
-        or attrname.startswith('put') \
         or attrname.startswith('sudo'):
             ret = wrap(ret)
+        elif attrname.startswith('put'):
+            ret = wrap2(ret)
             
         return ret
         
@@ -352,6 +368,9 @@ class Satchel(object):
         #OS: [package1, package2, ...],
     }
     
+    # These files will have their changes tracked.
+    templates = ()
+    
     def __init__(self):
         assert self.name, 'A name must be specified.'
         self.name = self.name.strip().lower()
@@ -370,6 +389,8 @@ class Satchel(object):
         self.env = _EnvProxy(self)
         
         self.files = files
+        
+        self.settings = settings
         
         _prefix = '%s_enabled' % self.name
         if _prefix not in env:
@@ -431,6 +452,42 @@ class Satchel(object):
     def all_satchels(self):
         return all_satchels
     
+    def define_cron_job(self, template, script_path, command=None, name='default', perms='600'):
+        if 'cron' not in self.env:
+            self.env.cron = type(env)()
+        self.env.cron[name] = type(env)()
+        self.env.cron[name].template = '%s/%s' % (self.name, template)
+        self.env.cron[name].script_path = script_path
+        self.env.cron[name].command = command
+        self.env.cron[name].perms = '600'
+        self.templates = list(self.templates)
+        self.templates.append(template)
+    
+    def install_cron_job(self, name='default', extra=None):
+        assert name in self.env.cron
+        
+        data = self.env.cron[name]
+        data.update(extra or {})
+    
+        self.install_script(
+            local_path=data.template,
+            remote_path=data.script_path,
+            render=True,
+            extra=data,
+        )
+        
+        r = self.local_renderer
+            
+        r.sudo('chown root:root %s' % data.script_path)
+        
+        # Must be 600, otherwise gives INSECURE MODE error.
+        # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
+        r.sudo('chmod %s %s' % (data.perms, data.script_path))#env.put_remote_path)
+        r.sudo('service cron restart')
+
+    def uninstall_cron_job(self, name):
+        assert name in self.cron
+        
     def pc(self, *args, **kwargs):
         return pc(*args, **kwargs)
     
@@ -452,7 +509,7 @@ class Satchel(object):
         Returns a version of env filtered to only include the variables in our namespace.
         """
         _env = type(env)()
-        for _k, _v in six.iteritems(env.iteritems):
+        for _k, _v in six.iteritems(env):
             if _k.startswith(self.name+'_'):
                 _env[_k[len(self.name)+1:]] = _v
         return _env
@@ -475,11 +532,21 @@ class Satchel(object):
     def _local(self, *args, **kwargs):
         return _local(*args, **kwargs)
     
-    def reboot_or_dryrun(self):
+    def render_to_string(self, *args, **kwargs):
+        return render_to_string(*args, **kwargs)
+    
+    def reboot_or_dryrun(self, *args, **kwargs):
         """
         Reboots the server and waits for it to come back.
         """
-        reboot_or_dryrun()
+        warnings.warn('Use self.run() instead.', DeprecationWarning, stacklevel=2)
+        self.reboot(*args, **kwargs)
+    
+    def reboot(self, *args, **kwargs):
+        """
+        Reboots the server and waits for it to come back.
+        """
+        reboot_or_dryrun(*args, **kwargs)
     
     def write_to_file(self, *args, **kwargs):
         return write_to_file(*args, **kwargs)
@@ -489,6 +556,9 @@ class Satchel(object):
     
     def get_template_contents(self, template):
         return get_template_contents(template)
+    
+    def install_script(self, *args, **kwargs):
+        return install_script(*args, **kwargs)
     
     def install_packages(self):
         os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
@@ -512,6 +582,8 @@ class Satchel(object):
         if package_list:
             package_list_str = ' '.join(package_list)
             if os_version.distro == UBUNTU:
+                self.sudo_or_dryrun('apt-get update --fix-missing; apt-get install --yes %s' % package_list_str)
+            elif os_version.distro == DEBIAN:
                 self.sudo_or_dryrun('apt-get update --fix-missing; apt-get install --yes %s' % package_list_str)
             elif os_version.distro == FEDORA:
                 self.sudo_or_dryrun('yum install --assumeyes %s' % package_list_str)
@@ -554,6 +626,10 @@ class Satchel(object):
         return render_to_file(*args, **kwargs)
     
     def put_or_dryrun(self, *args, **kwargs):
+        warnings.warn('Use self.put() instead.', DeprecationWarning, stacklevel=2)
+        return put_or_dryrun(*args, **kwargs)
+    
+    def put(self, *args, **kwargs):
         return put_or_dryrun(*args, **kwargs)
     
     def run_or_dryrun(self, *args, **kwargs):
@@ -587,8 +663,14 @@ class Satchel(object):
         """
         Returns a dictionary representing a serialized state of the service.
         """
-        data = get_component_settings(self.name)
-        return data
+        manifest = get_component_settings(self.name)
+        
+        # Record a signature of each template so we know to redeploy when they change.
+        for template in self.templates:
+            fqfn = self.find_template('%s/%s' % (self.name, template))
+            manifest['_%s' % template] = get_file_hash(fqfn)
+        
+        return manifest
     
     def configure(self):
         """
@@ -787,10 +869,8 @@ def shellquote(s, singleline=True):
     if singleline:
         s = pipes.quote(s)
         s = repr(s)
-        if s.startswith("u'") or s.startswith('u"'):
-            s = s[4:-4]
-        else:
-            s = s[3:-3]
+        s = re.sub(r'^u*[\"\']+', '', s)
+        s = re.sub(r'[\"\']+$', '', s)
         s = '"%s"' % s
     else:
         s = '{}'.format(pipes.quote(s))
@@ -912,19 +992,22 @@ def put_or_dryrun(**kwargs):
         if not remote_path:
             _, remote_path = tempfile.mkstemp()
             
-        if not remote_path.startswith('/'):
+        if not remote_path.startswith('/') and not remote_path.startswith('~'):
             remote_path = '/tmp/' + remote_path
         
         if use_sudo:
             real_remote_path = remote_path
             _, remote_path = tempfile.mkstemp()
         
+        if real_remote_path is None:
+            real_remote_path = remote_path
+        
         if env.host_string in LOCALHOSTS:
             cmd = 'rsync --progress --verbose %s %s' % (local_path, remote_path)
             print('%s put: %s' % (render_command_prefix(), cmd))
             env.put_remote_path = local_path
         else:
-            cmd = 'rsync --progress --verbose %s %s' % (local_path, remote_path)
+            cmd = 'rsync --progress --verbose %s %s@%s:%s' % (local_path, env.user, env.host_string, remote_path)
             env.put_remote_path = remote_path
             print('%s put: %s' % (render_command_prefix(), cmd))
             
@@ -932,6 +1015,7 @@ def put_or_dryrun(**kwargs):
             sudo_or_dryrun('mv %s %s' % (remote_path, real_remote_path))
             env.put_remote_path = real_remote_path
             
+        return [real_remote_path]
     else:
         return _put(**kwargs)
 
@@ -994,8 +1078,7 @@ def get_last_modified_timestamp(path):
     """
     cmd = 'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
          #'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d " " -f1
-
-    ret = subprocess.check_output(cmd)
+    ret = subprocess.check_output(cmd, shell=True)
     # Note, we round now to avoid rounding errors later on where some formatters
     # use different decimal contexts.
     try: 
@@ -1251,25 +1334,29 @@ def get_os_version():
     if common_os_version:
         return common_os_version
     with settings(warn_only=True), hide('running', 'stdout', 'stderr', 'warnings'):
-            ret = _run('cat /etc/lsb-release')
-            if ret.succeeded:
-                common_os_version = OS(
-                    type = LINUX,
-                    distro = UBUNTU,
-                    release = re.findall('DISTRIB_RELEASE=([0-9\.]+)', ret)[0])
-            else:
-                ret = _run('cat /etc/fedora-release')
-                if ret.succeeded:
-                    common_os_version = OS(
-                        type = LINUX,
-                        distro = FEDORA,
-                        release = re.findall('release ([0-9]+)', ret)[0])
-                else:
-                    raise Exception('Unable to determine OS version.')
-    if not common_os_version:
+        
+        ret = _run('cat /etc/lsb-release')
+        if ret.succeeded:
+            return OS(
+                type = LINUX,
+                distro = UBUNTU,
+                release = re.findall('DISTRIB_RELEASE=([0-9\.]+)', ret)[0])
+                
+        ret = _run('cat /etc/debian_version')
+        if ret.succeeded:
+            return OS(
+                type = LINUX,
+                distro = DEBIAN,
+                release = re.findall('([0-9\.]+)', ret)[0])
+    
+        ret = _run('cat /etc/fedora-release')
+        if ret.succeeded:
+            return OS(
+                type = LINUX,
+                distro = FEDORA,
+                release = re.findall('release ([0-9]+)', ret)[0])
+
         raise Exception('Unable to determine OS version.')
-    set_rc('common_os_version', common_os_version)
-    return common_os_version
 
 def find_template(template):
     verbose = get_verbose()
@@ -1331,8 +1418,19 @@ def render_to_file(template, fn=None, extra=None, **kwargs):
     """
     import tempfile
     dryrun = get_dryrun(kwargs.get('dryrun'))
+#     replace_homedir = kwargs.pop('replace_homedir', False)
+    append_newline = kwargs.pop('append_newline', True)
     content = render_to_string(template, extra=extra)
-    if not dryrun:
+    if append_newline and not content.endswith('\n'):
+        content += '\n'
+#     if env.user:
+#         content = content.replace('~', '/home/%s' % env.user)
+    if dryrun:
+        if not fn:
+            fd, fn = tempfile.mkstemp()
+            fout = os.fdopen(fd, 'wt')
+            fout.close()
+    else:
         if fn:
             fout = open(fn, 'w')
         else:
@@ -1340,10 +1438,21 @@ def render_to_file(template, fn=None, extra=None, **kwargs):
             fout = os.fdopen(fd, 'wt')
         fout.write(content)
         fout.close()
-    print('echo -e %s > %s' % (shellquote(content), fn))
+    assert fn
+    
+    cmd = 'echo -e %s > %s' % (shellquote(content), fn)
+    if BURLAP_COMMAND_PREFIX:
+        print('%s run: %s' % (render_command_prefix(), cmd))
+    else:
+        print(cmd)
+
     return fn
 
-def install_script(local_path=None, remote_path=None):
+def install_script(local_path=None, remote_path=None, render=True, extra=None):
+    local_path = find_template(local_path)
+    if render:
+        extra = extra or {}
+        local_path = render_to_file(template=local_path, extra=extra)
     put_or_dryrun(local_path=local_path, remote_path=remote_path, use_sudo=True)
     sudo_or_dryrun('chmod +x %s' % env.put_remote_path)
     

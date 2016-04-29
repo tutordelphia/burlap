@@ -36,10 +36,10 @@ if 'dj_settings_loaded' not in env:
     env.dj_settings_loaded = True
     
     # The default django settings module import path.
-    #print>>sys.stderr, 'reset django settings module template!!!'
+    #print('reset django settings module template!!!'
     if 'django_settings_module_template' in env:
-        print>>sys.stderr,  '!'*80
-        print>>sys.stderr,  'env.django_settings_module_template:',env.django_settings_module_template
+        print( '!'*80, file=sys.stderr)
+        print( 'env.django_settings_module_template:',env.django_settings_module_template, file=sys.stderr)
     env.django_settings_module_template = '%(app_name)s.settings.settings'
     #
     # This is the name of the executable to call to access Django's management
@@ -233,7 +233,7 @@ def syncdb(site=None, all=0, database=None):
     for site, site_data in iter_unique_databases(site=site):
         cmd = (
             'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
-            '%(django_manage)s syncdb %(db_syncdb_all_flag)s %(db_syncdb_database)s') % _env
+            '%(django_manage)s syncdb --noinput %(db_syncdb_all_flag)s %(db_syncdb_database)s') % _env
         run_or_dryrun(cmd)
 
 @task_or_dryrun
@@ -268,14 +268,14 @@ def manage_all(*args, **kwargs):
     """
     
     for site, site_data in iter_unique_databases(site='all'):
-        print>>sys.stderr, '-'*80
-        print>>sys.stderr, 'site:', site
+        print('-'*80, file=sys.stderr)
+        print('site:', site, file=sys.stderr)
         
         if env.available_sites_by_host:
             hostname = common.get_current_hostname()
             sites_on_host = env.available_sites_by_host.get(hostname, [])
             if sites_on_host and site not in sites_on_host:
-                print>>sys.stderr, 'skipping site:', site, sites_on_host
+                print('skipping site:', site, sites_on_host, file=sys.stderr)
                 continue
             
         manage(*args, **kwargs)
@@ -310,17 +310,17 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
     _env.django_migrate_database = '--database=%s' % database if database else ''
     _env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts else ''
     for site, site_data in iter_unique_databases(site=site):
-        print>>sys.stderr, '-'*80
-        print>>sys.stderr, 'site:', site
+        print('-'*80, file=sys.stderr)
+        print('site:', site, file=sys.stderr)
         
         if env.available_sites_by_host:
             hostname = common.get_current_hostname()
             sites_on_host = env.available_sites_by_host.get(hostname, [])
             if sites_on_host and site not in sites_on_host:
-                print>>sys.stderr, 'skipping site:', site, sites_on_host
+                print('skipping site:', site, sites_on_host, file=sys.stderr)
                 continue
         
-        print>>sys.stderr, 'migrate_apps:', migrate_apps
+        print('migrate_apps:', migrate_apps, file=sys.stderr)
         if migrate_apps:
             _env.django_migrate_app = ' '.join(migrate_apps)
         else:
@@ -545,9 +545,9 @@ def install_sql(name='default', site=None):
                     else:
                         terminal.add(path)
         if terminal:
-            print>>sys.stderr, '%i files could not be loaded.' % len(terminal)
+            print('%i files could not be loaded.' % len(terminal), file=sys.stderr)
             for path in sorted(list(terminal)):
-                print>>sys.stderr, path
+                print(path, file=sys.stderr)
             print>>sys.stderr
     
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:

@@ -13,6 +13,7 @@ class AvahiSatchel(ServiceSatchel):
     
     required_system_packages = {
         UBUNTU: ['avahi-daemon'],
+        DEBIAN: ['avahi-daemon'],
     }
 
     def set_defaults(self):
@@ -22,26 +23,33 @@ class AvahiSatchel(ServiceSatchel):
         self.env.service_commands = {
             START:{
                 UBUNTU: 'service %s start' % self.env.daemon_name,
+                DEBIAN: 'service %s start' % self.env.daemon_name,
             },
             STOP:{
                 UBUNTU: 'service %s stop' % self.env.daemon_name,
+                DEBIAN: 'service %s stop' % self.env.daemon_name,
             },
             DISABLE:{
                 UBUNTU: 'chkconfig %s off' % self.env.daemon_name,
+                DEBIAN: 'update-rc.d %s disable' % self.env.daemon_name,
             },
             ENABLE:{
                 UBUNTU: 'chkconfig %s on' % self.env.daemon_name,
+                DEBIAN: 'update-rc.d %s enable' % self.env.daemon_name,
             },
             RESTART:{
                 UBUNTU: 'service %s restart' % self.env.daemon_name,
+                DEBIAN: 'service %s restart' % self.env.daemon_name,
             },
             STATUS:{
                 UBUNTU: 'service %s status' % self.env.daemon_name,
+                DEBIAN: 'service %s status' % self.env.daemon_name,
             },
         }
     
     def configure(self):
         if self.env.enabled:
+            self.install_packages()
             self.enable()
             self.restart()
         else:

@@ -143,7 +143,7 @@ class Dependency(object):
         cmd = ("dpkg -s %(uri)s | grep -E \"Version:\" " + \
             "| awk '{gsub(/[()]/,\"\"); print($2;}'") % dict(uri=self.uri)
         #print cmd
-        out = subprocess.check_output(cmd)
+        out = subprocess.check_output(cmd, shell=True)
         #print out
         return out
     

@@ -433,7 +433,7 @@ class Plan(object):
         try:
             return int(re.findall('^[0-9]+', self.name)[0])
         except IndexError:
-            #print>>sys.stderr, 'No number in "%s"' % self.name
+            #print('No number in "%s"' % self.name
             return 0
     
     def failed(self):

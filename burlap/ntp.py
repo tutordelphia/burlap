@@ -9,7 +9,7 @@ It should be otherwise maintenance-free and have required settings to configure.
 from __future__ import print_function
 
 from burlap import ServiceSatchel
-from burlap.common import FEDORA, UBUNTU, START, STOP, ENABLE, DISABLE, RESTART, STATUS
+from burlap.constants import *
 
 class NTPClientSatchel(ServiceSatchel):
 
@@ -19,6 +19,7 @@ class NTPClientSatchel(ServiceSatchel):
         FEDORA: ['ntpdate','ntp'],
         (UBUNTU, '12.04'): ['ntpdate','ntp'],
         (UBUNTU, '14.04'): ['ntpdate','ntp'],
+        DEBIAN: ['ntpdate','ntp'],
     }
     
     tasks = (
@@ -30,23 +31,29 @@ class NTPClientSatchel(ServiceSatchel):
         self.env.service_commands = {
             START:{
                 UBUNTU: 'service ntp start',
+                DEBIAN: 'service ntp start',
             },
             STOP:{
                 UBUNTU: 'service ntp stop',
+                DEBIAN: 'service ntp stop',
             },
             DISABLE:{
                 UBUNTU: 'chkconfig ntp off',
                 (UBUNTU, '14.04'): 'update-rc.d -f ntp remove',
+                DEBIAN: 'update-rc.d ntp disable',
             },
             ENABLE:{
                 UBUNTU: 'chkconfig ntp on',
                 (UBUNTU, '14.04'): 'update-rc.d ntp defaults',
+                DEBIAN: 'update-rc.d ntp enable',
             },
             RESTART:{
                 UBUNTU: 'service ntp restart',
+                DEBIAN: 'service ntp restart',
             },
             STATUS:{
                 UBUNTU: 'service ntp status',
+                DEBIAN: 'service ntp status',
             },
         }
 

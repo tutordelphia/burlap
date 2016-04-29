@@ -13,7 +13,7 @@ import warnings
 
 from pprint import pprint
 
-VERSION = (0, 8, 0)
+VERSION = (0, 8, 1)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -323,8 +323,10 @@ if common and not no_load:
     for loader, module_name, is_pkg in  pkgutil.walk_packages(__path__):
         if module_name in locals():
             continue
+        if module_name.startswith('tests'):
+            continue
         __all__.append(module_name)
-        #print('Importing: %s' % module_name, file=sys.stderr)
+#         print('Importing: %s' % module_name, file=sys.stderr)
         module = loader.find_module(module_name).load_module(module_name)
         sub_modules[module_name] = module
 

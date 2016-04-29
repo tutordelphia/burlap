@@ -155,8 +155,8 @@ def update_tickets_from_git(last=None, current=None):
                         )
                         recheck = True
                     except AttributeError as e:
-                        print>>sys.stderr, 'Unable to transition ticket %s to %s: %s' \
-                            % (ticket, next_transition_name, e)
+                        print('Unable to transition ticket %s to %s: %s' \
+                            % (ticket, next_transition_name, e), file=sys.stderr)
                     
                     # Note assignment should happen after transition, since the assignment may
                     # effect remove transitions that we need.

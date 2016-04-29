@@ -8,6 +8,7 @@ import six
 from pipes import quote
 import os
 import posixpath
+import hashlib
 
 from fabric.api import env, hide, run, sudo
 
@@ -76,3 +77,19 @@ def oct(v, **kwargs):
             assert v[0] == '0'
             v = '0o' + v[1:]
     return eval('_oct(%s, **kwargs)' % v)
+
+def get_file_hash(fin, block_size=2**20):
+    """
+    Iteratively builds a file hash without loading the entire file into memory.
+    Designed to process an arbitrary binary file.
+    """
+    if isinstance(fin, basestring):
+        fin = open(fin)
+    h = hashlib.sha512()
+    while True:
+        data = fin.read(block_size)
+        if not data:
+            break
+        h.update(data)
+    return h.hexdigest()
+    

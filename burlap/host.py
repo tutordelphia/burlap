@@ -10,10 +10,9 @@ from fabric.api import (
     execute,
 )
 
-from burlap import common
-from burlap.common import (
-    Satchel,
-)
+from burlap import Satchel
+from burlap.constants import *
+
 from burlap.decorators import task_or_dryrun
 
 if 'host_hostname' not in env:
@@ -64,6 +63,48 @@ def list_public_ips(show_hostname=0):
 def reboot():
     common.sudo_or_dryrun('reboot now; sleep 10;')
 
+class HostSatchel(Satchel):
+    """
+    Used for initializing the host.
+    
+    Should only be called once, manually on a fresh install to initialize
+    the primary user login.
+    
+    e.g. fab prod host.initrole host.configure
+    """
+    
+    name = 'host'
+    
+    tasks = (
+        'initrole',
+        'configure',
+    )
+    
+    def set_defaults(self):
+        self.env.default_hostname = 'somehost'
+        self.env.default_user = 'someuser'
+        self.env.default_password = 'somepassword'
+    
+    def initrole(self):
+        from burlap.common import env
+        #env.host_string = self.env.default_hostname
+        env.hosts = [self.env.default_hostname]
+        env.user = self.env.default_user
+        env.password = self.env.default_password
+        env.key_filename = None
+        
+    def configure(self):
+        from burlap.user import user
+        
+        # Create primary user.
+        # Allow primary user to login with a key.
+        user.configure()
+        
+        # Set hostname.
+        hostname.configure()
+        
+        self.reboot()
+        
 class HostnameSatchel(Satchel):
     
     name = 'hostname'
@@ -132,6 +173,12 @@ class SSHNiceSatchel(Satchel):
 
     name = 'sshnice'
     
+    required_system_packages = {
+        FEDORA: ['cron'],
+        UBUNTU: ['cron'],
+        DEBIAN: ['cron'],
+    }
+    
     def set_defaults(self):
         self.env.enabled = False
         self.env.cron_script_path = '/etc/cron.d/sshnice'
@@ -139,6 +186,7 @@ class SSHNiceSatchel(Satchel):
     
     def configure(self):
         if self.env.enabled:
+            self.install_packages()
             remote_path = self.env.cron_script_path
             self.put_or_dryrun(
                 local_path=self.find_template('host/etc_crond_sshnice'),
@@ -172,6 +220,7 @@ class TimezoneSatchel(Satchel):
         self.sudo_or_dryrun('dpkg-reconfigure -f noninteractive tzdata')
     configure.deploy_before = ['packager']
 
-HostnameSatchel()
-SSHNiceSatchel()
-TimezoneSatchel()
+host = HostSatchel()
+hostname = HostnameSatchel()
+sshnice = SSHNiceSatchel()
+timezone = TimezoneSatchel()

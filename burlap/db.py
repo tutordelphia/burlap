@@ -397,7 +397,7 @@ def dump(dest_dir=None, to_local=None, from_local=0, archive=0, dump_fn=None):
         env.db_dump_dest_dir = dest_dir
     env.db_date = datetime.date.today().strftime('%Y%m%d')
     #env.db_dump_fn = dump_fn or (env.db_dump_fn_template % env)
-    env.db_dump_fn = get_default_db_fn(dump_fn or env.db_dump_fn_template)
+    env.db_dump_fn = get_default_db_fn(dump_fn or env.db_dump_fn_template).strip()
     
     if to_local is None and not env.is_local:
         to_local = 1
@@ -542,7 +542,7 @@ def dumpload():
         raise NotImplementedError
 
 def render_fn(fn):
-    return subprocess.check_output('echo %s' % fn)
+    return subprocess.check_output('echo %s' % fn, shell=True)
 
 @task_or_dryrun
 def get_default_db_fn(fn_template=None):
@@ -567,7 +567,7 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0):
     if not db_dump_fn:
         db_dump_fn = get_default_db_fn()
     
-    env.db_dump_fn = render_fn(db_dump_fn)
+    env.db_dump_fn = render_fn(db_dump_fn).strip()
     
     set_db(site=env.SITE, role=env.ROLE)
     
@@ -591,7 +591,7 @@ def load(db_dump_fn='', prep_only=0, force_upload=0, from_local=0):
                 print('Uploading database snapshot...')
             put_or_dryrun(local_path=env.db_dump_fn, remote_path=env.db_remote_dump_fn)
     
-    if env.is_local and not get_dryrun() and not prep_only:
+    if env.is_local and not prep_only and not get_dryrun():
         assert os.path.isfile(env.db_dump_fn), \
             missing_local_dump_error
     

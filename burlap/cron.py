@@ -89,10 +89,10 @@ class CronSatchel(ServiceSatchel):
         hostname = get_current_hostname()
         target_sites = self.genv.available_sites_by_host.get(hostname, None)
         if self.verbose:
-            print>>sys.stderr, 'hostname: "%s"' % (hostname,) 
+            print('hostname: "%s"' % (hostname,), file=sys.stderr) 
         for site, site_data in iter_sites(site=site):
             if self.verbose:
-                print>>sys.stderr, 'site:', site
+                print('site:', site, file=sys.stderr)
             
             env = self.render_paths(type(self.genv)(self.genv))
             
@@ -102,16 +102,16 @@ class CronSatchel(ServiceSatchel):
             else:
                 assert isinstance(target_sites, (tuple, list))
                 if site not in target_sites:
-                    print>>sys.stderr, 'Skipping:', site
+                    print('Skipping:', site, file=sys.stderr)
                     continue
             
             if self.verbose:
-                print>>sys.stderr, 'env.crontabs_selected:', self.env.crontabs_selected
+                print('env.crontabs_selected:', self.env.crontabs_selected, file=sys.stderr)
                 
             for selected_crontab in self.env.crontabs_selected:
                 lines = self.env.crontabs_available.get(selected_crontab, [])
                 if self.verbose:
-                    print>>sys.stderr, 'lines:', lines
+                    print('lines:', lines, file=sys.stderr)
                 for line in lines:
                     cron_crontabs.append(line % env)
         

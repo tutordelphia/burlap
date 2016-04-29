@@ -369,36 +369,37 @@ class UserSatchel(Satchel):
     def set_defaults(self):
                 
         self.env.tmp_sudoers_fn = '/tmp/sudoers'
-        self.env.groups = []
+        
         self.env.key_type = 'rsa' # e.g. rsa|dsa
         self.env.key_bits = 2048 # e.g. 1024, 2048, or 4096
-        self.env.key_filename = None
-        self.env.home_template = '/home/%(user_username)s'
-        self.env.passwordless = True
+        self.env.key_filename_template = 'roles/{ROLE}/{host}-{username}.pem'
         self.env.key_perms = '600'
+        
+        self.env.home_template = '/home/{username}'
+        #self.env.passwordless = True
+        self.env.groups = {} # {username:[groups]}
+        self.env.passwordless = {} # {username:True/False}
 
     def configure_keyless(self):
         generate_keys()
         passwordless()
 
-    def togroups(self, user=None, groups=None):
+    def togroups(self, user, groups):
         """
         Adds the user to the given list of groups.
         """
         
         r = self.local_renderer
         
-        user = user or r.env.user
-        groups = groups or r.env.user_groups
         if isinstance(groups, basestring):
-            groups = [_ for _ in groups.split(',') if _.strip()]
+            groups = [_.strip() for _ in groups.split(',') if _.strip()]
         for group in groups:
             r.env.username = user
             r.env.group = group
             r.sudo('groupadd --force {group}')
             r.sudo('adduser {username} {group}')
 
-    def passwordless(self, username=None, pubkey=None):
+    def passwordless(self, username, pubkey):
         """
         Configures the user to use an SSL key without a password.
         Assumes you've run generate_keys() first.
@@ -406,51 +407,62 @@ class UserSatchel(Satchel):
         
         r = self.local_renderer
         
-        r.env.username = username or r.env.user
-        r.env.pubkey = str(pubkey or r.genv.key_filename)
-        assert os.path.isfile(r.env.pubkey), \
-            'Public key file "%s" does not exist.' % (str(r.env.pubkey),)
+        r.env.username = username
+        r.env.pubkey = pubkey
+        if not self.dryrun:
+            assert os.path.isfile(r.env.pubkey), \
+                'Public key file "%s" does not exist.' % (str(r.env.pubkey),)
         
         first = os.path.splitext(r.env.pubkey)[0]
         r.env.pubkey = first+'.pub'
         r.env.pemkey = first+'.pem'
-        r.env.home = r.env.home_template % env
+        r.env.home = r.env.home_template.format(username=username)
         
         # Upload the SSH key.
-        put_remote_path = r.put(local_path=r.env.pubkey)
-        r.env.put_remote_path = put_remote_path
+        put_remote_paths = self.put(local_path=r.env.pubkey)
+        print('put_remote_path:', put_remote_paths)
+        r.env.put_remote_path = put_remote_paths[0]
         r.sudo('mkdir -p {home}/.ssh' % env)
         r.sudo('cat {put_remote_path} >> {home}/.ssh/authorized_keys')
         r.sudo('rm -f {put_remote_path}')
         
         # Disable password.
-        r.sudo('cp /etc/sudoers %(user_tmp_sudoers_fn)s' % env)
-        r.sudo('echo "%(user_username)s ALL=(ALL) NOPASSWD: ALL" >> %(user_tmp_sudoers_fn)s' % env)
-        r.sudo('sudo EDITOR="cp %(user_tmp_sudoers_fn)s" visudo' % env)
+        r.sudo('cp /etc/sudoers {tmp_sudoers_fn}')
+        r.sudo('echo "{username} ALL=(ALL) NOPASSWD: ALL" >> {tmp_sudoers_fn}')
+        r.sudo('sudo EDITOR="cp {tmp_sudoers_fn}" visudo')
         
         r.sudo('service ssh reload')
         
         print('You should now be able to login with:')
-        print('\tssh -i %(user_pemkey)s %(user_username)s@%(host_string)s' % env)
+        r.env.host_string = self.genv.hostname_hostname
+        r.comment('\tssh -i {pemkey} {username}@{host_string}')
 
-    def generate_keys(self):
+    def generate_keys(self, username, host):
         """
         Generates *.pem and *.pub key files suitable for setting up passwordless SSH.
         """
         
         r = self.local_renderer
         
-        r.env.key_filename = r.env.key_filename or env.key_filename
-        assert r.env.key_filename, 'r.env.key_filename or env.key_filename must be set. e.g. roles/role/app_name-role.pem'
+        #r.env.key_filename = r.env.key_filename or env.key_filename
+        #assert r.env.key_filename, 'r.env.key_filename or env.key_filename must be set. e.g. roles/role/app_name-role.pem'
+        r.env.key_filename = self.env.key_filename_template.format(
+            ROLE=self.genv.ROLE,
+            host=host,
+            username=username,
+        )
+#         print('r.env.key_filename:', r.env.key_filename)
         if not os.path.isfile(r.env.key_filename):
             r.local("ssh-keygen -t {key_type} -b {key_bits} -f {key_filename} -N ''")
+            r.local('chmod {key_perms} {key_filename}')
             if r.env.key_filename.endswith('.pem'):
                 src = r.env.key_filename+'.pub'
                 dst = (r.env.key_filename+'.pub').replace('.pem', '')
-                print('generate_keys:', src, dst)
+#                 print('generate_keys:', src, dst)
                 r.env.src = src
                 r.env.dst = dst
                 r.local('mv {src} {dst}')
+        return r.env.key_filename
     
     def create(self, username):
         """
@@ -461,8 +473,14 @@ class UserSatchel(Satchel):
         r.sudo('adduser {username}')
         
     def configure(self):
-        self.togroups()
+        for username, groups in self.env.groups.items():
+            self.togroups(username, groups)
+            
+        for username, is_passwordless in self.env.passwordless.items():
+            if is_passwordless:
+                pubkey = self.generate_keys(username=username, host=self.genv.hostname_hostname)
+                self.passwordless(username=username, pubkey=pubkey)
     
     configure.deploy_before = []
 
-UserSatchel()
+user = UserSatchel()

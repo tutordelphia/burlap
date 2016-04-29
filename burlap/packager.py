@@ -181,7 +181,7 @@ class PackagerSatchel(Satchel):
                 _new.extend(required_ruby_packages.get(
                     _service, {}).get((version.distro, version.release), []))
     #         if not _new and verbose:
-    #             print>>sys.stderr, \
+    #             print(\
     #                 'Warning: no packages found for service "%s"' % (_service,)
             for _ in _new:
                 if _ in packages_set:

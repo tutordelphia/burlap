@@ -72,7 +72,7 @@ class GitTrackerSatchel(Satchel):
         Retrieves all commit messages for all commits between the given commit numbers
         on the current branch.
         """
-        ret = self.local_or_dryrun('git log --pretty=oneline %s...%s' % (a, b), capture=True)
+        ret = self.local('git log --pretty=oneline %s...%s' % (a, b), capture=True)
         if self.verbose:
             print(ret)
         return str(ret)
@@ -81,7 +81,7 @@ class GitTrackerSatchel(Satchel):
         """
         Retrieves the git commit number of the current head branch.
         """
-        s = str(self.local_or_dryrun('git rev-parse HEAD', capture=True))
+        s = str(self.local('git rev-parse HEAD', capture=True))
         if self.verbose:
             print('current commit:', s)
         return s

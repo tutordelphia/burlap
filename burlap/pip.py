@@ -361,8 +361,8 @@ def update_dependency_cache(name=None, output=None):
                 ))
                 fout.flush()
             except Exception as e:
-                print>>sys.stderr, 'Error: %s' % e
-                print>>sys.stderr, e
+                print('Error: %s' % e, file=sys.stderr)
+                print(e, file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
                 raise
             
@@ -405,7 +405,7 @@ def sort_requirements(fn=None):
     depends_fn = get_dependencies_fn()
     reader = csv.DictReader(open(depends_fn))
     for line in reader:
-        print>>sys.stderr, line
+        print(line, file=sys.stderr)
         package_name = line['package_name'].lower()
         if package_name in ignore_packages:
             continue
@@ -417,10 +417,10 @@ def sort_requirements(fn=None):
         package_to_deps[package_name].add(dependency_name)
         
     reqs_missing_deps = set(map(str.lower, package_names_req)).difference(set(map(str.lower, package_names_dep)))
-    print>>sys.stderr, 'reqs_missing_deps:',reqs_missing_deps
+    print('reqs_missing_deps:',reqs_missing_deps, file=sys.stderr)
     
     deps_missing_reqs = set(map(str.lower, package_names_dep)).difference(set(map(str.lower, package_names_req)))
-    print>>sys.stderr, 'deps_missing_reqs:',deps_missing_reqs
+    print('deps_missing_reqs:',deps_missing_reqs, file=sys.stderr)
     
 #     def sort_by_dep(a_name, b_name):
 #         if a_name in package_to_deps[b_name]:
@@ -643,7 +643,7 @@ def check(return_type=PENDING):
         try:
             k, v = line.split('==')
         except ValueError as e:
-#             print>>sys.stderr, 'Malformed line: %s' % line
+#             print('Malformed line: %s' % line
 #             sys.exit()
             continue
         if not k.strip() or not v.strip():
