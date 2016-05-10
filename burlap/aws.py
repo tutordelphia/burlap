@@ -4,6 +4,8 @@ from burlap import Satchel, ServiceSatchel
 class EC2MonitorSatchel(Satchel):
     """
     Manages a script to monitor
+    
+    http://docs.aws.amazon.com/AmazonCloudWatch/latest/DeveloperGuide/mon-scripts.html
     """
     
     name = 'ec2monitor'

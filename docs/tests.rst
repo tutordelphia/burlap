@@ -26,12 +26,17 @@ after the first failure:
 
     $ tox -- -x
 
-Or to only run tests whose name matches ``apache``:
+Or to only run the test ``test_create_user`` in file ``test_users.py``:
 
 ::
 
-    $ tox -- -k apache
+    $ tox -- burlap/tests/functional_tests/test_users.py::test_create_user
 
+By default, the py.test backend hides normal output. To see everything:
+
+::
+
+    $ tox -- -s burlap/tests/functional_tests/test_users.py::test_create_user
 
 .. note::
 

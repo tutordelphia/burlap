@@ -6,6 +6,7 @@ import sys
 import types
 import copy
 import tempfile
+import time
 import importlib
 import warnings
 import glob
@@ -529,6 +530,16 @@ class Satchel(object):
             self._os_version_cache[hs] = get_os_version()
         return self._os_version_cache[hs]
     
+    def sleep(self, seconds):
+        if self.dryrun:
+            cmd = 'sleep %s' % seconds
+            if BURLAP_COMMAND_PREFIX:
+                print('%s local: %s' % (render_command_prefix(), cmd))
+            else:
+                print(cmd)
+        else:
+            time.sleep(seconds)
+    
     def _local(self, *args, **kwargs):
         return _local(*args, **kwargs)
     
@@ -668,6 +679,7 @@ class Satchel(object):
         # Record a signature of each template so we know to redeploy when they change.
         for template in self.templates:
             fqfn = self.find_template('%s/%s' % (self.name, template))
+            assert fqfn, 'Unable to find template: %s/%s' % (self.name, template)
             manifest['_%s' % template] = get_file_hash(fqfn)
         
         return manifest
@@ -799,8 +811,8 @@ class Service(object):
             cmd = self.get_command(START)
             sudo_or_dryrun(cmd)
         
-    def stop(self):
-        s = {'warn_only':True} if self.ignore_errors else {} 
+    def stop(self, ignore_errors=True):
+        s = {'warn_only':True} if ignore_errors else {} 
         with settings(**s):
             cmd = self.get_command(STOP)
             sudo_or_dryrun(cmd)

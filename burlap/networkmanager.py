@@ -10,7 +10,7 @@ class NetworkManagerSatchel(ServiceSatchel):
     https://fedoraproject.org/wiki/Networking/CLI#Wifi
     """
     
-    name = 'networkmanager'
+    name = 'nm'
     
     ## Service options.
     
