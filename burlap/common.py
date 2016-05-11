@@ -41,6 +41,7 @@ import fabric.api
 
 from .constants import *
 from .utils import get_file_hash
+from .shelf import Shelf
 
 if hasattr(fabric.api, '_run'):
     _run = fabric.api._run
@@ -1586,8 +1587,6 @@ def represent_ordereddict(dumper, data):
 yaml.add_representer(OrderedDict, represent_ordereddict)
 
 #TODO:make thread/process safe with lockfile?
-
-from shelf import Shelf
 
 shelf = Shelf()
 

@@ -1,8 +1,11 @@
 """
-Supervisor
-============
+Supervisor processes
+====================
 
-http://supervisord.org/
+This module provides high-level tools for managing long-running
+processes using `supervisord`_.
+
+.. _supervisord: http://supervisord.org/
 
 """
 from __future__ import print_function
@@ -11,41 +14,62 @@ import os
 import re
 import time
 
-from fabric.api import (
-    settings,
-)
+from fabric.api import hide, settings
 
 from burlap.constants import *
 from burlap import ServiceSatchel
+from burlap.utils import run_as_root
 
-#DEPRECATED
-# @task_or_dryrun
-# def configure():
-#     """
-#     Installs supervisor configuration and daemon.
-#     """
-#     render_paths()
-#     
-#     fn = render_to_file('supervisor_daemon.template.init')
-#     self.put_or_dryrun(local_path=fn, remote_path=env.supervisor_daemon_path, use_sudo=True)
-#     
-#     self.sudo_or_dryrun('chmod +x %(supervisor_daemon_path)s' % self.genv)
-#     self.sudo_or_dryrun('update-rc.d supervisord defaults' % self.genv)
-# 
-# @task_or_dryrun
-# def unconfigure():
-#     render_paths()
-#     supervisor_satchel.stop()
-#     self.sudo_or_dryrun('update-rc.d supervisord remove' % self.genv)
-#     self.sudo_or_dryrun('rm -Rf %(supervisor_daemon_path)s' % self.genv)
 
-# service_configurators[SUPERVISOR] = [configure]
-# service_deployers[SUPERVISOR] = [deploy_all_services]
-# service_restarters[SUPERVISOR] = [restart]
-# service_stoppers[SUPERVISOR] = [stop]
-# 
-# manifest_recorder[SUPERVISOR] = record_manifest
-# manifest_comparer[SUPERVISOR] = compare_manifest
+def reload_config():
+    """
+    Reload supervisor configuration.
+    """
+    run_as_root("supervisorctl reload")
+
+
+def update_config():
+    """
+    Reread and update supervisor job configurations.
+
+    Less heavy-handed than a full reload, as it doesn't restart the
+    backend supervisor process and all managed processes.
+    """
+    run_as_root("supervisorctl update")
+
+
+def process_status(name):
+    """
+    Get the status of a supervisor process.
+    """
+    with settings(hide('running', 'stdout', 'stderr', 'warnings'), warn_only=True):
+        res = run_as_root("supervisorctl status %(name)s" % locals())
+        if res.startswith("No such process"):
+            return None
+        else:
+            return res.split()[1]
+
+
+def start_process(name):
+    """
+    Start a supervisor process
+    """
+    run_as_root("supervisorctl start %(name)s" % locals())
+
+
+def stop_process(name):
+    """
+    Stop a supervisor process
+    """
+    run_as_root("supervisorctl stop %(name)s" % locals())
+
+
+def restart_process(name):
+    """
+    Restart a supervisor process
+    """
+    run_as_root("supervisorctl restart %(name)s" % locals())
+
 
 class SupervisorSatchel(ServiceSatchel):
     

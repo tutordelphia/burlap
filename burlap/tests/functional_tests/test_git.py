@@ -17,7 +17,7 @@ from burlap.utils import run_as_root
 pytestmark = pytest.mark.network
 
 
-REMOTE_URL = 'https://github.com/disko/burlap.git'
+REMOTE_URL = 'https://github.com/chrisspen/burlap.git'
 
 
 def test_git_require_remote_url():
@@ -36,8 +36,8 @@ def test_git_require_remote_url():
         with cd('burlap'):
             remotes = run('git remote -v')
             assert remotes == \
-                'origin\thttps://github.com/disko/burlap.git (fetch)\r\n' \
-                'origin\thttps://github.com/disko/burlap.git (push)'
+                'origin\thttps://github.com/chrisspen/burlap.git (fetch)\r\n' \
+                'origin\thttps://github.com/chrisspen/burlap.git (push)'
 
             assert _current_branch() == 'master'
 
@@ -61,8 +61,8 @@ def test_git_require_remote_url_and_path():
         with cd('wc'):
             remotes = run('git remote -v')
             assert remotes == \
-                'origin\thttps://github.com/disko/burlap.git (fetch)\r\n' \
-                'origin\thttps://github.com/disko/burlap.git (push)'
+                'origin\thttps://github.com/chrisspen/burlap.git (fetch)\r\n' \
+                'origin\thttps://github.com/chrisspen/burlap.git (push)'
 
             assert _current_branch() == 'master'
 
@@ -110,8 +110,8 @@ def test_git_require_branch():
         with cd('wc'):
             remotes = run('git remote -v')
             assert remotes == \
-                'origin\thttps://github.com/disko/burlap.git (fetch)\r\n' \
-                'origin\thttps://github.com/disko/burlap.git (push)'
+                'origin\thttps://github.com/chrisspen/burlap.git (fetch)\r\n' \
+                'origin\thttps://github.com/chrisspen/burlap.git (push)'
 
             assert _current_branch() == 'test_git'
 
@@ -136,8 +136,8 @@ def test_git_require_sudo():
         with cd('wc_root'):
             remotes = run('git remote -v')
             assert remotes == \
-                'origin\thttps://github.com/disko/burlap.git (fetch)\r\n' \
-                'origin\thttps://github.com/disko/burlap.git (push)'
+                'origin\thttps://github.com/chrisspen/burlap.git (fetch)\r\n' \
+                'origin\thttps://github.com/chrisspen/burlap.git (push)'
 
             assert _current_branch() == 'master'
 
@@ -181,8 +181,8 @@ def test_git_require_sudo_user(gituser):
             with cd('wc_nobody'):
                 remotes = sudo('git remote -v', user=username)
                 assert remotes == \
-                    'origin\thttps://github.com/disko/burlap.git (fetch)\r\n' \
-                    'origin\thttps://github.com/disko/burlap.git (push)'
+                    'origin\thttps://github.com/chrisspen/burlap.git (fetch)\r\n' \
+                    'origin\thttps://github.com/chrisspen/burlap.git (push)'
 
                 assert _current_branch() == 'master'
 
