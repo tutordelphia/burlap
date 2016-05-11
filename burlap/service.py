@@ -11,6 +11,7 @@ from fabric.api import (
     settings,
     cd,
     task,
+    hide,
 )
 
 from fabric.contrib import files
@@ -18,7 +19,7 @@ from fabric.tasks import Task
 
 from burlap import systemd
 from burlap.system import using_systemd, distrib_family
-from burlap.utils import run_as_root
+#from burlap.utils import run_as_root
 
 from burlap import common
 from burlap.common import (
@@ -32,6 +33,9 @@ from burlap.common import (
 )
 from burlap.decorators import task_or_dryrun
 
+run_as_root = sudo_or_dryrun
+
+@task_or_dryrun
 def is_running(service):
     """
     Check if a service is running.
@@ -43,6 +47,20 @@ def is_running(service):
         if burlap.service.is_running('foo'):
             print("Service foo is running!")
     """
+    
+    #DEPRECATED?
+    service = service.strip().lower()
+    _ran = False
+    for _service in env.services:
+        _service = _service.strip().upper()
+        if name and _service.lower() != name:
+            continue
+        srv = common.services.get(_service)
+        if srv:
+            _ran = True
+            print('%s.is_running: %s' % (name, srv.is_running()))
+            return srv.is_running()
+            
     with settings(hide('running', 'stdout', 'stderr', 'warnings'),
                   warn_only=True):
         if using_systemd():
@@ -51,14 +69,14 @@ def is_running(service):
             if distrib_family() != "gentoo":
                 test_upstart = run_as_root('test -f /etc/init/%s.conf' %
                                            service)
-                status = _service(service, 'status')
+                status = _run_service(service, 'status')
                 if test_upstart.succeeded:
                     return 'running' in status
                 else:
                     return status.succeeded
             else:
                 # gentoo
-                status = _service(service, 'status')
+                status = _run_service(service, 'status')
                 return ' started' in status
 
 
@@ -74,10 +92,11 @@ def start(service):
         if not burlap.service.is_running('foo'):
             burlap.service.start('foo')
     """
-    _service(service, 'start')
+    _run_service(service, 'start')
 
 
-def stop(service):
+@task_or_dryrun
+def stop(service=''):
     """
     Stop a service.
 
@@ -89,10 +108,26 @@ def stop(service):
         if burlap.service.is_running('foo'):
             burlap.service.stop('foo')
     """
-    _service(service, 'stop')
+    
+    ran = False
+    service = service.strip().lower()
+    for _service in env.services:
+        _service = _service.strip().upper()
+        if service and _service.lower() != service:
+            continue
+        funcs = common.service_stoppers.get(_service)
+        if funcs:
+            print('Restarting service %s...' % (_service,))
+            for func in funcs:
+                func()
+                ran = True
+                
+    if not ran and not get_dryrun() and service:
+        _run_service(service, 'stop')
 
 
-def restart(service):
+@task_or_dryrun
+def restart(service=''):
     """
     Restart a service.
 
@@ -106,8 +141,32 @@ def restart(service):
         else:
             burlap.service.start('foo')
     """
-    _service(service, 'restart')
+    
+    service = service.strip().lower()
+    _ran = False
 
+    for _service in env.services:
+        _service = _service.strip().upper()
+
+        if service and _service.lower() != service:
+            continue
+            
+        srv = common.services.get(_service)
+        if srv:
+            srv.restart()
+            _ran = True
+            continue
+            
+        funcs = common.service_restarters.get(_service)
+        if funcs:
+            print('Restarting service %s...' % (_service,))
+            for func in funcs:
+                if not get_dryrun():
+                    func()
+                    _ran = True
+    
+    if not get_dryrun() and not _ran and service:
+        _run_service(service, 'restart')
 
 def reload(service):
     """
@@ -124,7 +183,7 @@ def reload(service):
 
         The service needs to support the ``reload`` operation.
     """
-    _service(service, 'reload')
+    _run_service(service, 'reload')
 
 
 def force_reload(service):
@@ -142,10 +201,10 @@ def force_reload(service):
 
         The service needs to support the ``force-reload`` operation.
     """
-    _service(service, 'force-reload')
+    _run_service(service, 'force-reload')
 
 
-def _service(service, action):
+def _run_service(service, action):
     """
     Compatibility layer for distros that use ``service`` and those that don't.
     """
@@ -225,59 +284,6 @@ def post_deploy():
                 except Exception as e:
                     print(traceback.format_exc(), file=sys.stderr)
 
-@task_or_dryrun
-def restart(name=''):
-    name = name.strip().lower()
-    _ran = False
-    #print common.service_restarters
-    for service in env.services:
-        service = service.strip().upper()
-#         print('checking', service)
-        if name and service.lower() != name:
-            continue
-        srv = common.services.get(service)
-        if srv:
-            srv.restart()
-            _ran = True
-            continue
-        funcs = common.service_restarters.get(service)
-        if funcs:
-            print('Restarting service %s...' % (service,))
-            for func in funcs:
-                if not get_dryrun():
-                    func()
-                    _ran = True
-    if not get_dryrun() and not _ran and name:
-        raise Exception('No restart command found for service "%s".' % name)
-
-@task_or_dryrun
-def stop(name=''):
-    name = name.strip().lower()
-    for service in env.services:
-        service = service.strip().upper()
-        if name and service.lower() != name:
-            continue
-        funcs = common.service_stoppers.get(service)
-        if funcs:
-            print('Restarting service %s...' % (service,))
-            for func in funcs:
-                func()
-
-@task_or_dryrun
-def is_running(name):
-    name = name.strip().lower()
-    _ran = False
-    #print common.service_restarters
-    for service in env.services:
-        service = service.strip().upper()
-        if name and service.lower() != name:
-            continue
-        srv = common.services.get(service)
-        if srv:
-            _ran = True
-            print('%s.is_running: %s' % (name, srv.is_running()))
-    if not get_dryrun() and not _ran and name:
-        raise Exception('No restart command found for service "%s".' % name)
 
 def is_selected(name):
     name = name.strip().upper()
