@@ -1,8 +1,21 @@
 # This is the name of the Django app that contains the global settings for your site.
-app_name: {site_name}
+app_name: {{ site_name }}
 
 # This is the name of the Apache site that will host your Django app.
-default_site: {site_name}
+default_site: {{ site_name }}
 
 # This the template used to retrieving your Django app settings.
 settings_module: '%(app_name)s.settings'
+
+sites: {}
+#    {{ site_name }}:
+#        apache_domain_template: mydomain.com
+#        apache_domain_with_sub_template: %(apache_locale)s.mydomain.com
+#        apache_domain_without_sub_template: %(apache_locale)s.mydomain.com
+#        apache_server_aliases_template: '%(apache_locale)s.mydomain.com'
+#        apache_ssl: false
+#        apache_auth_basic: false
+#        apache_enforce_subdomain: false
+#        cron_crontabs_available:
+#            {{ site_name }}:
+#            -   "* * * * * bash -c \"export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_app_src_package_dir)s; %(cron_python)s %(cron_django_manage)s %(cron_command)s --name=%(SITE)s >> %(cron_stdout_log)s 2>>%(cron_stderr_log)s\""

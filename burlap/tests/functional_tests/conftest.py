@@ -1,3 +1,15 @@
+"""
+This is a py.test plugin configuration that initializes a Vagrant VM.
+
+https://pytest.org/latest/writing_plugins.html
+
+Environment variables:
+
+    BURLAP_TEST_BOX
+    BURLAP_TEST_PROVIDER
+    BURLAP_TEST_REUSE_VM
+
+"""
 from __future__ import print_function
 
 from pipes import quote

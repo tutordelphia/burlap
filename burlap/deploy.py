@@ -706,11 +706,18 @@ def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None
 #     raw_input('enter')
     for component_name, func in common.manifest_recorder.iteritems():
         component_name = component_name.upper()
-        #print('component_name:',component_name)
+        print('component_name:',component_name)
+        
         if only_components and component_name not in only_components:
             if common.get_verbose():
-                print('Skipping:', component_name)
+                print('Skipping ignored component:', component_name)
             continue
+            
+        if component_name.lower() not in env.services:
+            if common.get_verbose():
+                print('Skipping unused component:', component_name)
+            continue
+            
         try:
             manifest_data[component_name] = func()
 #             print('manifest:', component_name, manifest_data[component_name])
@@ -1009,13 +1016,12 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
 #     raw_input('enter')
     plan_funcs = list(get_deploy_funcs(components))
     if components and plan_funcs:
-        if preview or 1:
-            print('These components have changed:\n')
-            for component in sorted(components):
-                print((' '*4)+component)
-            print('\nDeployment plan:\n')
-            for func_name, _ in plan_funcs:
-                print(success((' '*4)+func_name))
+        print('These components have changed:\n')
+        for component in sorted(components):
+            print((' '*4)+component)
+        print('\nDeployment plan:\n')
+        for func_name, _ in plan_funcs:
+            print(success((' '*4)+func_name))
     else:
         print('Nothing to do!')
         return False
@@ -1023,7 +1029,7 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
     # Execute plan. 
     if preview:
         print('\nTo execute this plan on all hosts run:\n\n    fab %s deploy.run' % env.ROLE)
-        return True
+        return components, plan_funcs
     else:
 #         raw_input('enter')
         with open('/tmp/burlap.progress', 'w') as fout:

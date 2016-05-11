@@ -1586,42 +1586,8 @@ def represent_ordereddict(dumper, data):
 yaml.add_representer(OrderedDict, represent_ordereddict)
 
 #TODO:make thread/process safe with lockfile?
-class Shelf(object):
-    
-    def __init__(self, ascii_str=True):
-        
-        # If true, automatically ensure all string values are plain ASCII.
-        # This helps keep the YAML clean, otherwise verbose syntax would be
-        # added for non-ASCII encodings, even if the string only contains
-        # ASCII characters.
-        self.ascii_str = ascii_str
-        
-    @property
-    def filename(self):
-        return 'roles/%s/shelf.yaml' % (env.ROLE.lower(),)
 
-    @property
-    def _dict(self):
-        try:
-            return OrderedDict(yaml.load(open(self.filename, 'rb')) or {})
-        except IOError:
-            return OrderedDict()
-
-    def get(self, name, default=None):
-        d = self._dict
-        return d.get(name, default)
-    
-    def setdefault(self, name, default):
-        d = self._dict
-        d.setdefault(name, default)
-        yaml.dump(d, open(self.filename, 'wb'))
-    
-    def set(self, name, value):
-        d = self._dict
-        if self.ascii_str and isinstance(value, basestring):
-            value = str(value)
-        d[name] = value
-        yaml.dump(d, open(self.filename, 'wb'))
+from shelf import Shelf
 
 shelf = Shelf()
 
@@ -1659,4 +1625,10 @@ def get_hosts_for_site(site=None):
                     hosts.add(host_ip)
                     break
     return list(hosts)
+
+def getoutput(cmd):
+    return subprocess.check_output(cmd, shell=True)
+#     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+#     out, err = process.communicate()
+#     return out
     

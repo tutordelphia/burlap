@@ -23,7 +23,8 @@ fabfile_template = os.path.join(
     os.path.dirname(burlap.__file__),
     'templates',
     'burlap',
-    'fabfile.py.template')
+    'fabfile.py.template',
+)
 
 ACTIONS = (
     SKEL,
@@ -44,15 +45,15 @@ def to_camelcase(value):
     value = re.sub(r'[^a-zA-Z0-9]+', ' ', value).strip()
     return ''.join(x.capitalize() for x in value.split(' '))
 
-def init_django(args):
+def init_django(args, virtualenv='.env'):
     
     site_name = args.project_name + '_site'
     
     print('Initializing Django project...')
     if not os.path.isdir('src/%s' % site_name):
         print('Initializing base django project...')
-        os.system('. ./.env/bin/activate; django-admin.py startproject %s src; deactivate' \
-            % (site_name,))
+        os.system('. %s/bin/activate; django-admin.py startproject %s src; deactivate' \
+            % (virtualenv, site_name,))
         _settings_fn = 'src/%s_site/settings.py' % args.project_name
         _content = open(_settings_fn, 'r').read()
         _sites = '''SITE_{name_upper} = "{name_lower}"
@@ -177,6 +178,11 @@ if __name__ == "__main__":
         default='Fabric',
         help='The default Python packages to install.')
     skel_parser.add_argument(
+        '--virtualenv-dir',
+        type=str,
+        default='.env',
+        help='The default virtualenv directory.')
+    skel_parser.add_argument(
         '--roles',
         type=str,
         default='',#dev,prod',
@@ -236,9 +242,20 @@ if __name__ == "__main__":
         open('fabfile.py', 'w').write(content)
         
         print('Initializing local development virtual environment...')
-        os.system('virtualenv --no-site-packages .env')
+        os.system('virtualenv --no-site-packages %s' % args.virtualenv_dir)
         for package in default_packages:
-            os.system('. ./.env/bin/activate; pip install %s; deactivate' % package)
+            os.system('. %s/bin/activate; pip install %s; deactivate' % (args.virtualenv_dir, package))
+
+        # Install burlap dependencies.
+        burlap_pip_requirements = os.path.join(os.path.dirname(burlap.__file__), '../pip-requirements.txt')
+        print('burlap_pip_requirements:', burlap_pip_requirements)
+        assert os.path.exists(burlap_pip_requirements)
+        for package in open(burlap_pip_requirements, 'r').readlines():
+            if not package.strip():
+                continue
+            cmd = '%s/bin/pip install %s' % (args.virtualenv_dir, package)
+            print('cmd:', cmd)
+            assert not os.system(cmd)
 
         open('shell', 'w').write(common.render_to_string('burlap/shell.template'))
         

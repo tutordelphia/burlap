@@ -35,6 +35,7 @@ class GitCheckerSatchel(Satchel):
         self.env.branch = 'master'
     
     def check(self):
+        print('Checking GIT branch...')
         branch_name = self._local('git rev-parse --abbrev-ref HEAD', capture=True).strip()
         if not self.env.branch == branch_name:
             raise AbortDeployment(

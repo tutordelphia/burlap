@@ -1,6 +1,8 @@
 Burlap - configuration management designed for simplicity and speed
 =============================================================================
 
+![Build Status](https://secure.travis-ci.org/chrisspen/burlap.png?branch=master)
+
 Overview
 --------
 

@@ -288,6 +288,13 @@ def populate_fabfile():
     finally:
         del stack
 
+def load_role_handler(name):
+    _config = load_yaml_settings(name)
+    print('_config:', _config)#TODO
+    _f = _get_environ_handler(name, _config)
+    _f = WrappedCallableTask(_f, name=name)
+    return _f
+
 # Dynamically create a Fabric task for each role.
 role_commands = {}
 if common and not no_load:
@@ -298,19 +305,15 @@ if common and not no_load:
     if os.path.isdir(common.ROLE_DIR):
         for _name in os.listdir(common.ROLE_DIR):
             _settings_fn = os.path.join(common.ROLE_DIR, _name, 'settings.yaml')
+            print('_settings_fn:', _settings_fn)#TODO
             if _name.startswith('.') or not os.path.isfile(_settings_fn):
                 continue
-    #        if _name == 'all' or not :
-    #            continue
-    #        _config = copy.deepcopy(_common)
-    #        _config.update(yaml.safe_load(open(_settings_fn)) or type(env)())
-    #        _settings_local_fn = os.path.join(common.ROLE_DIR, _name, 'settings_local.yaml')
-    #        if os.path.isfile(_settings_local_fn):
-    #            _config.update(yaml.safe_load(open(_settings_local_fn)) or type(env)())
-            _config = load_yaml_settings(_name)
-            _f = _get_environ_handler(_name, _config)
-            _var_name = 'role_'+_name
-            _f = WrappedCallableTask(_f, name=_name)
+#             _config = load_yaml_settings(_name)
+#             _f = _get_environ_handler(_name, _config)
+#             _var_name = 'role_'+_name
+#             _f = WrappedCallableTask(_f, name=_name)
+            _f = load_role_handler(_name)
+            _var_name = 'role_' + _name
             _cmd = "%s = _f" % (_var_name,)
             exec(_cmd)
             #print('Creating role %s.' % _var_name, file=sys.stderr)

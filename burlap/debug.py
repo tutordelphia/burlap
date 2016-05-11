@@ -174,7 +174,7 @@ def info():
 @runs_once
 def shell(gui=0, command=''):
     """
-    Opens a UNIX shell.
+    Opens an SSH connection.
     """
     from burlap.common import get_hosts_for_site
     

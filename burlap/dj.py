@@ -137,10 +137,13 @@ def load_django_settings():
 
     # Load Django settings.
     settings = get_settings()
-    from django.contrib import staticfiles
-    from django.conf import settings as _settings
-    for k,v in settings.__dict__.iteritems():
-        setattr(_settings, k, v)
+    try:
+        from django.contrib import staticfiles
+        from django.conf import settings as _settings
+        for k,v in settings.__dict__.iteritems():
+            setattr(_settings, k, v)
+    except ImportError:
+        pass
         
     return settings
 
@@ -157,6 +160,8 @@ def iter_app_directories(ignore_import_error=False):
     from importlib import import_module
     
     settings = load_django_settings()
+    if not settings:
+        return
     
     for app in settings.INSTALLED_APPS:
         try:

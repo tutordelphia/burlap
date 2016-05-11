@@ -58,6 +58,8 @@ class PackagerSatchel(Satchel):
         """
         assert self.genv[ROLE]
         apt_req_fqfn = fn or self.find_template(self.env.apt_requirments_fn)
+        if not apt_req_fqfn:
+            return []
         assert os.path.isfile(apt_req_fqfn)
         lines = [
             _.strip() for _ in open(apt_req_fqfn).readlines()
@@ -84,6 +86,8 @@ class PackagerSatchel(Satchel):
         """
         assert self.genv[ROLE]
         yum_req_fn = fn or self.find_template(self.genv.yum_requirments_fn)
+        if not yum_req_fn:
+            return []
         assert os.path.isfile(yum_req_fn)
         update = int(update)
         if list_only:
