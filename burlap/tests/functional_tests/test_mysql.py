@@ -3,6 +3,7 @@ import pytest
 from fabric.api import run, settings
 
 from burlap.require import file as require_file
+from burlap.service import is_running
 
 
 pytestmark = pytest.mark.network
@@ -14,6 +15,7 @@ MYSQL_ROOT_PASSWORD = 's3cr3t'
 def test_require_mysql_server():
     from burlap.require.mysql import server
     server(password=MYSQL_ROOT_PASSWORD)
+    assert is_running('mysql')
 
 
 @pytest.fixture

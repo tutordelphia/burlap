@@ -13,7 +13,7 @@ import warnings
 
 from pprint import pprint
 
-VERSION = (0, 8, 1)
+VERSION = (0, 8, 2)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -290,7 +290,6 @@ def populate_fabfile():
 
 def load_role_handler(name):
     _config = load_yaml_settings(name)
-    print('_config:', _config)#TODO
     _f = _get_environ_handler(name, _config)
     _f = WrappedCallableTask(_f, name=name)
     return _f
@@ -305,7 +304,6 @@ if common and not no_load:
     if os.path.isdir(common.ROLE_DIR):
         for _name in os.listdir(common.ROLE_DIR):
             _settings_fn = os.path.join(common.ROLE_DIR, _name, 'settings.yaml')
-            print('_settings_fn:', _settings_fn)#TODO
             if _name.startswith('.') or not os.path.isfile(_settings_fn):
                 continue
 #             _config = load_yaml_settings(_name)

@@ -12,7 +12,7 @@ import hashlib
 
 from fabric.api import env, hide, run, sudo
 
-
+#TODO: replace with sudo_or_dryrun?
 def run_as_root(command, *args, **kwargs):
     """
     Run a remote command as the root user.

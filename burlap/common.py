@@ -826,7 +826,7 @@ class Service(object):
     def is_running(self):
         status = str(self.status())
         status = re.sub(r'[\s\s]+', ' ', status)
-        return 'is running' in status
+        return 'is running' in status or 'start/running' in status
 
 class ServiceSatchel(Satchel, Service):
     pass

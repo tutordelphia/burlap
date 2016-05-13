@@ -463,10 +463,6 @@ def pip_to_deps(lines=None):
 #     total = len(lines)
 #     i = 0
     for line in lines:
-#         i += 1
-#         print('\rChecking requirement %i of %i...' % (i, total),
-#         sys.stdout.flush()
-        #if i > 5:break#TODO:remove
         
         # Extract the dependency data from the pip-requirements.txt line.
         # e.g.

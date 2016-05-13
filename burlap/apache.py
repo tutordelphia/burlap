@@ -34,14 +34,6 @@ ignore_keys = [
     'apache_domain_without_sub',
     'apache_ports',
     'apache_ssl_dir',
-    
-    #TODO:remove? these are possibly distro-specific?
-#     'apache_root',
-#     'apache_conf',
-#     'apache_sites_available',
-#     'apache_sites_enabled',
-#     'apache_log_dir',
-#     'apache_pid',
 ]
 
 

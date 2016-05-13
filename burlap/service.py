@@ -19,7 +19,7 @@ from fabric.tasks import Task
 
 from burlap import systemd
 from burlap.system import using_systemd, distrib_family
-#from burlap.utils import run_as_root
+from burlap.utils import run_as_root
 
 from burlap import common
 from burlap.common import (
@@ -33,7 +33,7 @@ from burlap.common import (
 )
 from burlap.decorators import task_or_dryrun
 
-run_as_root = sudo_or_dryrun
+#run_as_root = sudo_or_dryrun
 
 @task_or_dryrun
 def is_running(service):
@@ -53,12 +53,12 @@ def is_running(service):
     _ran = False
     for _service in env.services:
         _service = _service.strip().upper()
-        if name and _service.lower() != name:
+        if service and _service.lower() != service:
             continue
         srv = common.services.get(_service)
         if srv:
             _ran = True
-            print('%s.is_running: %s' % (name, srv.is_running()))
+            #print('%s.is_running: %s' % (service, srv.is_running()))
             return srv.is_running()
             
     with settings(hide('running', 'stdout', 'stderr', 'warnings'),
@@ -92,8 +92,16 @@ def start(service):
         if not burlap.service.is_running('foo'):
             burlap.service.start('foo')
     """
-    _run_service(service, 'start')
-
+    
+    with settings(warn_only=True):
+        _run_service(service, 'start')
+        
+    # Sometimes race conditions result in us trying to start a service that wasn't running
+    # when we checked, but started running by the time we tried to start.
+    # So ignore the error that the service we're trying to start has started
+    # and then do a separate check to confirm the service has started.
+    assert is_running(service), 'Service %s failed to start.' % service
+    
 
 @task_or_dryrun
 def stop(service=''):

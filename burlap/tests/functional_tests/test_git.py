@@ -102,7 +102,7 @@ def test_git_require_branch():
     from burlap.require.git import working_copy
 
     try:
-        working_copy(REMOTE_URL, path='wc', branch='test_git')
+        working_copy(REMOTE_URL, path='wc', branch='master')
 
         assert is_dir('wc')
         assert is_dir('wc/.git')
@@ -113,7 +113,7 @@ def test_git_require_branch():
                 'origin\thttps://github.com/chrisspen/burlap.git (fetch)\r\n' \
                 'origin\thttps://github.com/chrisspen/burlap.git (push)'
 
-            assert _current_branch() == 'test_git'
+            assert _current_branch() == 'master'
 
 
     finally:

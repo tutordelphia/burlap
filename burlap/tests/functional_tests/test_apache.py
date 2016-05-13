@@ -22,9 +22,15 @@ def check_for_debian_family():
 
 @pytest.fixture(scope='module')
 def hostname():
-    from burlap.system import set_hostname
-    set_hostname('www.example.com')
-
+    from burlap.system import set_hostname, get_hostname
+    hostname0 = get_hostname()
+    try:
+        expected_hostname = 'www.example.com'
+        set_hostname(expected_hostname)
+        actual_hostname = get_hostname()
+        assert actual_hostname == expected_hostname
+    finally:
+        set_hostname(hostname0)
 
 @pytest.yield_fixture(scope='module')
 def apache(hostname, no_nginx):
