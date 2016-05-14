@@ -7,6 +7,6 @@ Vagrant.configure(2) do |config|
     config.cache.scope = :box
   end
 
-  config.vm.boot_timeout = 1200
+  config.vm.boot_timeout = 3000
 
 end

@@ -3,12 +3,14 @@ python:
 -   "3.5"
 install:
 -   sudo apt-get update -q
--   sudo apt-get -y install linux-headers-$(uname -r)
+-   sudo apt-get -y install build-essential linux-headers-$(uname -r)
 -   sudo apt-get -y install -q virtualbox --fix-missing
 -   VBoxManage -v
 # Find other releases at https://www.vagrantup.com/downloads.html
 -   sudo wget -nv https://releases.hashicorp.com/vagrant/1.8.1/vagrant_1.8.1_x86_64.deb
 -   sudo dpkg -i vagrant_1.8.1_x86_64.deb
+-   vagrant -v
+-   sudo vagrant plugin install vagrant-cachier
 -   sudo pip install tox
 script:
 -   tox
