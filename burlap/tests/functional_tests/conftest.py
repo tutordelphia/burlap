@@ -47,9 +47,9 @@ def setup_package():
     _allow_fabric_to_access_the_real_stdin()
     if not reuse_vm:
         _stop_vagrant_machine()
+    _fix_home_directory()
     _init_vagrant_machine(vagrant_box)
     _start_vagrant_machine(vagrant_provider)
-    _fix_home_directory()
     _target_vagrant_machine()
     _set_optional_http_proxy()
     _update_package_index()
@@ -92,8 +92,7 @@ end
 """
 
 def _fix_home_directory():
-    with lcd(HERE):
-        local('vagrant ssh --command="sudo chmod -R 777 ~"')
+    local('sudo chown -R `whoami`:`whoami` ~/.vagrant.d')
 
 def _init_vagrant_machine(base_box):
     path = os.path.join(HERE, 'Vagrantfile')
