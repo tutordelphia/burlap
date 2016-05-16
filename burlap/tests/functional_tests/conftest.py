@@ -49,6 +49,7 @@ def setup_package():
         _stop_vagrant_machine()
     _init_vagrant_machine(vagrant_box)
     _start_vagrant_machine(vagrant_provider)
+    _fix_home_directory()
     _target_vagrant_machine()
     _set_optional_http_proxy()
     _update_package_index()
@@ -90,6 +91,9 @@ Vagrant.configure(2) do |config|
 end
 """
 
+def _fix_home_directory():
+    with lcd(HERE):
+        local('vagrant ssh --command="sudo chmod -R 777 ~"')
 
 def _init_vagrant_machine(base_box):
     path = os.path.join(HERE, 'Vagrantfile')
