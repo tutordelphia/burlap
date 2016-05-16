@@ -90,6 +90,10 @@ Vagrant.configure(2) do |config|
   
   config.vm.boot_timeout = 3000
 
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = "1024"
+  end
+
 end
 """
 
