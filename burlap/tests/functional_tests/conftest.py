@@ -113,8 +113,9 @@ def _start_vagrant_machine(provider):
     else:
         options = ''
     with lcd(HERE):
-        #with settings(hide('stdout')):
-        local('export VAGRANT_LOG=DEBUG; vagrant up' + options)
+        with settings(hide('stdout')):
+            local('vagrant up' + options)
+        #local('export VAGRANT_LOG=DEBUG; vagrant up' + options)
 
 
 def _stop_vagrant_machine():
