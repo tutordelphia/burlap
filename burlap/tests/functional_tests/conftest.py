@@ -87,6 +87,8 @@ Vagrant.configure(2) do |config|
   if Vagrant.has_plugin?("vagrant-cachier")
     config.cache.scope = :box
   end
+  
+  config.vm.boot_timeout = 3000
 
 end
 """
@@ -107,8 +109,8 @@ def _start_vagrant_machine(provider):
     else:
         options = ''
     with lcd(HERE):
-        with settings(hide('stdout')):
-            local('vagrant up' + options)
+        #with settings(hide('stdout')):
+        local('export VAGRANT_LOG=DEBUG; vagrant up' + options)
 
 
 def _stop_vagrant_machine():
