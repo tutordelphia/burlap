@@ -4,7 +4,7 @@ python:
 -   "3.5"
 install:
 -   sudo apt-get update -q
--   export DEBIAN_FRONTEND=noninteractive; apt-get -o Dpkg::Options::="--force-confnew" install -y cloud-init
+-   export DEBIAN_FRONTEND=noninteractive; sudo apt-get -o Dpkg::Options::="--force-confnew" install -y cloud-init
 -   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy
 -   sudo apt-get dist-upgrade -y
 
