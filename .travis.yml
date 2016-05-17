@@ -4,6 +4,7 @@ python:
 -   "3.5"
 install:
 -   sudo apt-get update -q
+-   sudo apt-get dist-upgrade
 
 # Install Virtualbox.
 -   sudo apt-get install linux-headers-`uname -r`

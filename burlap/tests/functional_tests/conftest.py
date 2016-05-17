@@ -25,10 +25,7 @@ from fabric.state import connections
 
 from burlap.vagrant import version as _vagrant_version
 
-
 HERE = os.path.dirname(__file__)
-
-
 VAGRANT_VERSION = _vagrant_version()
 MIN_VAGRANT_VERSION = (1, 3)
 
@@ -78,7 +75,12 @@ def _allow_fabric_to_access_the_real_stdin():
     mock_sys.stdin = sys.__stdin__
 
 
-_VAGRANTFILE_TEMPLATE = """\
+def _fix_home_directory():
+    local('sudo chown -R `whoami`:`whoami` ~/.vagrant.d')
+
+def _init_vagrant_machine(base_box):
+    path = os.path.join(HERE, 'Vagrantfile')
+    contents = """\
 Vagrant.configure(2) do |config|
 
   config.vm.box = "%s"
@@ -95,14 +97,7 @@ Vagrant.configure(2) do |config|
   end
 
 end
-"""
-
-def _fix_home_directory():
-    local('sudo chown -R `whoami`:`whoami` ~/.vagrant.d')
-
-def _init_vagrant_machine(base_box):
-    path = os.path.join(HERE, 'Vagrantfile')
-    contents = _VAGRANTFILE_TEMPLATE % base_box
+""" % base_box
     with open(path, 'w') as vagrantfile:
         vagrantfile.write(contents)
 
@@ -113,8 +108,9 @@ def _start_vagrant_machine(provider):
     else:
         options = ''
     with lcd(HERE):
-        with settings(hide('stdout')):
-            local('vagrant up' + options)
+#         with settings(hide('stdout')):
+#             local('vagrant up' + options)
+        local('vagrant up' + options)
         #local('export VAGRANT_LOG=DEBUG; vagrant up' + options)
 
 
