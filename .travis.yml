@@ -4,12 +4,12 @@ python:
 -   "3.5"
 install:
 -   sudo apt-get update -q
--   sudo apt-get purge cloud-init
+-   export DEBIAN_FRONTEND=noninteractive; apt-get -o Dpkg::Options::="--force-confnew" install -y cloud-init
 -   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy
--   sudo apt-get dist-upgrade
+-   sudo apt-get dist-upgrade -y
 
 # Install Virtualbox.
--   sudo apt-get install linux-headers-`uname -r`
+-   sudo apt-get -y install linux-headers-`uname -r`
 -   sudo apt-get -y install -q build-essential virtualbox-ose-dkms virtualbox linux-headers-generic --fix-missing
 -   sudo dpkg-reconfigure virtualbox-dkms
 -   sudo dpkg-reconfigure virtualbox
