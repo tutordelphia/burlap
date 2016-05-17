@@ -6,6 +6,7 @@ install:
 -   sudo apt-get update -q
 
 # Install Virtualbox.
+-   sudo apt-get install linux-headers-`uname -r`
 -   sudo apt-get -y install -q build-essential virtualbox-ose-dkms virtualbox linux-headers-generic --fix-missing
 -   sudo dpkg-reconfigure virtualbox-dkms
 -   sudo dpkg-reconfigure virtualbox
