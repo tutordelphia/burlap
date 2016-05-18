@@ -21,12 +21,13 @@ install:
 -   sudo apt-get update
 -   sudo apt-cache search virtualbox
 -   sudo apt-get -y install virtualbox-5.0
--   sudo apt-get -y install dkms
-#-   sudo apt-get -y install -q virtualbox-ose-dkms virtualbox --fix-missing
-#-   sudo dpkg-reconfigure virtualbox-dkms
-#-   sudo dpkg-reconfigure virtualbox
-#-   sudo modprobe vboxdrv
-#-   sudo modprobe vboxnetflt
+-   sudo apt-get -y install dkms virtualbox-dkms virtualbox-ose-dkms virtualbox-ose-guest-dkms virtualbox-source virtualbox-ose-guest-source virtualbox-dkms 
+-   sudo dpkg-reconfigure virtualbox-dkms
+-   sudo dpkg-reconfigure virtualbox-ose-dkms
+-   sudo dpkg-reconfigure virtualbox-ose-guest-dkms
+-   sudo dpkg-reconfigure virtualbox
+-   sudo modprobe vboxdrv
+-   sudo modprobe vboxnetflt
 -   VBoxManage --version
 
 # Install Vagrant.
