@@ -17,7 +17,8 @@ install:
 # https://www.virtualbox.org/wiki/Linux_Downloads
 -   wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
 -   sudo apt-get update
--   sudo apt-get -y install virtualbox-5.0
+-   sudo apt-cache search virtualbox
+-   sudo apt-get -y install virtualbox
 -   sudo apt-get -y install dkms
 #-   sudo apt-get -y install -q virtualbox-ose-dkms virtualbox --fix-missing
 #-   sudo dpkg-reconfigure virtualbox-dkms
