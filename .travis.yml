@@ -16,7 +16,8 @@ install:
 # Install Virtualbox.
 # https://www.virtualbox.org/wiki/Linux_Downloads
 -   wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
--   sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian $(lsb_release -s -c) contrib"
+#-   sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian $(lsb_release -s -c) contrib"
+-   echo "deb http://download.virtualbox.org/virtualbox/debian $(lsb_release -s -c) contrib" | sudo tee -a /etc/apt/sources.list
 -   sudo apt-get update
 -   sudo apt-cache search virtualbox
 -   sudo apt-get -y install virtualbox
