@@ -18,10 +18,10 @@ install:
 
 # Install Vagrant.
 # Find other releases at https://www.vagrantup.com/downloads.html
--   sudo wget -nv https://releases.hashicorp.com/vagrant/1.7.2/vagrant_1.7.2_x86_64.deb
--   sudo dpkg -i vagrant_1.7.2_x86_64.deb
-#-   sudo wget -nv https://releases.hashicorp.com/vagrant/1.8.1/vagrant_1.8.1_x86_64.deb
-#-   sudo dpkg -i vagrant_1.8.1_x86_64.deb
+#-   sudo wget -nv https://releases.hashicorp.com/vagrant/1.7.2/vagrant_1.7.2_x86_64.deb
+#-   sudo dpkg -i vagrant_1.7.2_x86_64.deb
+-   sudo wget -nv https://releases.hashicorp.com/vagrant/1.8.1/vagrant_1.8.1_x86_64.deb
+-   sudo dpkg -i vagrant_1.8.1_x86_64.deb
 -   vagrant -v
 -   sudo vagrant plugin install vagrant-cachier
 
