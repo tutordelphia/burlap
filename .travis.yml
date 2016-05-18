@@ -1,22 +1,29 @@
 # https://docs.travis-ci.com/user/ci-environment/
+# Ubuntu 12.04 LTS Server Edition 64 bit
 language: python
 python:
 -   "3.5"
 install:
 -   sudo apt-key update
 -   sudo apt-get update -q
--   sudo apt-get purge postgr* 
+-   sudo apt-get purge postgr*
+-   sudo apt-get purge virtualbox*
 -   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
 -   sudo apt-get -y install build-essential
 -   sudo apt-get -y --force-yes install linux-headers-`uname -r`
 -   sudo apt-get -y --force-yes install linux-headers-3.13.0-63-generic linux-headers-3.13.0-86-generic
 
 # Install Virtualbox.
--   sudo apt-get -y install -q virtualbox-ose-dkms virtualbox --fix-missing
--   sudo dpkg-reconfigure virtualbox-dkms
--   sudo dpkg-reconfigure virtualbox
--   sudo modprobe vboxdrv
--   sudo modprobe vboxnetflt
+# https://www.virtualbox.org/wiki/Linux_Downloads
+-   wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
+-   sudo apt-get update
+-   sudo apt-get -y install virtualbox-5.0
+-   sudo apt-get -y install dkms
+#-   sudo apt-get -y install -q virtualbox-ose-dkms virtualbox --fix-missing
+#-   sudo dpkg-reconfigure virtualbox-dkms
+#-   sudo dpkg-reconfigure virtualbox
+#-   sudo modprobe vboxdrv
+#-   sudo modprobe vboxnetflt
 -   VBoxManage --version
 
 # Install Vagrant.
@@ -26,7 +33,7 @@ install:
 -   sudo wget -nv https://releases.hashicorp.com/vagrant/1.8.1/vagrant_1.8.1_x86_64.deb
 -   sudo dpkg -i vagrant_1.8.1_x86_64.deb
 -   vagrant -v
--   sudo vagrant plugin install vagrant-cachier
+#-   sudo vagrant plugin install vagrant-cachier
 
 -   sudo pip install tox
 script:
