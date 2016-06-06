@@ -49,20 +49,41 @@ class ElasticSearchSatchel(ServiceSatchel):
         }
         
     def configure(self):
+        r = self.local_renderer
         
         if self.env.enabled:
             
             if self.env.script_engine_groovy_inline_search:
-                self.sudo_or_dryrun(
-                    "sed '/script.engine.groovy.inline.search: off/d' {conf_path}"\
-                        .format(conf_path=self.env.conf_path))
-                self.sudo_or_dryrun(
-                    "echo 'script.engine.groovy.inline.search: on' >> {conf_path}"\
-                        .format(conf_path=self.env.conf_path))
+                
+                # Turn on online groovy search.
+                r.sed(
+                    filename=self.env.conf_path,
+                    before='script.engine.groovy.inline.search: off',
+                    after='script.engine.groovy.inline.search: on',
+                    use_sudo=True,
+                )
+                # Remove off.
+#                 r.sudo(
+#                     "sed '/script.engine.groovy.inline.search: off/d' {conf_path}"\
+#                         .format(conf_path=self.env.conf_path))
+                # Add on.
+#                 r.sudo(
+#                     "echo 'script.engine.groovy.inline.search: on' >> {conf_path}"\
+#                         .format(conf_path=self.env.conf_path))
+#                 r.append(
+#                     text='script.engine.groovy.inline.search: on',
+#                     filename=self.env.conf_path,
+#                     use_sudo=True)
             else:
-                self.sudo_or_dryrun(
-                    "sed '/script.engine.groovy.inline.search: on/d' {conf_path}"\
-                        .format(conf_path=self.env.conf_path))
+#                 r.sudo(
+#                     "sed '/script.engine.groovy.inline.search: on/d' {conf_path}"\
+#                         .format(conf_path=self.env.conf_path))
+                r.sed(
+                    filename=self.env.conf_path,
+                    before='script.engine.groovy.inline.search: on',
+                    after='script.engine.groovy.inline.search: off',
+                    use_sudo=True,
+                )
             
             self.enable()
             self.restart()

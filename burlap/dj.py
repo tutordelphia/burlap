@@ -778,7 +778,10 @@ class DjangoMigrations(Satchel):
                 if current[app_name] != last.get(app_name):
                     migrate_apps.append(app_name)
         if migrate_apps:
-            return update_all(migrate_apps=','.join(migrate_apps), ignore_errors=1)
+            # Note, Django's migrate command doesn't support multiple app name arguments
+            # with all options, so we run it separately for each app.
+            for app in migrate_apps:
+                update_all(migrate_apps=app, ignore_errors=1)
     
     configure.deploy_before = ['packager', 'apache', 'apache2', 'pip', 'tarball', 'djangomedia']
     #configure.takes_diff = True

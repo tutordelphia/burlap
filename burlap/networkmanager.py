@@ -52,10 +52,13 @@ class NetworkManagerSatchel(ServiceSatchel):
             DISABLE:{
                 UBUNTU: 'chkconfig network-manager off',
                 DEBIAN: 'update-rc.d network-manager disable',
+                #(UBUNTU, '14.04'): 'update-rc.d -f network-manager remove',
+                (UBUNTU, '14.04'): 'echo "manual" | sudo tee /etc/init/network-manager.override',
             },
             ENABLE:{
-                UBUNTU: 'chkconfig network-manager on',
                 DEBIAN: 'update-rc.d network-manager enable',
+                UBUNTU: 'chkconfig network-manager on',
+                (UBUNTU, '14.04'): 'rm /etc/init/network-manager.override || true',
             },
             RESTART:{
                 UBUNTU: 'service network-manager restart',

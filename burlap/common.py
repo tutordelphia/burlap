@@ -325,7 +325,7 @@ class Renderer(object):
             return _wrap
         
         def wrap2(func):
-            # For non-command functions.
+            # For non-command functions, just pass-through.
             
             def _wrap(*args, **kwargs):
                 return func(*args, **kwargs)
@@ -341,7 +341,9 @@ class Renderer(object):
         or attrname.startswith('comment') \
         or attrname.startswith('sudo'):
             ret = wrap(ret)
-        elif attrname.startswith('put'):
+        elif attrname.startswith('put') \
+        or attrname.startswith('append') \
+        or attrname.startswith('sed'):
             ret = wrap2(ret)
             
         return ret
@@ -654,7 +656,13 @@ class Satchel(object):
     def local_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.local() instead.', DeprecationWarning, stacklevel=2)
         return local_or_dryrun(*args, **kwargs)
-        
+    
+    def append(self, *args, **kwargs):
+        return append_or_dryrun(*args, **kwargs)
+    
+    def sed(self, *args, **kwargs):
+        return sed_or_dryrun(*args, **kwargs)
+    
     def local(self, *args, **kwargs):
         return local_or_dryrun(*args, **kwargs)
     
@@ -934,6 +942,55 @@ def render_command_prefix():
 
 def print_command(cmd):
     print('[%s@localhost] local: %s' % (getpass.getuser(), cmd))
+
+def append_or_dryrun(*args, **kwargs):
+    """
+    Wrapper around Fabric's contrib.files.append() to give it a dryrun option.
+    
+    http://docs.fabfile.org/en/0.9.1/api/contrib/files.html#fabric.contrib.files.append
+    """
+    dryrun = get_dryrun(kwargs.get('dryrun'))
+    if 'dryrun' in kwargs:
+        del kwargs['dryrun']
+        
+    use_sudo = kwargs.get('use_sudo', False)
+        
+    if dryrun:
+        text = args[0] if len(args) >= 1 else kwargs['text']
+        filename = args[1] if len(args) >= 2 else kwargs['filename']
+        cmd = 'echo "%s" >> %s' % (text, filename)
+        cmd_run = 'sudo' if use_sudo else 'run'
+        if BURLAP_COMMAND_PREFIX:
+            print('%s %s: %s' % (render_command_prefix(), cmd_run, cmd))
+        else:
+            print(cmd)
+
+def sed_or_dryrun(*args, **kwargs):
+    """
+    Wrapper around Fabric's contrib.files.sed() to give it a dryrun option.
+    
+    http://docs.fabfile.org/en/0.9.1/api/contrib/files.html#fabric.contrib.files.sed
+    """
+    dryrun = get_dryrun(kwargs.get('dryrun'))
+    if 'dryrun' in kwargs:
+        del kwargs['dryrun']
+        
+    use_sudo = kwargs.get('use_sudo', False)
+        
+    if dryrun:
+        context = dict(
+            filename=args[0] if len(args) >= 1 else kwargs['filename'],
+            before=args[1] if len(args) >= 2 else kwargs['before'],
+            after=args[2] if len(args) >= 3 else kwargs['after'],
+            backup=args[3] if len(args) >= 4 else kwargs.get('backup', '.bak'),
+            limit=kwargs.get('limit', ''),
+        )
+        cmd = 'sed -i{backup} -r -e "/{limit}/ s/{before}/{after}/g {filename}"'.format(**context)
+        cmd_run = 'sudo' if use_sudo else 'run'
+        if BURLAP_COMMAND_PREFIX:
+            print('%s %s: %s' % (render_command_prefix(), cmd_run, cmd))
+        else:
+            print(cmd)
 
 def local_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
