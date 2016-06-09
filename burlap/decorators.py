@@ -5,12 +5,13 @@ from __future__ import with_statement
 
 import types
 from functools import wraps
+import inspect
 
 #from Crypto import Random
 
 #from fabric import tasks
 #from .context_managers import settings
-from burlap import tasks
+from burlap.tasks import WrappedCallableTask
 
 def task_or_dryrun(*args, **kwargs):
     """
@@ -31,7 +32,7 @@ def task_or_dryrun(*args, **kwargs):
     .. seealso:: `~fabric.docs.unwrap_tasks`, `~fabric.tasks.WrappedCallableTask`
     """
     invoked = bool(not args or kwargs)
-    task_class = kwargs.pop("task_class", tasks.WrappedCallableTask)
+    task_class = kwargs.pop("task_class", WrappedCallableTask)
 #     if invoked:
 #         func, args = args[0], ()
 #     else:
@@ -43,3 +44,7 @@ def task_or_dryrun(*args, **kwargs):
     wrapper.wrapped = func
 
     return wrapper if invoked else wrapper(func)
+
+def task(meth):
+    meth.is_task = True
+    return meth

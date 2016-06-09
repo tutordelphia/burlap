@@ -42,6 +42,7 @@ import fabric.api
 from .constants import *
 from .utils import get_file_hash
 from .shelf import Shelf
+from .decorators import task
 
 if hasattr(fabric.api, '_run'):
     _run = fabric.api._run
@@ -300,11 +301,11 @@ class Renderer(object):
     
     env_type = None
     
-    def __init__(self, obj):
+    def __init__(self, obj, lenv=None):
         # Satchel instance.
         self.obj = obj
         # Copy the environment dictionary so we don't modify the original.
-        self.lenv = type(env)(obj.lenv)
+        self.lenv = type(env)(obj.lenv if lenv is None else lenv)
         self.genv = type(env)(obj.genv)
     
     def __getattr__(self, attrname):
@@ -366,14 +367,14 @@ class Satchel(object):
     name = None
     
     # This is the list of Fabric tasks exposed by the instance.
-    tasks = ()
+    tasks = []
     
     required_system_packages = {
         #OS: [package1, package2, ...],
     }
     
     # These files will have their changes tracked.
-    templates = ()
+    templates = []
     
     def __init__(self):
         assert self.name, 'A name must be specified.'
@@ -416,7 +417,7 @@ class Satchel(object):
             self.tasks += ('configure',)
         
         # Register select instance methods as Fabric tasks.
-        for task_name in self.tasks:
+        for task_name in self.get_tasks():
             task = add_class_methods_as_module_level_functions_for_fabric(
                 instance=self,
                 module_name=get_class_module_name(self),
@@ -443,6 +444,25 @@ class Satchel(object):
                     before=deployer.before,
                     after=deployer.after,
                     takes_diff=deployer.takes_diff)
+    
+    def get_tasks(self):
+        """
+        Returns an ordered list of all task names.
+        """
+        tasks = set(self.tasks)#DEPRECATED
+        for _name in dir(self):
+            # Skip properties so we don't accidentally execute any methods.
+            if isinstance(getattr(type(self), _name, None), property):
+                continue
+            attr = getattr(self, _name)
+            if hasattr(attr, '__call__') and getattr(attr, 'is_task', False):
+                tasks.add(_name)
+        return sorted(tasks)
+    
+    @task
+    def list_tasks(self):
+        for _task in self.get_tasks():
+            print(_task)
     
     @property
     def local_renderer(self):

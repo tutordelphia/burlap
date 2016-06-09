@@ -34,8 +34,9 @@ from burlap.common import (
     ALL,
     QueuedCommand,
     get_dryrun,
+    LocalRenderer,
 )
-from burlap.decorators import task_or_dryrun
+from burlap.decorators import task_or_dryrun, task
 #from burlap.plan import run, sudo
 
 if 'db_dump_fn' not in env:
@@ -103,6 +104,7 @@ if 'db_dump_fn' not in env:
     
     env.db_fixture_sets = {} # {name:[list of fixtures]}
     
+    #DEPRECATED
     env.db_sets = {} # {name:{configs}}
 
 # Service names.
@@ -123,6 +125,7 @@ def load_db_set(name):
     db_set = env.db_sets.get(name, {})
     env.update(db_set)
 
+#DEPRECATED
 @task_or_dryrun
 def exists(name='default', site=None):
     """
@@ -198,136 +201,6 @@ def exists(name='default', site=None):
     if ret is not None:
         print('%s database on site %s %s exist' % (name, env.SITE, 'DOES' if ret else 'DOES NOT'))
         return ret
-
-def set_root_login(db_type=None, db_host=None, e=None):
-    """
-    Looks up the root login for the given database on the given host and sets
-    it to environment variables. 
-    """
-    
-    if e:
-        _env = e
-        _env = type(_env)(_env)
-    else:
-        _env = env
-    
-    # Check the legacy password location.
-    if db_type is None:
-        if 'mysql' in _env.db_engine:
-            db_type = 'mysql'
-            _env.db_root_password = _env.mysql_root_password
-        elif 'postgres' in _env.db_engine or 'postgis' in _env.db_engine:
-            db_type = 'postgresql'
-        else:
-            raise NotImplementedError
-    
-    # Check the new password location.
-    db_host = db_host or _env.db_host
-    key = '%s-%s' % (db_type, db_host)
-    if key in _env.db_root_logins:
-        data = _env.db_root_logins[key]
-        if 'username' in data:
-            _env.db_root_user = data['username']
-        if 'password' in data:
-            _env.db_root_password = data['password']
-    
-    if _env.db_root_password is None and _env.db_mysql_root_password and 'mysql' in _env.db_engine:
-        _env.db_root_password = _env.db_mysql_root_password
-        
-    return _env
-
-@task_or_dryrun
-def create(drop=0, name='default', site=None, post_process=0, db_engine=None, db_user=None, db_host=None, db_password=None, db_name=None):
-    """
-    Creates the target database.
-    """
-    from burlap.dj import set_db, render_remote_paths
-    assert env[ROLE]
-    
-    require('app_name')
-    drop = int(drop)
-    
-    # Do nothing if we're not dropping and the database already exists.
-    print('Checking to see if database already exists...')
-    if exists(name=name, site=site) and not drop:
-        print('Database already exists. Aborting creation. '\
-            'Use drop=1 to override.')
-        return
-    
-    env.db_drop_flag = '--drop' if drop else ''
-    if name:
-        set_db(name=name, site=site)
-        load_db_set(name=name)
-    if db_engine:
-        env.db_engine = db_engine
-    if db_user:
-        env.db_user = db_user
-    if db_host:
-        env.db_host = db_host
-    if db_password:
-        env.db_password = db_password
-    if db_name:
-        env.db_name = db_name
-    
-    if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-        
-        print('Setting root login...')
-        set_root_login()
-        
-        # Create role/user.
-        with settings(warn_only=True):
-            print('Creating user...')
-            cmd = 'psql --user={db_postgresql_postgres_user} --no-password --command="CREATE USER {db_user} WITH PASSWORD \'{db_password}\';"'.format(**env)
-            run_or_dryrun(cmd)
-        
-        print('Creating database...')
-        cmd = 'psql --user=%(db_postgresql_postgres_user)s --no-password --command="CREATE DATABASE %(db_name)s WITH OWNER=%(db_user)s ENCODING=\'%(db_postgresql_encoding)s\'"' % env
-        run_or_dryrun(cmd)
-        
-        #run_or_dryrun('psql --user=postgres -d %(db_name)s -c "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %(db_user)s_ro CASCADE; DROP ROLE IF EXISTS %(db_user)s_ro; DROP USER IF EXISTS %(db_user)s_ro; CREATE USER %(db_user)s_ro WITH PASSWORD \'readonly\'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO %(db_user)s_ro;"')
-        with settings(warn_only=True):
-            print('Enabling plpgsql on database...')
-            cmd = 'createlang -U postgres plpgsql %(db_name)s' % env
-            run_or_dryrun(cmd)
-            
-    elif 'mysql' in env.db_engine:
-        
-        set_root_login()
-        
-        if int(drop):
-            cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute='DROP DATABASE IF EXISTS %(db_name)s'" % env
-            sudo_or_dryrun(cmd)
-            
-        cmd = "mysqladmin -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' create %(db_name)s" % env
-        sudo_or_dryrun(cmd)
- 
-        set_collation_mysql()
-            
-        # Create user.
-        cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute=\"GRANT USAGE ON *.* TO %(db_user)s@'%%'; DROP USER %(db_user)s@'%%';\"" % env
-        run_or_dryrun(cmd)
-        
-        # Grant user access to the database.
-        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s "\
-            "-p'%(db_root_password)s' --execute=\"GRANT ALL PRIVILEGES "\
-            "ON %(db_name)s.* TO %(db_user)s@'%%' IDENTIFIED BY "\
-            "'%(db_password)s'; FLUSH PRIVILEGES;\"") % env
-        run_or_dryrun(cmd)
-        
-        #TODO:why is this necessary? why doesn't the user@% pattern above give
-        #localhost access?!
-        cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s "\
-            "-p'%(db_root_password)s' --execute=\"GRANT ALL PRIVILEGES "\
-            "ON %(db_name)s.* TO %(db_user)s@%(db_host)s IDENTIFIED BY "\
-            "'%(db_password)s'; FLUSH PRIVILEGES;\"") % env
-        run_or_dryrun(cmd)
-            
-        # Let the primary login do so from everywhere.
-#        cmd = 'mysql -h %(db_host)s -u %()s -p'%(db_root_password)s' --execute="USE mysql; GRANT ALL ON %(db_name)s.* to %(db_user)s@\'%\' IDENTIFIED BY \'%(db_password)s\'; FLUSH PRIVILEGES;"'
-#        sudo_or_dryrun(cmd)
-    
-    else:
-        raise NotImplemented
 
 #DEPRECATED:use dj.update
 @task_or_dryrun
@@ -749,22 +622,9 @@ def set_max_mysql_packet_size(do_set=1):
         'net_buffer_length=%(db_mysql_net_buffer_length)s; SET global '
         'max_allowed_packet=%(db_mysql_max_allowed_packet)s;"') % env)
 
-@task_or_dryrun
-def prep_root_password():
-    args = dict(
-        db_root_password=env.db_mysql_root_password or env.db_root_password,
-    )
-    sudo_or_dryrun("dpkg --configure -a")
-    sudo_or_dryrun("debconf-set-selections <<< 'mysql-server mysql-server/root_password password %(db_root_password)s'" % args)
-    sudo_or_dryrun("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password %(db_root_password)s'" % args)
-
+CONNECTION_HANDLER_DJANGO = 'django'
 
 class DatabaseSatchel(ServiceSatchel):
-    
-    tasks = (
-        'shell',
-        'drop_views',
-    )
     
     def set_defaults(self):
                 
@@ -773,6 +633,76 @@ class DatabaseSatchel(ServiceSatchel):
         # share the same server.
         self.env.allow_remote_connections = False
         
+        self.env.databases = {} # {name: {}}
+
+    def get_database_defaults(self):
+        """
+        Returns a dictionary of default settings for each database.
+        """
+        return dict(
+            # {name: None=burlap settings, Django=Django Python settings}
+            connection_handler=None,
+        )
+
+    def database_renderer(self, name):
+        """
+        Renders local settings for a specific database.
+        """
+        d = type(self.genv)(self.lenv)
+        d.update(self.get_database_defaults())
+        d.update(self.env.databases[name])
+        d['db_name'] = name
+        
+        if d.connection_handler == CONNECTION_HANDLER_DJANGO:
+            from burlap.dj import set_db
+            _d = type(self.genv)()
+            set_db(name=name, e=_d)
+            d.update(_d)
+        
+        return LocalRenderer(self, lenv=d)
+        
+    @task
+    def configure(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def set_root_login(self, db_type=None, db_host=None, e=None):
+        """
+        Looks up the root login for the given database on the given host and sets
+        it to environment variables. 
+        """
+        
+        if e:
+            _env = e
+            _env = type(_env)(_env)
+        else:
+            _env = env
+        
+        # Check the legacy password location.
+        if db_type is None:
+            if 'mysql' in _env.db_engine:
+                db_type = 'mysql'
+                _env.db_root_password = _env.mysql_root_password
+            elif 'postgres' in _env.db_engine or 'postgis' in _env.db_engine:
+                db_type = 'postgresql'
+            else:
+                raise NotImplementedError
+        
+        # Check the new password location.
+        db_host = db_host or _env.db_host
+        key = '%s-%s' % (db_type, db_host)
+        if key in _env.db_root_logins:
+            data = _env.db_root_logins[key]
+            if 'username' in data:
+                _env.db_root_user = data['username']
+            if 'password' in data:
+                _env.db_root_password = data['password']
+        
+        if _env.db_root_password is None and _env.db_mysql_root_password and 'mysql' in _env.db_engine:
+            _env.db_root_password = _env.db_mysql_root_password
+            
+        return _env
+
+    @task
     def shell(self, name='default', user=None, password=None, root=0, verbose=1, write_password=1, no_db=0, no_pw=0):
         """
         Opens a SQL shell to the given database, assuming the configured database
@@ -849,6 +779,84 @@ class DatabaseSatchel(ServiceSatchel):
                 else:
                     run_or_dryrun(cmd)
 
+    #TODO:relocate this to DB-specific classes
+    @task
+    def create(self, drop=0, name='default', site=None, post_process=0, db_engine=None, db_user=None, db_host=None, db_password=None, db_name=None):
+        """
+        Creates the target database.
+        """
+        from burlap.dj import set_db, render_remote_paths
+        assert env[ROLE]
+        
+        require('app_name')
+        drop = int(drop)
+        
+        # Do nothing if we're not dropping and the database already exists.
+        print('Checking to see if database already exists...')
+        if self.exists(name=name, site=site) and not drop:
+            print('Database already exists. Aborting creation. '\
+                'Use drop=1 to override.')
+            return
+        
+        env.db_drop_flag = '--drop' if drop else ''
+        if name:
+            set_db(name=name, site=site)
+            load_db_set(name=name)
+        if db_engine:
+            env.db_engine = db_engine
+        if db_user:
+            env.db_user = db_user
+        if db_host:
+            env.db_host = db_host
+        if db_password:
+            env.db_password = db_password
+        if db_name:
+            env.db_name = db_name
+        
+        if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
+            
+            pass
+                
+        elif 'mysql' in env.db_engine:
+            
+            set_root_login()
+            
+            if int(drop):
+                cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute='DROP DATABASE IF EXISTS %(db_name)s'" % env
+                sudo_or_dryrun(cmd)
+                
+            cmd = "mysqladmin -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' create %(db_name)s" % env
+            sudo_or_dryrun(cmd)
+     
+            set_collation_mysql()
+                
+            # Create user.
+            cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute=\"GRANT USAGE ON *.* TO %(db_user)s@'%%'; DROP USER %(db_user)s@'%%';\"" % env
+            run_or_dryrun(cmd)
+            
+            # Grant user access to the database.
+            cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s "\
+                "-p'%(db_root_password)s' --execute=\"GRANT ALL PRIVILEGES "\
+                "ON %(db_name)s.* TO %(db_user)s@'%%' IDENTIFIED BY "\
+                "'%(db_password)s'; FLUSH PRIVILEGES;\"") % env
+            run_or_dryrun(cmd)
+            
+            #TODO:why is this necessary? why doesn't the user@% pattern above give
+            #localhost access?!
+            cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s "\
+                "-p'%(db_root_password)s' --execute=\"GRANT ALL PRIVILEGES "\
+                "ON %(db_name)s.* TO %(db_user)s@%(db_host)s IDENTIFIED BY "\
+                "'%(db_password)s'; FLUSH PRIVILEGES;\"") % env
+            run_or_dryrun(cmd)
+                
+            # Let the primary login do so from everywhere.
+    #        cmd = 'mysql -h %(db_host)s -u %()s -p'%(db_root_password)s' --execute="USE mysql; GRANT ALL ON %(db_name)s.* to %(db_user)s@\'%\' IDENTIFIED BY \'%(db_password)s\'; FLUSH PRIVILEGES;"'
+    #        sudo_or_dryrun(cmd)
+        
+        else:
+            raise NotImplemented
+
+    @task
     def drop_views(self, name=None, site=None):
         """
         Drops all views.
@@ -898,16 +906,85 @@ class DatabaseSatchel(ServiceSatchel):
         else:
             raise NotImplementedError
 
+    @task
+    def exists(self, name='default', site=None):
+        """
+        Returns true if a database with the given name exists. False otherwise.
+        """
+        
+        if self.verbose:
+            print('!'*80)
+            print('db.exists:', name)
+        
+        if name and self.env.connection_handler == CONNECTION_HANDLER_DJANGO:
+            from burlap.dj import set_db
+            set_db(name=name, site=site, verbose=verbose)
+            load_db_set(name=name)
+            
+        self.set_root_login()
+        
+        ret = None
+        if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
+            
+            kwargs = dict(
+                db_user=env.db_root_user,
+                db_password=env.db_root_password,
+                db_host=env.db_host,
+                db_name=env.db_name,
+            )
+            env.update(kwargs)
+            
+            # Set pgpass file.
+            if env.db_password:
+                self.write_pgpass(verbose=verbose, name=name)
+            
+    #        cmd = ('psql --username={db_user} --no-password -l '\
+    #            '--host={db_host} --dbname={db_name}'\
+    #            '| grep {db_name} | wc -l').format(**env)
+            cmd = ('psql --username={db_user} --host={db_host} -l '\
+                '| grep {db_name} | wc -l').format(**env)
+            if verbose:
+                print(cmd)
+            with settings(warn_only=True):
+                ret = run_or_dryrun(cmd)
+                #print 'ret:', ret
+                if ret is not None:
+                    if 'password authentication failed' in ret:
+                        ret = False
+                    else:
+                        ret = int(ret) >= 1
+                
+        elif 'mysql' in env.db_engine:
+            
+            kwargs = dict(
+                db_user=env.db_root_user,
+                db_password=env.db_root_password,
+                db_host=env.db_host,
+                db_name=env.db_name,
+            )
+            env.update(kwargs)
+                
+            cmd = ('mysql -h {db_host} -u {db_user} '\
+                '-p"{db_password}" -N -B -e "SELECT IF(\'{db_name}\''\
+                ' IN(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA), '\
+                '\'exists\', \'notexists\') AS found;"').format(**env)
+            if verbose:
+                print(cmd)
+            ret = run_or_dryrun(cmd)
+            if ret is not None:
+                ret = 'notexists' not in (ret or 'notexists')
+    
+        else:
+            raise NotImplementedError
+        
+        if ret is not None:
+            print('%s database on site %s %s exist' % (name, env.SITE, 'DOES' if ret else 'DOES NOT'))
+            return ret
+
+
 class MySQLSatchel(DatabaseSatchel):
     
     name = 'mysql'
-    
-    tasks = (
-        'configure',
-        'set_max_packet_size',
-        'prep_root_password',
-        'set_root_password',
-    )
     
     required_system_packages = {
         FEDORA: ['mysql-server'],
@@ -916,6 +993,7 @@ class MySQLSatchel(DatabaseSatchel):
     }
     
     def set_defaults(self):
+        super(MySQLSatchel, self).set_defaults()
     
         # You want this to be large, and set in both the client and server.
         # Otherwise, MySQL may silently truncate database dumps, leading to much
@@ -965,7 +1043,8 @@ class MySQLSatchel(DatabaseSatchel):
     def set_collation_mysql_all(self, name=None, site=None):
         for site in env.available_sites:
             set_collation_mysql(name=name, site=site)
-        
+    
+    @task
     def set_max_packet_size(self, do_set=1):
         verbose = common.get_verbose()
         from burlap.dj import set_db
@@ -986,8 +1065,9 @@ class MySQLSatchel(DatabaseSatchel):
         """
         Called before packager.configure is run.
         """
-        prep_root_password()
+        self.prep_root_password()
         
+    @task
     def prep_root_password(self):
         args = dict(
             db_root_password=\
@@ -998,12 +1078,14 @@ class MySQLSatchel(DatabaseSatchel):
         self.sudo_or_dryrun("dpkg --configure -a")
         self.sudo_or_dryrun("debconf-set-selections <<< 'mysql-server mysql-server/root_password password %(db_root_password)s'" % args)
         self.sudo_or_dryrun("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password %(db_root_password)s'" % args)
-        
+    
+    @task
     def set_root_password(self):
         self.prep_root_password()
         #self.sudo_or_dryrun('dpkg-reconfigure mysql-server-5.5')
         self.sudo_or_dryrun("dpkg-reconfigure -fnoninteractive `dpkg --list | egrep -o 'mysql-server-([0-9.]+)'`")
-        
+    
+    @task
     def configure(self, do_packages=0):
 
         _env = type(self.genv)(self.genv)
@@ -1041,10 +1123,6 @@ class MySQLSatchel(DatabaseSatchel):
 class MySQLClientSatchel(Satchel):
 
     name = 'mysqlclient'
-
-    tasks = (
-        #'configure_mysql_client',
-    )
     
     required_system_packages = {
         FEDORA: ['mysql-server'],
@@ -1053,13 +1131,11 @@ class MySQLClientSatchel(Satchel):
     }
     
 class PostgreSQLSatchel(DatabaseSatchel):
+    """
+    Represents a PostgreSQL server.
+    """
     
     name = 'postgresql'
-    
-    tasks = (
-        'configure',
-        'write_pgpass',
-    )
     
     required_system_packages = {
         (UBUNTU, '12.04'): ['postgresql-9.3'],
@@ -1067,16 +1143,17 @@ class PostgreSQLSatchel(DatabaseSatchel):
     }
     
     def set_defaults(self):
-    
-        env.dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s > %(db_dump_fn)s'
-        env.createlangs = ['plpgsql'] # plpythonu
-        env.postgres_user = 'postgres'
-        env.encoding = 'UTF8'
-        env.custom_load_cmd = ''
-        env.port = 5432
-        env.pgass_path = '~/.pgpass'
-        env.pgpass_chmod = 600
-        env.version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
+        super(PostgreSQLSatchel, self).set_defaults()
+        
+        self.env.dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s > %(db_dump_fn)s'
+        self.env.createlangs = ['plpgsql'] # plpythonu
+        self.env.postgres_user = 'postgres'
+        self.env.encoding = 'UTF8'
+        self.env.custom_load_cmd = ''
+        self.env.port = 5432
+        self.env.pgass_path = '~/.pgpass'
+        self.env.pgpass_chmod = 600
+        self.env.version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
 
         self.env.service_commands = {
             START:{
@@ -1099,6 +1176,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
             },
         }
 
+    @task
     def write_pgpass(self, name=None, use_sudo=0, verbose=1, commands_only=0):
         """
         Write the file used to store login credentials for PostgreSQL.
@@ -1148,7 +1226,25 @@ class PostgreSQLSatchel(DatabaseSatchel):
                     
         return cmds
 
-    def configure(self):
+    @task
+    def create(self, name, **kargs):
+        
+        r = self.database_renderer(name)
+        
+        # Create role/user.
+        with settings(warn_only=True):
+            r.pc('Creating user...')
+            r.run('psql --user={postgres_user} --no-password --command="CREATE USER {db_user} WITH PASSWORD \'{db_password}\';"')
+        
+        r.pc('Creating database...')
+        r.run('psql --user={postgres_user} --no-password --command="CREATE DATABASE {db_name} WITH OWNER={db_user} ENCODING=\'{encoding}\'"')
+        
+        with settings(warn_only=True):
+            r.pc('Enabling plpgsql on database...')
+            r.run('createlang -U postgres plpgsql {db_name}')
+        
+    @task
+    def configure(self, *args, **kwargs):
         #TODO:set postgres user password?
         #https://help.ubuntu.com/community/PostgreSQL
         #set postgres ident in pg_hba.conf
@@ -1156,18 +1252,18 @@ class PostgreSQLSatchel(DatabaseSatchel):
         #sudo service postgresql restart
         #sudo -u postgres psql
         #\password postgres
+        r = self.local_renderer
 
         self.install_packages()
 
-        self.pc('Backing up PostgreSQL configuration files...')
-        cmd = 'cp /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf.$(date +%%Y%%m%%d%%H%%M).bak' % env
-        self.sudo_or_dryrun(cmd)
-        cmd = 'cp /etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf /etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf.$(date +%%Y%%m%%d%%H%%M).bak' % env
-        self.sudo_or_dryrun(cmd)
+#         r.pc('Backing up PostgreSQL configuration files...')
+        r.sudo('cp /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf.$(date +%%Y%%m%%d%%H%%M).bak')
+        r.sudo('cp /etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf /etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf.$(date +%%Y%%m%%d%%H%%M).bak')
         
-        self.pc('Allowing remote connections...')
+        r.pc('Allowing remote connections...')
         fn = self.render_to_file('postgresql/pg_hba.template.conf')
-        self.put_or_dryrun(local_path=fn,
+        r.put(
+            local_path=fn,
             remote_path='/etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf' % env,
             use_sudo=True,
         )
@@ -1176,11 +1272,21 @@ class PostgreSQLSatchel(DatabaseSatchel):
         # See common.tunnel()
         #sudo_or_dryrun('sed -i "s/#listen_addresses = \'localhost\'/listen_addresses = \'*\'/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env)
         
-        self.pc('Enabling auto-vacuuming...')
-        cmd = 'sed -i "s/#autovacuum = on/autovacuum = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env
-        self.sudo_or_dryrun(cmd)
-        cmd = 'sed -i "s/#track_counts = on/track_counts = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env
-        self.sudo_or_dryrun(cmd)
+        r.pc('Enabling auto-vacuuming...')
+        #r.sudo('sed -i "s/#autovacuum = on/autovacuum = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf')
+        r.sed(  
+            filename='/etc/postgresql/{version_command}/main/postgresql.conf'.format(**self.lenv),
+            before='#autovacuum = on',
+            after='/autovacuum = on',
+            backup='',
+        )
+        #r.sudo('sed -i "s/#track_counts = on/track_counts = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf')
+        r.sed(
+            filename='/etc/postgresql/{version_command}/main/postgresql.conf'.format(**self.lenv),
+            before='#track_counts = on',
+            after='track_counts = on',
+            backup='',
+        )
         
         # Set UTF-8 as the default database encoding.
         #TODO:fix? throws error code?
@@ -1193,19 +1299,13 @@ class PostgreSQLSatchel(DatabaseSatchel):
 #            'VACUUM FREEZE;'
 #            'UPDATE pg_database SET datallowconn = FALSE WHERE datname = \'template1\';"')
 
-        cmd = 'service postgresql restart'
-        self.sudo_or_dryrun(cmd)
+        r.sudo('service postgresql restart')
 
-    
     configure.deploy_before = ['packager', 'user']
     
 class PostgreSQLClientSatchel(Satchel):
 
     name = 'postgresqlclient'
-
-    tasks = (
-        #'configure_postgresql_client',
-    )
     
     required_system_packages = {
         FEDORA: ['postgresql-client'],

@@ -101,17 +101,17 @@ def render_remote_paths(e=None):
             e.remote_app_src_package_dir = os.path.abspath(e.remote_app_src_package_dir)
     e.remote_manage_dir = e.remote_manage_dir_template % e
     e.shell_default_dir = e.shell_default_dir_template % e
-    if verbose:
-        print('render_remote_paths')
-        print('django_settings_module_template:',e.django_settings_module_template)
-        print('django_settings_module:',e.django_settings_module)
-        print('shell_default_dir:',e.shell_default_dir)
-        print('src_dir:',e.src_dir)
-        print('remote_app_dir:',e.remote_app_dir)
-        print('remote_app_src_dir:',e.remote_app_src_dir)
-        print('remote_app_src_package_dir_template:',e.remote_app_src_package_dir_template)
-        print('remote_app_src_package_dir:',e.remote_app_src_package_dir)
-        print('remote_manage_dir:',e.remote_manage_dir)
+#     if verbose:
+#         print('render_remote_paths')
+#         print('django_settings_module_template:',e.django_settings_module_template)
+#         print('django_settings_module:',e.django_settings_module)
+#         print('shell_default_dir:',e.shell_default_dir)
+#         print('src_dir:',e.src_dir)
+#         print('remote_app_dir:',e.remote_app_dir)
+#         print('remote_app_src_dir:',e.remote_app_src_dir)
+#         print('remote_app_src_package_dir_template:',e.remote_app_src_package_dir_template)
+#         print('remote_app_src_package_dir:',e.remote_app_src_package_dir)
+#         print('remote_manage_dir:',e.remote_manage_dir)
     
     if _global_env:
         env.update(e)
@@ -298,7 +298,8 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
     skip_databases = (skip_databases or '')
     if isinstance(skip_databases, basestring):
         skip_databases = [_.strip() for _ in skip_databases.split(',') if _.strip()]
-        
+    
+    migrate_apps = migrate_apps or ''    
     migrate_apps = [
         _.strip().split('.')[-1]
         for _ in migrate_apps.strip().split(',')
@@ -359,7 +360,9 @@ def create_db(name=None):
         db_name=env.db_name,
     )
 
-def set_db(name=None, site=None, role=None, verbose=0):
+def set_db(name=None, site=None, role=None, verbose=0, e=None):
+    if e is None:
+        e = env
     name = name or 'default'
     site = site or env.SITE
     role = role or env.ROLE
@@ -369,27 +372,27 @@ def set_db(name=None, site=None, role=None, verbose=0):
         print('set_db.role:',role)
     settings = get_settings(site=site, role=role, verbose=verbose)
     assert settings, 'Unable to load Django settings for site %s.' % (site,)
-    env.django_settings = settings
+    e.django_settings = settings
     if verbose:
         print('settings:',settings)
         print('databases:',settings.DATABASES)
     default_db = settings.DATABASES[name]
     if verbose:
         print('default_db:',default_db)
-    env.db_name = default_db['NAME']
-    env.db_user = default_db['USER']
-    env.db_host = default_db['HOST']
-    env.db_password = default_db['PASSWORD']
-    env.db_engine = default_db['ENGINE']
+    e.db_name = default_db['NAME']
+    e.db_user = default_db['USER']
+    e.db_host = default_db['HOST']
+    e.db_password = default_db['PASSWORD']
+    e.db_engine = default_db['ENGINE']
     
-    if 'mysql' in env.db_engine.lower():
-        env.db_type = 'mysql'
-    elif 'postgres' in env.db_engine.lower() or 'postgis' in env.db_engine.lower():
-        env.db_type = 'postgresql'
-    elif 'sqlite' in env.db_engine.lower():
-        env.db_type = 'sqlite'
+    if 'mysql' in e.db_engine.lower():
+        e.db_type = 'mysql'
+    elif 'postgres' in e.db_engine.lower() or 'postgis' in e.db_engine.lower():
+        e.db_type = 'postgresql'
+    elif 'sqlite' in e.db_engine.lower():
+        e.db_type = 'sqlite'
     else:
-        env.db_type = env.db_engine    
+        e.db_type = e.db_engine
     
     return default_db
 
@@ -492,17 +495,20 @@ def execute_sql(fn, name='default', site=None):
         print(site, ret)
     
 @task_or_dryrun
-def install_sql(name='default', site=None):
+def install_sql(site=None, database='default', apps=None):
     """
     Installs all custom SQL.
     """
     from burlap.dj import set_db
     from burlap.db import load_db_set
     
+    name = database
     set_db(name=name, site=site)
     load_db_set(name=name)
     paths = glob.glob(env.django_install_sql_path_template % env)
     #paths = glob.glob('%(src_dir)s/%(app_name)s/*/sql/*' % env)
+    
+    apps = (apps or '').split(',')
     
     def cmp_paths(d0, d1):
         if d0[1] and d0[1] in d1[2]:
@@ -539,6 +545,9 @@ def install_sql(name='default', site=None):
         terminal = set()
         while paths:
             path = paths.pop(0)
+            app_name = re.findall(r'/([^/]+)/sql/', path)[0]
+            if apps and app_name not in apps:
+                continue
             with settings(warn_only=True):
                 put_or_dryrun(local_path=path)
                 cmd = cmd_template % env
@@ -553,7 +562,7 @@ def install_sql(name='default', site=None):
             print('%i files could not be loaded.' % len(terminal), file=sys.stderr)
             for path in sorted(list(terminal)):
                 print(path, file=sys.stderr)
-            print>>sys.stderr
+            print(file=sys.stderr)
     
     if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
         run_paths(
@@ -632,7 +641,8 @@ def loaddata(path, site=None):
             pass
 
 @task_or_dryrun
-def post_db_create(name=None, site=None):
+def post_db_create(name=None, site=None, apps=None):
+    from burlap.db import load_db_set
     print('post_db_create')
     assert env[ROLE]
     require('app_name')
@@ -640,9 +650,9 @@ def post_db_create(name=None, site=None):
     set_db(name=name, site=site, verbose=1)
     load_db_set(name=name)
     
-    syncdb(all=True, site=site)
-    migrate(fake=True, site=site)
-    install_sql(name=name, site=site)
+    syncdb(all=True, site=site, database=name)
+    migrate(fake=True, site=site, database=name, migrate_apps=apps)
+    install_sql(site=site, database=name, apps=apps)
     #createsuperuser()
 
 @task_or_dryrun
@@ -692,7 +702,7 @@ def record_manifest_migrations(verbose=0):
 
 @task_or_dryrun
 #@runs_once
-def update(name=None, site=None, skip_databases=None, do_install_sql=0, migrate_apps=''):
+def update(name=None, site=None, skip_databases=None, do_install_sql=0, apps=''):
     """
     Updates schema and custom SQL.
     """
@@ -704,14 +714,14 @@ def update(name=None, site=None, skip_databases=None, do_install_sql=0, migrate_
     migrate(
         site=site,
         skip_databases=skip_databases,
-        migrate_apps=migrate_apps)
+        migrate_apps=apps)
     if int(do_install_sql):
-        install_sql(name=name, site=site)
+        install_sql(name=name, site=site, apps=apps)
     #TODO:run syncdb --all to force population of new content types?
 
 @task_or_dryrun
 #@runs_once
-def update_all(skip_databases=None, do_install_sql=0, migrate_apps='', ignore_errors=0):
+def update_all(skip_databases=None, do_install_sql=0, apps='', ignore_errors=0):
     """
     Runs the Django migrate command for all unique databases
     for all available sites.
@@ -731,7 +741,7 @@ def update_all(skip_databases=None, do_install_sql=0, migrate_apps='', ignore_er
                 site=site,
                 skip_databases=skip_databases,
                 do_install_sql=do_install_sql,
-                migrate_apps=migrate_apps)
+                apps=apps)
 
 #DEPRECATED
 @task_or_dryrun

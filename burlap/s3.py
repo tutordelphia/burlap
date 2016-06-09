@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import os
 import re
+import json
 
 from fabric.api import (
     env,
@@ -31,6 +32,9 @@ from burlap.common import (
     ROLE,
 )
 from burlap.decorators import task_or_dryrun
+from burlap.constants import *
+from burlap import Satchel, ServiceSatchel
+
 
 env.AWS_ACCESS_KEY_ID = None
 env.AWS_SECRET_ACCESS_KEY = None
@@ -188,4 +192,44 @@ def invalidate(*paths):
         print('Issue invalidation request %s.' % (inval_req,))
         
         i += 1000
+
+class S3Satchel(Satchel):
+    
+    name = 's3'
+
+    tasks = (
+        'list_bucket_sizes',
+    )
         
+    def list_bucket_sizes(self):
+        
+        UNIT_TO_BYTES = {
+            'Bytes': 1,
+            'KiB': 1000,
+            'MiB': 1000000,
+            'GiB': 1000000000,
+        }
+        
+        r = self.local_renderer
+        
+        sizes = {} # {bucket: total size}
+        total_size_bytes = 0
+        
+        buckets = json.loads(r.local("aws s3api list-buckets --query 'Buckets[].Name'", capture=True) or '[]')
+        print('buckets:', len(buckets))
+        
+        for bucket in buckets:
+            ret = r.local("aws s3 ls --summarize --human-readable --recursive s3://%s/" % bucket, capture=True)
+            matches = re.findall(r'Total Size: (?P<number>[0-9\.]+)\s(?P<unit>[a-zA-Z]+)', ret)
+            print('matches:', matches)
+            value, unit = matches[0]
+            value = float(value) * UNIT_TO_BYTES[unit]
+            total_size_bytes += value
+            sizes[bucket] = value
+        print()
+        print('name,bytes')
+        for name in sorted(sizes):
+            print('%s,%s' % (name, sizes[name]))
+        print('all,%s' % total_size_bytes)
+        
+S3Satchel()
