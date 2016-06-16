@@ -323,10 +323,10 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
             hostname = common.get_current_hostname()
             sites_on_host = env.available_sites_by_host.get(hostname, [])
             if sites_on_host and site not in sites_on_host:
-                print('skipping site:', site, sites_on_host, file=sys.stderr)
+#                 print('skipping site:', site, sites_on_host, file=sys.stderr)
                 continue
         
-        print('migrate_apps:', migrate_apps, file=sys.stderr)
+#         print('migrate_apps:', migrate_apps, file=sys.stderr)
         if migrate_apps:
             _env.django_migrate_app = ' '.join(migrate_apps)
         else:
@@ -726,7 +726,6 @@ def update_all(skip_databases=None, do_install_sql=0, apps='', ignore_errors=0):
     Runs the Django migrate command for all unique databases
     for all available sites.
     """
-#     print('update_all()'
     from burlap.common import get_current_hostname
     hostname = get_current_hostname()
     
@@ -754,7 +753,7 @@ def update_all_from_diff(last=None, current=None):
             for app_name in current:
                 if current[app_name] != last.get(app_name):
                     migrate_apps.append(app_name)
-    return update_all(migrate_apps=','.join(migrate_apps))
+    return update_all(apps=','.join(migrate_apps))
 
 class DjangoMigrations(Satchel):
     
@@ -791,7 +790,7 @@ class DjangoMigrations(Satchel):
             # Note, Django's migrate command doesn't support multiple app name arguments
             # with all options, so we run it separately for each app.
             for app in migrate_apps:
-                update_all(migrate_apps=app, ignore_errors=1)
+                update_all(apps=app, ignore_errors=1)
     
     configure.deploy_before = ['packager', 'apache', 'apache2', 'pip', 'tarball', 'djangomedia']
     #configure.takes_diff = True

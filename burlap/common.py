@@ -294,6 +294,8 @@ def assert_valid_satchel(name):
     assert name in all_satchels
     return name
 
+CMD_VAR_REGEX = r'(?<!{){([^}]+)}'
+
 class Renderer(object):
     """
     Base convenience wrapper around command executioners.
@@ -308,6 +310,35 @@ class Renderer(object):
         self.lenv = type(env)(obj.lenv if lenv is None else lenv)
         self.genv = type(env)(obj.genv)
     
+    def format(self, s):
+
+        # Resolve all variable names.
+        cnt = 0
+        while 1:
+            cnt += 1
+            if cnt > 10:
+                raise Exception, 'Too many variables containing variables.'
+            
+            var_names = re.findall(CMD_VAR_REGEX, s)
+            if not var_names:
+                break
+            
+            # Lookup local and global variable values.
+            var_values = {}
+            for var_name in var_names:
+                if var_name in self.lenv:
+                    var_values[var_name] = self.lenv[var_name]
+                elif var_name in self.genv:
+                    var_values[var_name] = self.genv[var_name]
+                else:
+                    raise Exception, (
+                        'Command references variable "%s" which is not found '
+                        'in either the local or global namespace.') % var_name
+            
+            s = s.format(**var_values)
+            
+        return s
+    
     def __getattr__(self, attrname):
         
         # Alias .env to the default type.
@@ -320,7 +351,7 @@ class Renderer(object):
         def wrap(func):
             
             def _wrap(cmd, *args, **kwargs):
-                cmd = cmd.format(**getattr(self, self.env_type))
+                cmd = self.format(cmd)
                 return func(cmd, *args, **kwargs)
             
             return _wrap
@@ -680,6 +711,9 @@ class Satchel(object):
     def append(self, *args, **kwargs):
         return append_or_dryrun(*args, **kwargs)
     
+    def files_exists(self, *args, **kwargs):
+        return files_exists_or_dryrun(*args, **kwargs)
+    
     def sed(self, *args, **kwargs):
         return sed_or_dryrun(*args, **kwargs)
     
@@ -985,6 +1019,21 @@ def append_or_dryrun(*args, **kwargs):
         else:
             print(cmd)
 
+def files_exists_or_dryrun(path, *args, **kwargs):
+#     dryrun = get_dryrun(kwargs.get('dryrun'))
+#     if dryrun:
+#         use_sudo = kwargs.get('use_sudo', False)
+#         cmd = '[ -d {path} ] || [ -f {path} ]'.format(path=path)
+#         cmd_run = 'sudo' if use_sudo else 'run'
+#         if BURLAP_COMMAND_PREFIX:
+#             print('%s %s: %s' % (render_command_prefix(), cmd_run, cmd))
+#         else:
+#             print(cmd)
+#         return False
+#     else:
+    from fabric.contrib.files import exists
+    return exists(path, *args, **kwargs)
+
 def sed_or_dryrun(*args, **kwargs):
     """
     Wrapper around Fabric's contrib.files.sed() to give it a dryrun option.
@@ -1011,6 +1060,9 @@ def sed_or_dryrun(*args, **kwargs):
             print('%s %s: %s' % (render_command_prefix(), cmd_run, cmd))
         else:
             print(cmd)
+    else:
+        from fabric.contrib.files import sed
+        sed(*args, **kwargs)
 
 def local_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))

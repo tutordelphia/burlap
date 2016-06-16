@@ -12,15 +12,7 @@ from fabric.api import (
 
 from burlap import Satchel
 from burlap.constants import *
-
-from burlap.decorators import task_or_dryrun
-
-if 'host_hostname' not in env:
-    
-    env.host_hostname = None
-    env.host_os_type = None # Linux/Windows/etc
-    env.host_os_distro = None # Ubuntu/Fedora/etc
-    env.host_os_release = None # 12.04/14.04/etc
+from burlap.decorators import task, task_or_dryrun
 
 def iter_hostnames():
     from burlap.common import get_hosts_retriever, get_verbose
@@ -59,10 +51,6 @@ def list_public_ips(show_hostname=0):
         else:
             print(output)
 
-@task_or_dryrun
-def reboot():
-    common.sudo_or_dryrun('reboot now; sleep 10;')
-
 class HostSatchel(Satchel):
     """
     Used for initializing the host.
@@ -75,16 +63,17 @@ class HostSatchel(Satchel):
     
     name = 'host'
     
-    tasks = (
-        'initrole',
-        'configure',
-    )
-    
     def set_defaults(self):
+        
         self.env.default_hostname = 'somehost'
         self.env.default_user = 'someuser'
         self.env.default_password = 'somepassword'
+            
+        self.env.os_type = None # Linux/Windows/etc
+        self.env.os_distro = None # Ubuntu/Fedora/etc
+        self.env.os_release = None # 12.04/14.04/etc
     
+    @task
     def initrole(self):
         from burlap.common import env
         #env.host_string = self.env.default_hostname
@@ -92,7 +81,12 @@ class HostSatchel(Satchel):
         env.user = self.env.default_user
         env.password = self.env.default_password
         env.key_filename = None
-        
+    
+    @task
+    def reboot():
+        common.sudo_or_dryrun('reboot now; sleep 10;')
+    
+    @task
     def configure(self):
         from burlap.user import user
         
@@ -109,11 +103,6 @@ class HostnameSatchel(Satchel):
     
     name = 'hostname'
     
-    tasks = (
-        'configure',
-        'get_public_ip',
-    )
-    
     def record_manifest(self):
         """
         Returns a dictionary representing a serialized state of the service.
@@ -126,13 +115,15 @@ class HostnameSatchel(Satchel):
         self.env.hostname = None
         self.env.get_public_ip_command = 'wget -qO- http://ipecho.net/plain ; echo'
 
+    @task
     def get_public_ip(self):
         """
         Gets the public IP for a host.
         """
         ret = self.run_or_dryrun(self.env.get_public_ip_command)
         return ret
-        
+    
+    @task
     def configure(self):
         """
         Assigns a name to the server accessible from user space.
@@ -184,6 +175,7 @@ class SSHNiceSatchel(Satchel):
         self.env.cron_script_path = '/etc/cron.d/sshnice'
         self.env.cron_perms = '600'
     
+    @task
     def configure(self):
         if self.env.enabled:
             self.install_packages()
@@ -215,6 +207,7 @@ class TimezoneSatchel(Satchel):
     def set_defaults(self):
         self.env.timezone = 'America/New_York'
     
+    @task
     def configure(self):
         self.sudo_or_dryrun("sudo sh -c 'echo \"{timezone}\" > /etc/timezone'".format(**self.lenv))    
         self.sudo_or_dryrun('dpkg-reconfigure -f noninteractive tzdata')
