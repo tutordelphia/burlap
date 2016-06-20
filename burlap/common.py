@@ -16,6 +16,7 @@ import json
 import getpass
 import inspect
 import subprocess
+import uuid
 from collections import namedtuple, OrderedDict
 from pprint import pprint
 from datetime import date
@@ -278,7 +279,7 @@ class _EnvProxy(object):
     def __getattr__(self, k):
         if k in ('satchel',):
             return super(_EnvProxy, self).__getattr__(k)
-        return env[self.satchel.env_prefix + k]
+        return env.get(self.satchel.env_prefix + k)
         
     def __setattr__(self, k, v):
         if k in ('satchel',):
@@ -294,7 +295,8 @@ def assert_valid_satchel(name):
     assert name in all_satchels
     return name
 
-CMD_VAR_REGEX = r'(?<!{){([^}]+)}'
+CMD_VAR_REGEX = re.compile(r'(?:^|[^{]+){([^{}]+)}')
+CMD_ESCAPED_VAR_REGEX = re.compile(r'\{{2}[^\{\}]+\}{2}')
 
 class Renderer(object):
     """
@@ -319,7 +321,7 @@ class Renderer(object):
             if cnt > 10:
                 raise Exception, 'Too many variables containing variables.'
             
-            var_names = re.findall(CMD_VAR_REGEX, s)
+            var_names = CMD_VAR_REGEX.findall(s)
             if not var_names:
                 break
             
@@ -335,7 +337,17 @@ class Renderer(object):
                         'Command references variable "%s" which is not found '
                         'in either the local or global namespace.') % var_name
             
+            escaped_var_names = dict(
+                (k, str(uuid.uuid4()))
+                for k in CMD_ESCAPED_VAR_REGEX.findall(s)
+            )
+            for k, v in escaped_var_names.iteritems():
+                s = s.replace(k, v)
+            
             s = s.format(**var_values)
+            
+            for k, v in escaped_var_names.iteritems():
+                s = s.replace(v, k)
             
         return s
     
@@ -369,6 +381,7 @@ class Renderer(object):
         # If we're calling a command executor, wrap it so that it automatically formats
         # the command string using our preferred environment dictionary when called.
         if attrname.startswith('local') \
+        or attrname.startswith('_local') \
         or attrname.startswith('run') \
         or attrname.startswith('comment') \
         or attrname.startswith('sudo'):
@@ -707,7 +720,7 @@ class Satchel(object):
     def local_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.local() instead.', DeprecationWarning, stacklevel=2)
         return local_or_dryrun(*args, **kwargs)
-    
+        
     def append(self, *args, **kwargs):
         return append_or_dryrun(*args, **kwargs)
     
@@ -753,7 +766,9 @@ class Satchel(object):
         """
         raise NotImplementedError
 
+    # List of satchels that should be run before this one during deployments.
     configure.deploy_before = []
+    
     configure.takes_diff = False #DEPRECATED
     
     #TODO:deprecated, remove?
@@ -1459,7 +1474,7 @@ def get_packager():
                     common_packager = APT
                 else:
                     for pn in PACKAGERS:
-                        ret = run_or_dryrun('which %s' % pn)
+                        ret = _run('which %s' % pn)
                         if ret.succeeded:
                             common_packager = pn
                             break

@@ -73,6 +73,8 @@ class NetworkManagerSatchel(ServiceSatchel):
         self.env.check_script_path = '/usr/local/bin/check_networkmanager.sh'
         self.env.cron_script_path = '/etc/cron.d/check_networkmanager'
         self.env.cron_perms = '600'
+        
+        self.env.connections = {} # {ssid: passphrase}
     
     def add_wifi_connection(self, ssid, passphrase=None):
         r = self.local_renderer

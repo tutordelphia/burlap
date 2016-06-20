@@ -61,7 +61,7 @@ class NTPClientSatchel(ServiceSatchel):
         if self.env.enabled:
             self.install_packages()
             self.enable()
-            self.start()
+            self.restart()
         else:
             self.disable()
             self.stop()

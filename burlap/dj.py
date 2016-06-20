@@ -289,6 +289,12 @@ def manage_all(*args, **kwargs):
 def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_databases=None, database=None, migrate_apps='', delete_ghosts=1):
     """
     Runs the standard South migrate command for one or more sites.
+    
+    Note, to pass a comma-delimted list in a fab command, escape the comma with a back slash.
+    
+    e.g.
+    
+        fab staging dj.migrate:migrate_apps=oneapp\,twoapp\,threeapp
     """
     
     ignore_errors = int(ignore_errors)
@@ -312,6 +318,7 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
     
     _env = type(env)(env)
     _env.django_migrate_migration = migration or ''
+    print('_env.django_migrate_migration:', _env.django_migrate_migration)
     _env.django_migrate_fake_str = '--fake' if int(fake) else ''
     _env.django_migrate_database = '--database=%s' % database if database else ''
     _env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts else ''
@@ -327,20 +334,23 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
                 continue
         
 #         print('migrate_apps:', migrate_apps, file=sys.stderr)
-        if migrate_apps:
-            _env.django_migrate_app = ' '.join(migrate_apps)
-        else:
-            _env.django_migrate_app = ''
-        
-        _env.SITE = site
-        cmd = (
-            'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
-            '%(django_manage)s migrate --noinput --traceback %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
-            '%(django_migrate_fake_str)s'
-        ) % _env
-        cmd = cmd.strip()
-        with settings(warn_only=ignore_errors):
-            run_or_dryrun(cmd)
+        if not migrate_apps:
+            migrate_apps.append(' ')
+            
+        for app in migrate_apps:
+            print('app:', app)
+            _env.django_migrate_app = app
+            print('_env.django_migrate_app:', _env.django_migrate_app)
+            _env.SITE = site
+            cmd = (
+                'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
+                '%(django_manage)s migrate --noinput --traceback %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
+                '%(django_migrate_fake_str)s'
+            ) % _env
+            print('cmd:', cmd)
+            cmd = cmd.strip()
+            with settings(warn_only=ignore_errors):
+                run_or_dryrun(cmd)
 
 @task_or_dryrun
 def migrate_all(*args, **kwargs):

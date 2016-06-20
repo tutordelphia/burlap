@@ -5,6 +5,7 @@ from __future__ import print_function
 
 from burlap import Satchel
 from burlap.constants import *
+from burlap.decorators import task
 
 class UnattendedUpgradesSatchel(Satchel):
     """
@@ -19,10 +20,6 @@ class UnattendedUpgradesSatchel(Satchel):
         (UBUNTU, '14.04'): ['unattended-upgrades'],
     }
     
-    tasks = (
-        'configure',
-    )
-    
     def set_defaults(self):
         
         self.env.mail_to = 'root@localhost'
@@ -35,21 +32,24 @@ class UnattendedUpgradesSatchel(Satchel):
         self.env.autoclean_interval = 7
         self.env.unattended_upgrade = 1
 
+    @task
     def configure(self):
         
         #TODO:generalize for other distros?
         assert not self.genv.host_os_distro or self.genv.host_os_distro == UBUNTU, \
             'Only Ubuntu is supported.'
         
+        r = self.local_renderer
+        
         if self.env.enabled:
             
             # Enable automatic package updates for Ubuntu.
             # Taken from the guide at https://help.ubuntu.com/lts/serverguide/automatic-updates.html.
-            self.sudo_or_dryrun('apt-get install --yes unattended-upgrades')
+            r.sudo('apt-get install --yes unattended-upgrades')
             fn = self.render_to_file('unattended_upgrades/etc_apt_aptconfd_50unattended_upgrades')
-            self.put_or_dryrun(local_path=fn, remote_path='/etc/apt/apt.conf.d/50unattended-upgrades', use_sudo=True)
+            r.put(local_path=fn, remote_path='/etc/apt/apt.conf.d/50unattended-upgrades', use_sudo=True)
             fn = self.render_to_file('unattended_upgrades/etc_apt_aptconfd_10periodic')
-            self.put_or_dryrun(local_path=fn, remote_path='/etc/apt/apt.conf.d/10periodic', use_sudo=True)
+            r.put(local_path=fn, remote_path='/etc/apt/apt.conf.d/10periodic', use_sudo=True)
             
         else:
             #TODO:disable

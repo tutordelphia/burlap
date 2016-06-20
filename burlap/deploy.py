@@ -1063,9 +1063,16 @@ def run(*args, **kwargs):
         components := name of satchel to limit deployment to
     """
     from burlap import service, notifier
+    from burlap.common import all_satchels
     
     assume_yes = int(kwargs.pop('assume_yes', 0)) or int(kwargs.pop('yes', 0))
     fake = int(kwargs.get('fake', 0))
+    
+    # Allow satchels to configure connection parameters before we try contacting the hosts.
+    #TODO:support ordering?
+    for name, satchel in all_satchels.iteritems():
+        if hasattr(satchel, 'deploy_pre_run'):
+            satchel.deploy_pre_run()
     
     if env.host_string == env.hosts[0]:
         pending = preview(*args, **kwargs)

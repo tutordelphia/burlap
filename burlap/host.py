@@ -65,39 +65,92 @@ class HostSatchel(Satchel):
     
     def set_defaults(self):
         
-        self.env.default_hostname = 'somehost'
-        self.env.default_user = 'someuser'
-        self.env.default_password = 'somepassword'
+        self.env.default_hostname = None
+        self.env.default_hosts = []
+        self.env.default_user = None
+        self.env.default_password = None
+        self.env.default_key_filename = None
             
-        self.env.os_type = None # Linux/Windows/etc
-        self.env.os_distro = None # Ubuntu/Fedora/etc
-        self.env.os_release = None # 12.04/14.04/etc
+#         self.env.os_type = None # Linux/Windows/etc
+#         self.env.os_distro = None # Ubuntu/Fedora/etc
+#         self.env.os_release = None # 12.04/14.04/etc
     
     @task
-    def initrole(self):
-        from burlap.common import env
-        #env.host_string = self.env.default_hostname
-        env.hosts = [self.env.default_hostname]
-        env.user = self.env.default_user
-        env.password = self.env.default_password
-        env.key_filename = None
+    def is_present(self, host=None):
+        """
+        Returns true if the given host exists on the network.
+        Returns false otherwise.
+        """
+        r = self.local_renderer
+        r.env.host = host or self.genv.host_string
+        ret = r._local("getent hosts {host} | awk '{{ print $1 }}'", capture=True) or ''
+        if self.verbose:
+            print('ret:', ret)
+        ret = ret.strip()
+        if self.verbose:
+            print('Host %s %s present.' % (r.env.host, 'IS' if bool(ret) else 'IS NOT'))
+        return bool(ret)
     
     @task
-    def reboot():
-        common.sudo_or_dryrun('reboot now; sleep 10;')
+    def needs_initrole(self, stop_on_error=False):
+        
+        ret = False
+            
+        target_host_present = self.is_present()
+        
+        if not target_host_present:
+            default_host_present = self.is_present(self.env.default_hostname)
+            if default_host_present:
+                if self.verbose:
+                    print('Target host missing and default host present so host init required.')
+                ret = True
+            else:
+                if self.verbose:
+                    print('Target host missing but default host also missing, '
+                        'so no host init required.')
+                if stop_on_error:
+                    raise Exception, (
+                        'Both target and default hosts missing! '
+                        'Is the machine turned on and plugged into the network?')
+        else:
+            if self.verbose:
+                print('Target host is present so no host init required.')
+                
+        return ret
     
     @task
+    def initrole(self, check=True):
+        """
+        Called to set default password login for systems that do not yet have passwordless
+        login setup.
+        """
+        
+        needs = True
+        if check:
+            needs = self.needs_initrole(stop_on_error=True)
+        if not needs:
+            return
+        
+        assert self.env.default_hostname, 'No default hostname set.'
+        assert self.env.default_user, 'No default user set.'
+        self.genv.host_string = self.env.default_hostname
+        if self.env.default_hosts:
+            self.genv.hosts = self.env.default_hosts
+        else:
+            self.genv.hosts = [self.env.default_hostname]
+        self.genv.user = self.env.default_user
+        self.genv.password = self.env.default_password
+        self.genv.key_filename = self.env.default_key_filename
+    
+    def deploy_pre_run(self):
+        
+        # If the desired hostname is not present but the default hostname is present,
+        # then we assume the host is new or has been reset and needs to be reconfigured.
+        self.initrole()
+        
     def configure(self):
-        from burlap.user import user
-        
-        # Create primary user.
-        # Allow primary user to login with a key.
-        user.configure()
-        
-        # Set hostname.
-        hostname.configure()
-        
-        self.reboot()
+        # Just a stub. All the magic happens in deploy_pre_run().
+        pass
         
 class HostnameSatchel(Satchel):
     
@@ -113,6 +166,8 @@ class HostnameSatchel(Satchel):
     
     def set_defaults(self):
         self.env.hostname = None
+        
+        # The bash command to run to get our public IP as we appear on the WAN.
         self.env.get_public_ip_command = 'wget -qO- http://ipecho.net/plain ; echo'
 
     @task
@@ -120,7 +175,9 @@ class HostnameSatchel(Satchel):
         """
         Gets the public IP for a host.
         """
-        ret = self.run_or_dryrun(self.env.get_public_ip_command)
+        r = self.local_renderer
+        ret = r.run(r.env.get_public_ip_command) or ''
+        ret = ret.strip()
         return ret
     
     @task
@@ -132,6 +189,8 @@ class HostnameSatchel(Satchel):
         /etc/hostname to reliably identify the server hostname.
         """
         from burlap.common import get_hosts_retriever
+        
+        r = self.local_renderer
         
         verbose = self.verbose
         
@@ -148,15 +207,11 @@ class HostnameSatchel(Satchel):
                 break
                 
         assert hostname, 'Unable to lookup hostname.'
-    
-        #env.host_hostname = name or env.host_hostname or env.host_string or env.hosts[0]
-        self.env.hostname = hostname
         
-        kwargs = dict(hostname=hostname)
-        self.sudo_or_dryrun('echo "%(hostname)s" > /etc/hostname' % kwargs)
-        self.sudo_or_dryrun('echo "127.0.0.1 %(hostname)s" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts' % kwargs)
-        self.sudo_or_dryrun('service hostname restart; sleep 3')
-        
+        r.env.hostname = hostname
+        r.sudo('echo "{hostname}" > /etc/hostname')
+        r.sudo('echo "127.0.0.1 {hostname}" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts')
+        r.sudo('service hostname restart; sleep 3')
     
     configure.deploy_before = []
 
@@ -177,20 +232,21 @@ class SSHNiceSatchel(Satchel):
     
     @task
     def configure(self):
+        r = self.local_renderer
         if self.env.enabled:
             self.install_packages()
-            remote_path = self.env.cron_script_path
-            self.put_or_dryrun(
+            remote_path = r.env.remote_path = self.env.cron_script_path
+            r.put(
                 local_path=self.find_template('host/etc_crond_sshnice'),
                 remote_path=remote_path, use_sudo=True)
-            self.sudo_or_dryrun('chown root:root %s' % remote_path)
+            r.sudo('chown root:root %s' % remote_path)
             # Must be 600, otherwise gives INSECURE MODE error.
             # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
-            self.sudo_or_dryrun('chmod %s %s' % (self.env.cron_perms, remote_path))#env.put_remote_path)
-            self.sudo_or_dryrun('service cron restart')
+            r.sudo('chmod {cron_perms} {remote_path}')
+            r.sudo('service cron restart')
         else:
-            self.sudo_or_dryrun('rm -f {cron_script_path}'.format(**self.lenv))
-            self.sudo_or_dryrun('service cron restart')
+            r.sudo('rm -f {cron_script_path}')
+            r.sudo('service cron restart')
     configure.deploy_before = ['packager']
 
 class TimezoneSatchel(Satchel):
@@ -205,12 +261,13 @@ class TimezoneSatchel(Satchel):
     name = 'timezone'
     
     def set_defaults(self):
-        self.env.timezone = 'America/New_York'
+        self.env.timezone = 'Etc/UTC'
     
     @task
     def configure(self):
-        self.sudo_or_dryrun("sudo sh -c 'echo \"{timezone}\" > /etc/timezone'".format(**self.lenv))    
-        self.sudo_or_dryrun('dpkg-reconfigure -f noninteractive tzdata')
+        r = self.local_renderer
+        r.sudo("sudo sh -c 'echo \"{timezone}\" > /etc/timezone'")
+        r.sudo('dpkg-reconfigure -f noninteractive tzdata')
     configure.deploy_before = ['packager']
 
 host = HostSatchel()

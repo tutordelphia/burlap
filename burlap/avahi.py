@@ -2,14 +2,13 @@ from __future__ import print_function
 
 from burlap import ServiceSatchel
 from burlap.constants import *
+from burlap.decorators import task
 
 class AvahiSatchel(ServiceSatchel):
     
     name = 'avahi'
     
     ## Service options.
-    
-    #ignore_errors = True
     
     required_system_packages = {
         UBUNTU: ['avahi-daemon'],
@@ -47,6 +46,7 @@ class AvahiSatchel(ServiceSatchel):
             },
         }
     
+    @task
     def configure(self):
         if self.env.enabled:
             self.install_packages()
@@ -55,14 +55,6 @@ class AvahiSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-        #sudo_or_dryrun('apt-get install avahi-daemon')
-        
-        #TODO:
-        #sudo_or_dryrun('nano /etc/avahi/avahi-daemon.conf')
-        
-        #sudo_or_dryrun('service avahi-daemon restart')
-        #sudo_or_dryrun('update-rc.d avahi-daemon defaults')
-        
     
     configure.deploy_before = ['packager', 'user']
     

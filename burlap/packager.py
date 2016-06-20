@@ -4,25 +4,13 @@ import os
 import sys
 import tempfile
 
-from burlap.constants import *
 from burlap import Satchel
+from burlap.constants import *
+from burlap.decorators import task
 
 class PackagerSatchel(Satchel):
     
     name = 'packager'
-    
-    tasks = (
-        'configure',
-        'prepare',
-        'install_apt',
-        'install_custom',
-        'refresh',
-        'refresh_apt',
-        'upgrade',
-        'list_required',
-        'install_required',
-        'kill_apt_get',
-    )
     
     def set_defaults(self):
         self.env.apt_requirments_fn = 'apt-requirements.txt'
@@ -33,13 +21,12 @@ class PackagerSatchel(Satchel):
         Returns a dictionary representing a serialized state of the service.
         """
         data = []
-        
         data.extend(self.install_required(type=SYSTEM, verbose=False, list_only=True))
         data.extend(self.install_custom(list_only=True))
-        
         data.sort()
         return data
-        
+    
+    @task
     def prepare(self):
         """
         Preparse the packaging system for installations.
@@ -52,6 +39,7 @@ class PackagerSatchel(Satchel):
         else:
             raise Exception('Unknown packager: %s' % (packager,))
 
+    @task
     def install_apt(self, fn=None, package_name=None, update=0, list_only=0):
         """
         Installs system packages listed in apt-requirements.txt.
@@ -80,6 +68,7 @@ class PackagerSatchel(Satchel):
         self.sudo_or_dryrun('apt-get update -y --fix-missing')
         self.sudo_or_dryrun('apt-get install -y `cat "%s" | tr "\\n" " "`' % apt_req_fqfn)
 
+    @task
     def install_yum(self, fn=None, package_name=None, update=0, list_only=0):
         """
         Installs system packages listed in yum-requirements.txt.
@@ -106,6 +95,7 @@ class PackagerSatchel(Satchel):
                 yum_req_fn = self.genv.put_remote_fn
             self.sudo_or_dryrun('yum install --assumeyes $(cat %(yum_req_fn)s)' % yum_req_fn)
 
+    @task
     def install_custom(self, *args, **kwargs):
         """
         Installs all system packages listed in the appropriate
@@ -119,10 +109,13 @@ class PackagerSatchel(Satchel):
         else:
             raise Exception('Unknown packager: %s' % (packager,))
     
+    @task
     def kill_apt_get(self):
-        self.sudo_or_dryrun('killall apt-get')
-        self.sudo_or_dryrun('dpkg --configure -a')
+        r = self.local_renderer
+        r.sudo('killall apt-get')
+        r.sudo('dpkg --configure -a')
     
+    @task
     def refresh(self, *args, **kwargs):
         """
         Updates/upgrades all system packages.
@@ -136,9 +129,12 @@ class PackagerSatchel(Satchel):
         else:
             raise Exception('Unknown packager: %s' % (packager,))
     
+    @task
     def refresh_apt(self):
-        self.sudo_or_dryrun('apt-get update -y --fix-missing')
+        r = self.local_renderer
+        r.sudo('apt-get update -y --fix-missing')
     
+    @task
     def upgrade(self, *args, **kwargs):
         """
         Updates/upgrades all system packages.
@@ -153,6 +149,7 @@ class PackagerSatchel(Satchel):
         else:
             raise Exception('Unknown packager: %s' % (packager,))
 
+    @task
     def list_required(self, type=None, service=None):
         """
         Displays all packages required by the current role
@@ -197,6 +194,7 @@ class PackagerSatchel(Satchel):
                 print('package:', package)
         return packages
     
+    @task
     def install_required(self, type=None, service=None, list_only=0, verbose=0, **kwargs):
         """
         Installs system packages listed as required by services this host uses.
@@ -228,8 +226,12 @@ class PackagerSatchel(Satchel):
                 raise NotImplementedError
         return lst
 
+    @task
     def configure(self, **kwargs):
+        enabled_services = map(str.upper, self.genv.services)
         for satchel_name, satchel in self.all_satchels.iteritems():
+            if satchel_name not in enabled_services:
+                continue
             if hasattr(satchel, 'packager_pre_configure'):
                 satchel.packager_pre_configure()
         self.refresh()
@@ -241,24 +243,21 @@ class PackagerSatchel(Satchel):
 class UbuntuMultiverseSatchel(Satchel):
      
     name = 'ubuntumultiverse'
-     
-    tasks = (
-        'configure',
-    )
-         
+    
+    @task
     def configure(self):
         """
         Returns one or more Deployer instances, representing tasks to run during a deployment.
         """
+        r = self.local_renderer
         if self.env.enabled:
             # Enable the multiverse so we can install select non-free packages.
-            self.sudo_or_dryrun('sed -i "/^# deb.*multiverse/ s/^# //" /etc/apt/sources.list')
-            self.sudo_or_dryrun('apt-get update')
+            r.sudo('sed -i "/^# deb.*multiverse/ s/^# //" /etc/apt/sources.list')
+            r.sudo('apt-get update')
         else:
             # Disable the multiverse.
-            self.sudo_or_dryrun('sed -i "/^# // s/^# deb.*multiverse/" /etc/apt/sources.list')
-            self.sudo_or_dryrun('apt-get update')
-             
+            r.sudo('sed -i "/^# // s/^# deb.*multiverse/" /etc/apt/sources.list')
+            r.sudo('apt-get update')
     
     configure.deploy_before = []
 

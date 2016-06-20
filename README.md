@@ -147,10 +147,3 @@ To run tests:
     [tox](http://tox.readthedocs.org/en/latest/)
     
     tox -e py27 -- -s burlap/tests/test_project.py::test_project
-
-or:
-
-    [py.test](https://pytest.org/latest/usage.html)
-    
-    py.test -s burlap/tests/test_project.py::test_project
-    

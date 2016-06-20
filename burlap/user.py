@@ -379,6 +379,7 @@ class UserSatchel(Satchel):
         #self.env.passwordless = True
         self.env.groups = {} # {username:[groups]}
         self.env.passwordless = {} # {username:True/False}
+        self.env.passwords = {} # {user: password}
 
     def configure_keyless(self):
         generate_keys()
@@ -473,13 +474,20 @@ class UserSatchel(Satchel):
         r.sudo('adduser {username}')
         
     def configure(self):
-        for username, groups in self.env.groups.items():
+        r = self.local_renderer
+        
+        for username, groups in r.env.groups.items():
             self.togroups(username, groups)
             
-        for username, is_passwordless in self.env.passwordless.items():
+        for username, is_passwordless in r.env.passwordless.items():
             if is_passwordless:
                 pubkey = self.generate_keys(username=username, host=self.genv.hostname_hostname)
                 self.passwordless(username=username, pubkey=pubkey)
+                
+        for username, password in r.env.passwords.items():
+            r.env.username = username
+            r.env.password = password
+            r.sudo('echo "{username}:{password}"|chpasswd')
     
     configure.deploy_before = []
 
