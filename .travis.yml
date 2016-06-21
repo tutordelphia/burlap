@@ -20,7 +20,8 @@ install:
 -   echo "deb http://download.virtualbox.org/virtualbox/debian $(lsb_release -s -c) contrib" | sudo tee -a /etc/apt/sources.list
 -   sudo rm -rf /var/lib/apt/lists/*
 -   sudo apt-get clean
--   sudo apt-get update
+#-   sudo apt-get update
+-   sudo apt-get update -o Acquire::CompressionTypes::Order::=gz
 -   sudo apt-cache search virtualbox
 -   sudo apt-get -y install virtualbox-5.0
 -   sudo apt-get -y install dkms virtualbox-dkms virtualbox-ose-dkms virtualbox-ose-guest-dkms virtualbox-source virtualbox-ose-guest-source virtualbox-dkms 
