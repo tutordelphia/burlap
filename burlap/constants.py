@@ -1,7 +1,7 @@
 PACKAGERS = APT, YUM = ('apt-get', 'yum')
 
 OS_TYPES = LINUX, WINDOWS = ('linux', 'windows')
-OS_DISTRO = FEDORA, UBUNTU, DEBIAN, CENTOS = ('fedora', 'ubuntu', 'debian', 'centos')
+OS_DISTRO = FEDORA, UBUNTU, DEBIAN, RASPBIAN, CENTOS = ('fedora', 'ubuntu', 'debian', 'raspbian', 'centos')
 
 SYSTEM = 'system'
 RUBY = 'ruby'

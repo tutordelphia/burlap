@@ -764,7 +764,7 @@ class Satchel(object):
         """
         The standard method called to apply functionality when the manifest changes.
         """
-        raise NotImplementedError
+        #raise NotImplementedError
 
     # List of satchels that should be run before this one during deployments.
     configure.deploy_before = []
