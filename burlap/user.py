@@ -35,6 +35,7 @@ from burlap.group import (
 )
 from burlap.files import uncommented_lines
 from burlap.utils import run_as_root
+from burlap.decorators import task
 
 
 def exists(name):
@@ -358,14 +359,6 @@ class UserSatchel(Satchel):
     
     name = 'user'
     
-    tasks = (
-        'configure',
-        'togroups',
-        'configure_keyless',
-        'passwordless',
-        'create',
-    )
-    
     def set_defaults(self):
                 
         self.env.tmp_sudoers_fn = '/tmp/sudoers'
@@ -379,12 +372,36 @@ class UserSatchel(Satchel):
         #self.env.passwordless = True
         self.env.groups = {} # {username:[groups]}
         self.env.passwordless = {} # {username:True/False}
-        self.env.passwords = {} # {user: password}
+        self.env.passwords = {} # {username: password}
+        self.env.reset_passwords_on_first_login = {} # {username: true/false}
+        
+        self.env.default_passwords = {} # {username:password}
 
+    @task
+    def enter_password_change(self, username=None, old_password=None):
+        """
+        Responds to a forced password change via `passwd` prompts due to password expiration.
+        """
+        r = self.local_renderer
+        r.genv.user = r.genv.user or username
+        r.env.new_password = self.env.passwords[self.genv.user]
+        r.env.old_password = r.env.default_passwords[self.genv.user]
+        if old_password:
+            r.env.old_password = old_password 
+        prompts = {
+            '(current) UNIX password: ': r.env.old_password,
+            'Enter new UNIX password: ': r.env.new_password,
+            'Retype new UNIX password: ': r.env.new_password,
+        }
+        with settings(prompts=prompts):
+            r.run('echo done')
+
+    @task
     def configure_keyless(self):
         generate_keys()
         passwordless()
 
+    @task
     def togroups(self, user, groups):
         """
         Adds the user to the given list of groups.
@@ -400,6 +417,7 @@ class UserSatchel(Satchel):
             r.sudo('groupadd --force {group}')
             r.sudo('adduser {username} {group}')
 
+    @task
     def passwordless(self, username, pubkey):
         """
         Configures the user to use an SSL key without a password.
@@ -438,6 +456,7 @@ class UserSatchel(Satchel):
         r.env.host_string = self.genv.hostname_hostname
         r.comment('\tssh -i {pemkey} {username}@{host_string}')
 
+    @task
     def generate_keys(self, username, host):
         """
         Generates *.pem and *.pub key files suitable for setting up passwordless SSH.
@@ -465,6 +484,7 @@ class UserSatchel(Satchel):
                 r.local('mv {src} {dst}')
         return r.env.key_filename
     
+    @task
     def create(self, username):
         """
         Creates a user with the given username.
@@ -472,22 +492,52 @@ class UserSatchel(Satchel):
         r = self.local_renderer
         r.env.username = username
         r.sudo('adduser {username}')
-        
+    
+    @task
+    def expire_password(self, username):
+        """
+        Forces the user to change their password the next time they login.
+        """
+        r = self.local_renderer
+        r.env.username = username
+        r.sudo('chage -d 0 {username}')
+    
+    @task
     def configure(self):
         r = self.local_renderer
         
-        for username, groups in r.env.groups.items():
-            self.togroups(username, groups)
-            
+        lm = self.last_manifest
+        lm_reset_passwords_on_first_login = lm.get('reset_passwords_on_first_login', {})
+        lm_passwordless = lm.get('passwordless', {})
+        lm_passwords = lm.get('passwords', {})
+        
+        # Make one-time password changes.
+        for username, ret in r.env.reset_passwords_on_first_login.items():
+            if ret and not lm_reset_passwords_on_first_login.get(username):
+                self.enter_password_change(username)
+        
+        # Make passwordless logins.
         for username, is_passwordless in r.env.passwordless.items():
             if is_passwordless:
-                pubkey = self.generate_keys(username=username, host=self.genv.hostname_hostname)
-                self.passwordless(username=username, pubkey=pubkey)
-                
+                if not lm_passwordless.get(username):
+                    # If this user is passwordless, and we've not already created a passwordless
+                    # login for them, then create one.
+                    pubkey = self.generate_keys(username=username, host=self.genv.hostname_hostname)
+                    self.passwordless(username=username, pubkey=pubkey)
+            else:
+                #TODO:expire old SSH key?
+                pass
+        
+        # Update passwords.
         for username, password in r.env.passwords.items():
-            r.env.username = username
-            r.env.password = password
-            r.sudo('echo "{username}:{password}"|chpasswd')
+            if lm_passwords.get(username) != password:
+                r.env.username = username
+                r.env.password = password
+                r.sudo('echo "{username}:{password}"|chpasswd')
+        
+        # Set groups.
+        for username, groups in r.env.groups.items():
+            self.togroups(username, groups)
     
     configure.deploy_before = []
 

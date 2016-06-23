@@ -41,11 +41,10 @@ def get_last(name):
     from burlap.deploy import get_last_thumbprint
     name = common.assert_valid_satchel(name)
     last_thumbprint = get_last_thumbprint()
-#     print('get_last:', last_thumbprint.get(name))
-#     raw_input('enter')
     if last_thumbprint:
         if name in last_thumbprint:
-            return last_thumbprint.get(name, {})
+            return last_thumbprint.get(name, type(env)())
+    return type(env)()
     
 @task_or_dryrun
 @runs_once

@@ -265,7 +265,15 @@ def ongoing(s):
 
 def iter_plan_names(role=None):
     d = get_plan_dir(role=role)
-    assert is_dir(d)
+    try:
+        assert is_dir(d), 'Plan directory %s does not exist.' % d
+    except AssertionError:
+        if common.get_dryrun():
+            # During dryrun, and the directory is missing, assume the host has been reset
+            # and there are no prior plan files.
+            return
+        else:
+            raise
     for name in sorted(list_dir(d)):
         fqfn = os.path.join(d, name)
         if not is_dir(fqfn):

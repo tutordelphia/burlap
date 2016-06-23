@@ -400,7 +400,10 @@ class LocalRenderer(Renderer):
 class GlobalRenderer(Renderer):
     
     env_type = 'genv'
-    
+
+def get_satchel(name):
+    return all_satchels[name.strip().upper()]
+
 class Satchel(object):
     """
     Represents a base unit of functionality that is deployed and maintained on one
@@ -519,6 +522,21 @@ class Satchel(object):
     @property
     def all_satchels(self):
         return all_satchels
+    
+    @property
+    def all_other_enabled_satchels(self):
+        """
+        Returns a dictionary of satchels used in the current configuration, excluding ourselves.
+        """
+        return dict(
+            (name, satchel)
+            for name, satchel in self.all_satchels.items()
+            if name != self.name.upper() and name.lower() in map(str.lower, self.genv.services)
+        )
+        
+    
+    def get_satchel(self, *args, **kwargs):
+        return get_satchel(*args, **kwargs)
     
     def define_cron_job(self, template, script_path, command=None, name='default', perms='600'):
         if 'cron' not in self.env:
@@ -739,6 +757,9 @@ class Satchel(object):
     def sudo(self, *args, **kwargs):
         warnings.warn('Use self.sudo() instead.', DeprecationWarning, stacklevel=2)
         return sudo_or_dryrun(*args, **kwargs)
+    
+    def write_temp_file(self, *args, **kwargs):
+        return write_temp_file_or_dryrun(*args, **kwargs)
     
     def comment(self, *args):
         print('# ' + (' '.join(map(str, args))))
@@ -1049,6 +1070,27 @@ def files_exists_or_dryrun(path, *args, **kwargs):
     from fabric.contrib.files import exists
     return exists(path, *args, **kwargs)
 
+def write_temp_file_or_dryrun(content, *args, **kwargs):
+    """
+    Writes the given content to a local temporary file.
+    """
+    dryrun = get_dryrun(kwargs.get('dryrun'))
+    if dryrun:
+        fd, tmp_fn = tempfile.mkstemp()
+        os.remove(tmp_fn)
+        cmd_run = 'local'
+        cmd = 'cat <<EOT >> %s\n%s\nEOT' % (tmp_fn, content)
+        if BURLAP_COMMAND_PREFIX:
+            print('%s %s: %s' % (render_command_prefix(), cmd_run, cmd))
+        else:
+            print(cmd)
+    else:
+        fd, tmp_fn = tempfile.mkstemp()
+        fout = open(tmp_fn, 'w')
+        fout.write(content)
+        fout.close()
+    return tmp_fn
+
 def sed_or_dryrun(*args, **kwargs):
     """
     Wrapper around Fabric's contrib.files.sed() to give it a dryrun option.
@@ -1136,7 +1178,7 @@ def reboot_or_dryrun(*args, **kwargs):
                 return
         reboot(*args, **kwargs)
 
-def put_or_dryrun(**kwargs):
+def put_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
     use_sudo = kwargs.get('use_sudo', False)
     real_remote_path = None

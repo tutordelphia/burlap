@@ -20,10 +20,12 @@ class PackagerSatchel(Satchel):
         """
         Returns a dictionary representing a serialized state of the service.
         """
-        data = []
-        data.extend(self.install_required(type=SYSTEM, verbose=False, list_only=True))
-        data.extend(self.install_custom(list_only=True))
-        data.sort()
+        data = {}
+        data['required_packages'] = self.install_required(type=SYSTEM, verbose=False, list_only=True)
+        data['required_packages'].sort()
+        data['custom_packages'] = self.install_custom(list_only=True)
+        data['custom_packages'].sort()
+        data['repositories'] = self.get_repositories()
         return data
     
     @task
@@ -44,29 +46,35 @@ class PackagerSatchel(Satchel):
         """
         Installs system packages listed in apt-requirements.txt.
         """
+        r = self.local_renderer
         assert self.genv[ROLE]
         apt_req_fqfn = fn or self.find_template(self.env.apt_requirments_fn)
         if not apt_req_fqfn:
             return []
         assert os.path.isfile(apt_req_fqfn)
-        lines = [
-            _.strip() for _ in open(apt_req_fqfn).readlines()
-            if _.strip() and not _.strip().startswith('#')
-            and (not package_name or _.strip() == package_name)
-        ]
+        
+        lines = []
+        for _ in open(apt_req_fqfn).readlines():
+            if _.strip() and not _.strip().startswith('#') \
+            and (not package_name or _.strip() == package_name):
+                lines.extend(_pkg.strip() for _pkg in _.split(' ') if _pkg.strip()) 
+        
         if list_only:
             return lines
-        fd, tmp_fn = tempfile.mkstemp()
-        fout = open(tmp_fn, 'w')
-        fout.write('\n'.join(lines))
-        fout.close()
+            
+#         fd, tmp_fn = tempfile.mkstemp()
+#         fout = open(tmp_fn, 'w')
+#         fout.write('\n'.join(lines))
+#         fout.close()
+        tmp_fn = r.write_temp_file('\n'.join(lines))
         apt_req_fqfn = tmp_fn
+        
         if not self.genv.is_local:
-            self.put_or_dryrun(local_path=tmp_fn)
+            r.put(local_path=tmp_fn)
             apt_req_fqfn = self.genv.put_remote_path
     #    if int(update):
-        self.sudo_or_dryrun('apt-get update -y --fix-missing')
-        self.sudo_or_dryrun('apt-get install -y `cat "%s" | tr "\\n" " "`' % apt_req_fqfn)
+        r.sudo('apt-get update -y --fix-missing')
+        r.sudo('apt-get install -y `cat "%s" | tr "\\n" " "`' % apt_req_fqfn)
 
     @task
     def install_yum(self, fn=None, package_name=None, update=0, list_only=0):
@@ -150,6 +158,65 @@ class PackagerSatchel(Satchel):
             raise Exception('Unknown packager: %s' % (packager,))
 
     @task
+    def get_repositories(self, typ=None, service=None):
+        
+        service = (service or '').strip().upper()
+        typ = (typ or '').lower().strip()
+        assert not typ or typ in PACKAGE_TYPES, \
+            'Unknown package type: %s' % (typ,)
+        
+        repositories = {} # {typ: [repos]}
+        
+        for satchel_name, satchel in self.all_other_enabled_satchels.items():
+            
+            if service and satchel_name != service:
+                continue
+                
+            try:
+                repos = satchel.packager_repositories
+                for repo_type, repo_lst in repos.items():
+                    repositories.setdefault(repo_type, [])
+                    repositories[repo_type].extend(repo_lst)
+            except AttributeError:
+                pass
+                    
+        for repo_type in repositories:
+            repositories[repo_type].sort()
+                    
+        return repositories
+    
+    @task
+    def install_repositories(self, *args, **kwargs):
+        r = self.local_renderer
+        repos = self.get_repositories(*args, **kwargs)
+        
+        # Apt sources.
+        apt_sources = repos.get(APT_SOURCE, [])
+        for line, fn in apt_sources:
+            r.env.apt_source = line
+            r.env.apt_fn = fn
+            r.sudo("sh -c 'echo \"{apt_source}\" > {apt_fn}'")
+        
+        # Apt keys.
+        apt_keys = repos.get(APT_KEY, [])
+        for key_server, key_value in apt_keys:
+            r.env.apt_key_server = key_server
+            r.env.apt_key_value = key_value
+            r.sudo("apt-key adv --keyserver {apt_key_server} --recv-key {apt_key_value}")
+        
+        for repo_type in [APT]:
+            if repo_type not in repos:
+                continue
+            repo_lst = repos[repo_type]
+            if repo_type is APT:
+                for repo_name in repo_lst:
+                    r.env.repo_name = repo_name
+                    r.sudo('add-apt-repository {repo_name}')
+                r.sudo('apt-get update -y')
+            else:
+                raise NotImplementedError, 'Unsupported repository type: %s' % repo_type
+
+    @task
     def list_required(self, type=None, service=None):
         """
         Displays all packages required by the current role
@@ -167,20 +234,52 @@ class PackagerSatchel(Satchel):
         packages_set = set()
         packages = []
         version = self.os_version
-        for _service in self.genv.services:
+        
+        for _service, satchel in self.all_other_enabled_satchels.items():
+                
             _service = _service.strip().upper()
             if service and service != _service:
                 continue
+                
             _new = []
+            
             if not type or type == SYSTEM:
+                
+                #TODO:deprecated, remove
                 _new.extend(required_system_packages.get(
                     _service, {}).get((version.distro, version.release), []))
+                    
+                try:
+                    _pkgs = satchel.packager_system_packages
+                    for _key in [(version.distro, version.release), version.distro]:
+                        if _key in _pkgs:
+                            _new.extend(_pkgs[_key])
+                except AttributeError:
+                    pass
+                    
             if not type or type == PYTHON:
+                
+                #TODO:deprecated, remove
                 _new.extend(required_python_packages.get(
                     _service, {}).get((version.distro, version.release), []))
+                
+                try:
+                    _pkgs = satchel.packager_python_packages
+                    for _key in [(version.distro, version.release), version.distro]:
+                        if _key in _pkgs:
+                            _new.extend(_pkgs[_key])
+                except AttributeError:
+                    pass
+                print('_new:', _new)
+                    
             if not type or type == RUBY:
+                
+                #TODO:deprecated, remove
                 _new.extend(required_ruby_packages.get(
                     _service, {}).get((version.distro, version.release), []))
+            
+            
+            
     #         if not _new and verbose:
     #             print(\
     #                 'Warning: no packages found for service "%s"' % (_service,)
@@ -195,11 +294,12 @@ class PackagerSatchel(Satchel):
         return packages
     
     @task
-    def install_required(self, type=None, service=None, list_only=0, verbose=0, **kwargs):
+    def install_required(self, type=None, service=None, list_only=0, **kwargs):
         """
         Installs system packages listed as required by services this host uses.
         """
-        verbose = int(verbose)
+        r = self.local_renderer
+        r.pc('Installing required packages.')
         list_only = int(list_only)
         type = (type or '').lower().strip()
         assert not type or type in PACKAGE_TYPES, \
@@ -214,7 +314,7 @@ class PackagerSatchel(Satchel):
                 content = '\n'.join(self.list_required(type=type, service=service))
                 if list_only:
                     lst.extend(_ for _ in content.split('\n') if _.strip())
-                    if verbose:
+                    if self.verbose:
                         print('content:', content)
                     break
                 fd, fn = tempfile.mkstemp()
@@ -229,12 +329,12 @@ class PackagerSatchel(Satchel):
     @task
     def configure(self, **kwargs):
         enabled_services = map(str.upper, self.genv.services)
-        for satchel_name, satchel in self.all_satchels.iteritems():
-            if satchel_name not in enabled_services:
-                continue
+        #for satchel_name, satchel in self.all_satchels.iteritems():
+        for satchel_name, satchel in self.all_other_enabled_satchels.items():
             if hasattr(satchel, 'packager_pre_configure'):
                 satchel.packager_pre_configure()
         self.refresh()
+        self.install_repositories(**kwargs)
         self.install_required(type=SYSTEM, **kwargs)
         self.install_custom(**kwargs)
     
