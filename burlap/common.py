@@ -384,6 +384,7 @@ class Renderer(object):
         or attrname.startswith('_local') \
         or attrname.startswith('run') \
         or attrname.startswith('comment') \
+        or attrname.startswith('pc') \
         or attrname.startswith('sudo'):
             ret = wrap(ret)
         elif attrname.startswith('put') \
@@ -853,6 +854,7 @@ class Service(object):
         if _key in env:
             self.commands = env[_key]
  
+        #DEPRECATED
         tasks = (
             'start',
             'stop',

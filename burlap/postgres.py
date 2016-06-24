@@ -142,10 +142,12 @@ class PostgreSQLSatchel(DatabaseSatchel):
     
     name = 'postgresql'
     
-    required_system_packages = {
-        (UBUNTU, '12.04'): ['postgresql-9.3'],
-        (UBUNTU, '14.04'): ['postgresql-9.3'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            (UBUNTU, '12.04'): ['postgresql-9.1'],
+            (UBUNTU, '14.04'): ['postgresql-9.3'],
+        }
     
     def set_defaults(self):
         super(PostgreSQLSatchel, self).set_defaults()
@@ -408,20 +410,22 @@ class PostgreSQLSatchel(DatabaseSatchel):
 class PostgreSQLClientSatchel(Satchel):
 
     name = 'postgresqlclient'
-    
-    required_system_packages = {
-        FEDORA: ['postgresql-client'],
-        (UBUNTU, '12.04'): [
-            'postgresql-client-9.1',
-            #'python-psycopg2',#install from pip instead
-            #'postgresql-server-dev-9.1',
-        ],
-        (UBUNTU, '14.04'): [
-            'postgresql-client-9.3',
-            #'python-psycopg2',#install from pip instead
-            #'postgresql-server-dev-9.3',
-        ],
-    }
+
+    @property
+    def packager_system_packages(self):
+        return {
+            FEDORA: ['postgresql-client'],
+            (UBUNTU, '12.04'): [
+                'postgresql-client-9.1',
+                #'python-psycopg2',#install from pip instead
+                #'postgresql-server-dev-9.1',
+            ],
+            (UBUNTU, '14.04'): [
+                'postgresql-client-9.3',
+                #'python-psycopg2',#install from pip instead
+                #'postgresql-server-dev-9.3',
+            ],
+        }
 
 postgresql = PostgreSQLSatchel()
 PostgreSQLClientSatchel()

@@ -7,23 +7,18 @@ from __future__ import print_function
 
 from burlap import ServiceSatchel
 from burlap.constants import *
+from burlap.decorators import task
 
 class MotionSatchel(ServiceSatchel):
     
     name = 'motion'
     
-    ## Service options.
-    
-    #ignore_errors = True
-    
-    required_system_packages = {
-        FEDORA: ['motion'],
-        UBUNTU: ['motion'],
-    }
-
-    tasks = (
-        'configure',
-    )
+    @property
+    def packager_system_packages(self):
+        return {
+            FEDORA: ['motion'],
+            UBUNTU: ['motion'],
+        }
     
     def set_defaults(self):
         self.env.notify_enabled = False
@@ -54,6 +49,7 @@ class MotionSatchel(ServiceSatchel):
             },
         }    
     
+    @task
     def configure(self):
         todo
     

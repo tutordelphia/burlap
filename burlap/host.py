@@ -220,11 +220,13 @@ class SSHNiceSatchel(Satchel):
 
     name = 'sshnice'
     
-    required_system_packages = {
-        FEDORA: ['cron'],
-        UBUNTU: ['cron'],
-        DEBIAN: ['cron'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            FEDORA: ['cron'],
+            UBUNTU: ['cron'],
+            DEBIAN: ['cron'],
+        }
     
     def set_defaults(self):
         self.env.enabled = False

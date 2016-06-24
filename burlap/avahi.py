@@ -7,13 +7,6 @@ from burlap.decorators import task
 class AvahiSatchel(ServiceSatchel):
     
     name = 'avahi'
-    
-    ## Service options.
-    
-    required_system_packages = {
-        UBUNTU: ['avahi-daemon'],
-        DEBIAN: ['avahi-daemon'],
-    }
 
     def set_defaults(self):
             
@@ -45,7 +38,14 @@ class AvahiSatchel(ServiceSatchel):
                 DEBIAN: 'service %s status' % self.env.daemon_name,
             },
         }
-    
+
+    @property
+    def packager_system_packages(self):
+        return {
+            DEBIAN: ['avahi-daemon'],
+            UBUNTU: ['avahi-daemon'],
+        }
+        
     @task
     def configure(self):
         if self.env.enabled:

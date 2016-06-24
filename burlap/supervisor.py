@@ -19,7 +19,7 @@ from fabric.api import hide, settings
 from burlap.constants import *
 from burlap import ServiceSatchel
 from burlap.utils import run_as_root
-
+from burlap.decorators import task
 
 def reload_config():
     """
@@ -81,13 +81,11 @@ class SupervisorSatchel(ServiceSatchel):
     
     post_deploy_command = 'restart'
     
-    tasks = (
-        'configure',
-    )
-    
-    required_system_packages = {
-        UBUNTU: ['supervisor'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            UBUNTU: ['supervisor'],
+        }
     
     def set_defaults(self):
     
@@ -234,6 +232,7 @@ class SupervisorSatchel(ServiceSatchel):
         self.sudo_or_dryrun('supervisorctl reread')
         self.sudo_or_dryrun('supervisorctl update')
     
+    @task
     def configure(self, **kwargs):
         kwargs['site'] = ALL
         
@@ -242,7 +241,6 @@ class SupervisorSatchel(ServiceSatchel):
 #             configure()
         
         self.deploy_services(**kwargs)
-        
     
     configure.deploy_before = ['packager', 'user', 'rabbitmq']
         

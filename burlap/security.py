@@ -14,11 +14,13 @@ class UnattendedUpgradesSatchel(Satchel):
     
     name = 'unattendedupgrades'
     
-    required_system_packages = {
-        UBUNTU: ['unattended-upgrades'],
-        (UBUNTU, '12.04'): ['unattended-upgrades'],
-        (UBUNTU, '14.04'): ['unattended-upgrades'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            UBUNTU: ['unattended-upgrades'],
+            (UBUNTU, '12.04'): ['unattended-upgrades'],
+            (UBUNTU, '14.04'): ['unattended-upgrades'],
+        }
     
     def set_defaults(self):
         

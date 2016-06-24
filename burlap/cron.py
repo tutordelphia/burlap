@@ -16,10 +16,12 @@ class CronSatchel(ServiceSatchel):
         
     post_deploy_command = None
     
-    required_system_packages = {
-        FEDORA: ['crontabs'],
-        (UBUNTU, '12.04'): ['cron'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            FEDORA: ['crontabs'],
+            (UBUNTU, '12.04'): ['cron'],
+        }
 
     def set_defaults(self):
         self.env.enabled = True

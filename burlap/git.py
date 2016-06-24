@@ -15,6 +15,7 @@ import time
 
 from burlap import Satchel
 from burlap.constants import *
+from burlap.decorators import task
 from burlap.exceptions import AbortDeployment
 
 from fabric.api import run
@@ -235,19 +236,17 @@ class GitCheckerSatchel(Satchel):
     
     name = 'gitchecker'
     
-    tasks = (
-        'configure',
-        'check',
-    )
-    
-    required_system_packages = {
-        (UBUNTU, '12.04'): ['git'],
-        (UBUNTU, '14.04'): ['git'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            (UBUNTU, '12.04'): ['git'],
+            (UBUNTU, '14.04'): ['git'],
+        }
     
     def set_defaults(self):
         self.env.branch = 'master'
     
+    @task
     def check(self):
         print('Checking GIT branch...')
         branch_name = self._local('git rev-parse --abbrev-ref HEAD', capture=True).strip()
@@ -258,7 +257,8 @@ class GitCheckerSatchel(Satchel):
     def record_manifest(self):
         self.check()
         return super(GitCheckerSatchel, self).record_manifest()
-        
+    
+    @task
     def configure(self):
         pass
     
@@ -270,14 +270,12 @@ class GitTrackerSatchel(Satchel):
     
     name = 'gittracker'
     
-    tasks = (
-        'configure',
-    )
-    
-    required_system_packages = {
-        (UBUNTU, '12.04'): ['git'],
-        (UBUNTU, '14.04'): ['git'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            (UBUNTU, '12.04'): ['git'],
+            (UBUNTU, '14.04'): ['git'],
+        }
     
     def set_defaults(self):
         pass
@@ -311,6 +309,7 @@ class GitTrackerSatchel(Satchel):
         }
         return data
     
+    @task
     def configure(self):
         from burlap.jirahelp import update_tickets_from_git
         update_tickets_from_git()

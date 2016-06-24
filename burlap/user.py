@@ -360,7 +360,7 @@ class UserSatchel(Satchel):
     name = 'user'
     
     def set_defaults(self):
-                
+        
         self.env.tmp_sudoers_fn = '/tmp/sudoers'
         
         self.env.key_type = 'rsa' # e.g. rsa|dsa
@@ -384,6 +384,7 @@ class UserSatchel(Satchel):
         """
         r = self.local_renderer
         r.genv.user = r.genv.user or username
+        r.pc('Changing password for user {user} via interactive prompts.')
         r.env.new_password = self.env.passwords[self.genv.user]
         r.env.old_password = r.env.default_passwords[self.genv.user]
         if old_password:
@@ -439,7 +440,6 @@ class UserSatchel(Satchel):
         
         # Upload the SSH key.
         put_remote_paths = self.put(local_path=r.env.pubkey)
-        print('put_remote_path:', put_remote_paths)
         r.env.put_remote_path = put_remote_paths[0]
         r.sudo('mkdir -p {home}/.ssh' % env)
         r.sudo('cat {put_remote_path} >> {home}/.ssh/authorized_keys')
@@ -471,8 +471,9 @@ class UserSatchel(Satchel):
             host=host,
             username=username,
         )
-#         print('r.env.key_filename:', r.env.key_filename)
-        if not os.path.isfile(r.env.key_filename):
+        if os.path.isfile(r.env.key_filename):
+            r.pc('Key file {key_filename} already exists. Skipping generation.'.format(**r.env))
+        else:
             r.local("ssh-keygen -t {key_type} -b {key_bits} -f {key_filename} -N ''")
             r.local('chmod {key_perms} {key_filename}')
             if r.env.key_filename.endswith('.pem'):
@@ -512,9 +513,11 @@ class UserSatchel(Satchel):
         lm_passwords = lm.get('passwords', {})
         
         # Make one-time password changes.
+        just_changed = set()
         for username, ret in r.env.reset_passwords_on_first_login.items():
             if ret and not lm_reset_passwords_on_first_login.get(username):
                 self.enter_password_change(username)
+                just_changed.add(username)
         
         # Make passwordless logins.
         for username, is_passwordless in r.env.passwordless.items():
@@ -530,6 +533,8 @@ class UserSatchel(Satchel):
         
         # Update passwords.
         for username, password in r.env.passwords.items():
+            if username in just_changed:
+                continue
             if lm_passwords.get(username) != password:
                 r.env.username = username
                 r.env.password = password

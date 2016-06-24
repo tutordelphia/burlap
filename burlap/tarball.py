@@ -5,6 +5,7 @@ import hashlib
 
 from burlap import Satchel
 from burlap.constants import *
+from burlap.decorators import task
 from burlap.common import only_hostname
 
 TARBALL = 'tarball'
@@ -13,15 +14,6 @@ RSYNC = 'rsync'
 class TarballSatchel(Satchel):
     
     name = 'tarball'
-    
-    tasks = (
-        'create',
-        'get_tarball_hash',
-        'configure',
-        'deploy_tarball',
-        'deploy_rsync',
-        'set_permissions',
-    )
     
     def set_defaults(self):
         self.env.clean = 1
@@ -99,6 +91,7 @@ class TarballSatchel(Satchel):
         self.env.path = os.path.abspath('%(tarball_dir)s/code-%(ROLE)s-%(SITE)s-%(host_string)s.%(tarball_ext)s' % self.genv)
         return self.env.path
     
+    @task
     def create(self, gzip=1):
         """
         Generates a tarball of all deployable code.
@@ -116,6 +109,7 @@ class TarballSatchel(Satchel):
             "--create --verbose --dereference --file %(tarball_path)s *") % self.genv
         self.local_or_dryrun(cmd)
     
+    @task
     def get_tarball_hash(fn=None, refresh=1, verbose=0):
         """
         Calculates the hash for the tarball.
@@ -132,6 +126,7 @@ class TarballSatchel(Satchel):
             print(tarball_hash)
         return tarball_hash
     
+    @task
     def set_permissions(self, d=None):
         
         genv = self.render_template_paths(d)
@@ -170,6 +165,7 @@ class TarballSatchel(Satchel):
         final_rsync_command = self.env.rsync_command_template % genv
         self.sudo_or_dryrun(final_rsync_command)
         
+    @task
     def deploy_rsync(self, *args, **kwargs):
         
         # Confirm source directories.
@@ -190,6 +186,7 @@ class TarballSatchel(Satchel):
         if self.env.set_permissions:
             self.set_permissions(genv)
     
+    @task
     def deploy_tarball(self, clean=None, refresh=1):
         """
         Copies the tarball to the target server.
@@ -234,6 +231,7 @@ class TarballSatchel(Satchel):
         if self.env.set_permissions:
             self.set_permissions(genv)
     
+    @task
     def configure(self, *args, **kwargs):
         if self.env.method == TARBALL:
             self.deploy_tarball(*args, **kwargs)

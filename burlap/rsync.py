@@ -5,14 +5,11 @@ import hashlib
 
 from burlap import Satchel
 from burlap.constants import *
+from burlap.decorators import task
 
 class RsyncSatchel(Satchel):
     
     name = 'rsync'
-    
-    tasks = (
-        'deploy_code',
-    )
     
     def set_defaults(self):
         self.env.clean = 1
@@ -33,6 +30,7 @@ class RsyncSatchel(Satchel):
         self.env.chown_group = 'www-data'
         self.env.command = 'rsync --verbose --compress --recursive --delete --rsh "ssh -i {key_filename}" {exclusions_str} {rsync_src_dir} {user}@{host_string}:{rsync_dst_dir}'
     
+    @task
     def deploy_code(self):
         """
         Generates a rsync of all deployable code.

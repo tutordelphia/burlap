@@ -10,21 +10,20 @@ from __future__ import print_function
 
 from burlap import ServiceSatchel
 from burlap.constants import *
+from burlap.decorators import task
 
 class NTPClientSatchel(ServiceSatchel):
 
     name = 'ntpclient'
     
-    required_system_packages = {
-        FEDORA: ['ntpdate','ntp'],
-        (UBUNTU, '12.04'): ['ntpdate','ntp'],
-        (UBUNTU, '14.04'): ['ntpdate','ntp'],
-        DEBIAN: ['ntpdate','ntp'],
-    }
-    
-    tasks = (
-        'configure',
-    )
+    @property
+    def packager_system_packages(self):
+        return {
+            FEDORA: ['ntpdate','ntp'],
+            (UBUNTU, '12.04'): ['ntpdate','ntp'],
+            (UBUNTU, '14.04'): ['ntpdate','ntp'],
+            DEBIAN: ['ntpdate','ntp'],
+        }
     
     def set_defaults(self):
         self.env.enabled = True
@@ -57,6 +56,7 @@ class NTPClientSatchel(ServiceSatchel):
             },
         }
 
+    @task
     def configure(self):
         if self.env.enabled:
             self.install_packages()
@@ -68,4 +68,4 @@ class NTPClientSatchel(ServiceSatchel):
     
     configure.deploy_before = ['packager', 'user']
     
-NTPClientSatchel()
+ntpclient = NTPClientSatchel()

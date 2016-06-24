@@ -1,7 +1,8 @@
 from __future__ import print_function
 
-from burlap.constants import *
 from burlap import ServiceSatchel
+from burlap.constants import *
+from burlap.decorators import task
 
 class NetworkManagerSatchel(ServiceSatchel):
     """
@@ -12,25 +13,12 @@ class NetworkManagerSatchel(ServiceSatchel):
     
     name = 'nm'
     
-    ## Service options.
-    
-    #ignore_errors = True
-    
-    # {action: {os_version_distro: command}}
-#     commands = env.networkmanager_service_commands
-    
-    tasks = (
-        'configure',
-        'add_wifi_connection',
-        'remove_connection',
-        'dev_status',
-        'dev_wifi_list',
-    )
-    
-    required_system_packages = {
-        UBUNTU: ['network-manager', 'cron'],
-        DEBIAN: ['network-manager', 'cron'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            UBUNTU: ['network-manager', 'cron'],
+            DEBIAN: ['network-manager', 'cron'],
+        }
     
     templates = (
         'check_networkmanager.sh',
@@ -76,26 +64,31 @@ class NetworkManagerSatchel(ServiceSatchel):
         
         self.env.connections = {} # {ssid: passphrase}
     
+    @task
     def add_wifi_connection(self, ssid, passphrase=None):
         r = self.local_renderer
         r.env.ssid = ssid = ssid
         r.env.passphrase = passphrase
         r.sudo('nmcli device wifi connect "{ssid}" password "{passphrase}"')
     
+    @task
     def remove_connection(self, ssid):
         r = self.local_renderer
         r.env.ssid = ssid = ssid
         #r.sudo("nmcli connection delete `nmcli --fields NAME,UUID con list | grep -i {ssid} | awk '{print $2}'`")
         r.sudo("nmcli connection delete id {ssid}")
         
+    @task
     def dev_status(self):
         r = self.local_renderer
         r.sudo('nmcli device status')
         
+    @task
     def dev_wifi_list(self):
         r = self.local_renderer
         r.sudo('nmcli device wifi list')
         
+    @task
     def configure(self):
         
         if self.env.enabled:
@@ -134,4 +127,4 @@ class NetworkManagerSatchel(ServiceSatchel):
     
     configure.deploy_before = ['packager', 'user', 'cron']
 
-NetworkManagerSatchel()
+nm = NetworkManagerSatchel()

@@ -40,6 +40,7 @@ from burlap.common import (
 from burlap.decorators import task_or_dryrun
 from burlap import versioner
 from burlap.constants import *
+from burlap.decorators import task
 
 try:
     from requirements.requirement import Requirement
@@ -893,25 +894,23 @@ class PIPSatchel(Satchel):
     
     name = PIP
     
-    tasks = (
-        'configure',
-    )
-    
-    required_system_packages = {
-        FEDORA: [
-            #'python-pip'#obsolete?
-        ],
-        (UBUNTU, '12.04'): [
-            #'python-pip',#obsolete in 14.04?
-            #'python-virtualenv',#obsolete in 14.04?
-            'gcc', 'python-dev', 'build-essential'
-        ],
-        (UBUNTU, '14.04'): [
-            #'python-pip',#obsolete in 14.04?
-            #'python-virtualenv',#obsolete in 14.04?
-            'gcc', 'python-dev', 'build-essential'
-        ],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            FEDORA: [
+                #'python-pip'#obsolete?
+            ],
+            (UBUNTU, '12.04'): [
+                #'python-pip',#obsolete in 14.04?
+                #'python-virtualenv',#obsolete in 14.04?
+                'gcc', 'python-dev', 'build-essential'
+            ],
+            (UBUNTU, '14.04'): [
+                #'python-pip',#obsolete in 14.04?
+                #'python-virtualenv',#obsolete in 14.04?
+                'gcc', 'python-dev', 'build-essential'
+            ],
+        }
 
     def record_manifest(self):
         """
@@ -929,9 +928,10 @@ class PIPSatchel(Satchel):
             print(data)
         return data
     
+    @task
     def configure(self, *args, **kwargs):
         return update_install(*args, **kwargs)
     
     configure.deploy_before = ['packager', 'user']
         
-PIPSatchel()
+pip = PIPSatchel()

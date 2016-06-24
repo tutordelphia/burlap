@@ -1,94 +1,77 @@
 from __future__ import print_function
 
-import os
-import re
-
-from fabric.api import (
-    env,
-    require,
-    settings,
-    cd,
-)
- 
-from burlap import common
-from burlap.common import (
-    ServiceSatchel,
-)
+from burlap import ServiceSatchel
+from burlap.constants import *
+from burlap.decorators import task
 
 STATIC = 'static'
 DYNAMIC = 'dynamic'
-
-if 'ip_type' not in env:
-    env.ip_type = DYNAMIC#STATIC
-    env.ip_interface = 'eth0'
-    env.ip_address = None
-    env.ip_network = '192.168.0.0'
-    env.ip_netmask = '255.255.255.0'
-    env.ip_broadcast = '10.157.10.255'
-    env.ip_gateway = '10.157.10.1'
-    env.ip_dns_nameservers = None
-    env.ip_interfaces_fn = '/etc/network/interfaces'
-    #env.ip_network_restart_command = '/etc/init.d/networking restart'
-    env.ip_daemon_name = 'networking'
-    env.ip_service_commands = {
-        common.START:{
-            common.UBUNTU: 'service %s start' % env.ip_daemon_name,
-        },
-        common.STOP:{
-            common.UBUNTU: 'service %s stop' % env.ip_daemon_name,
-        },
-        common.DISABLE:{
-            common.UBUNTU: 'chkconfig %s off' % env.ip_daemon_name,
-        },
-        common.ENABLE:{
-            common.UBUNTU: 'chkconfig %s on' % env.ip_daemon_name,
-        },
-        common.RESTART:{
-            common.UBUNTU: 'service %s restart' % env.ip_daemon_name,
-        },
-        common.STATUS:{
-            common.UBUNTU: 'service %s status' % env.ip_daemon_name,
-        },
-    }
 
 class IPSatchel(ServiceSatchel):
     
     name = 'ip'
     
-    commands = env.ip_service_commands
-    
-    tasks = (
-        'configure',
-        'static',
-        'dynamic',
-    )
-    
     post_deploy_command = None
 
+    def set_defaults(self):
+        self.env.type = DYNAMIC#STATIC
+        self.env.interface = 'eth0'
+        self.env.address = None
+        self.env.network = '192.168.0.0'
+        self.env.netmask = '255.255.255.0'
+        self.env.broadcast = '10.157.10.255'
+        self.env.gateway = '10.157.10.1'
+        self.env.dns_nameservers = None
+        self.env.interfaces_fn = '/etc/network/interfaces'
+        #env.network_restart_command = '/etc/init.d/networking restart'
+        self.env.daemon_name = 'networking'
+        self.env.service_commands = {
+            START:{
+                UBUNTU: 'service %s start' % self.env.daemon_name,
+            },
+            STOP:{
+                UBUNTU: 'service %s stop' % self.env.daemon_name,
+            },
+            DISABLE:{
+                UBUNTU: 'chkconfig %s off' % self.env.daemon_name,
+            },
+            ENABLE:{
+                UBUNTU: 'chkconfig %s on' % self.env.daemon_name,
+            },
+            RESTART:{
+                UBUNTU: 'service %s restart' % self.env.daemon_name,
+            },
+            STATUS:{
+                UBUNTU: 'service %s status' % self.env.daemon_name,
+            },
+        }
+
+    @task
     def static(self):
         """
         Configures the server to use a static IP.
         """
         fn = self.render_to_file('ip/ip_interfaces_static.template')
-        self.put_or_dryrun(local_path=fn, remote_path=env.ip_interfaces_fn, use_sudo=True)
+        self.put_or_dryrun(local_path=fn, remote_path=env.interfaces_fn, use_sudo=True)
     
+    @task
     def dynamic(self):
         """
         Configures the server to use a static IP.
         """
         fn = self.render_to_file('ip/ip_interfaces_dynamic.template')
-        self.put_or_dryrun(local_path=fn, remote_path=env.ip_interfaces_fn, use_sudo=True)
+        self.put_or_dryrun(local_path=fn, remote_path=env.interfaces_fn, use_sudo=True)
     
+    @task
     def configure(self):
-        if env.ip_type == STATIC:
+        if self.env.type == STATIC:
             self.static()
-        elif env.ip_type == DYNAMIC:
+        elif self.env.type == DYNAMIC:
             self.dynamic()
         else:
-            raise NotImplementedError('Unknown type: %s' % env.ip_type)
+            raise NotImplementedError('Unknown type: %s' % self.env.type)
         self.restart()
-        
     
     configure.deploy_before = ['packager', 'user', 'hostname']
     
-IPSatchel()
+ip = IPSatchel()

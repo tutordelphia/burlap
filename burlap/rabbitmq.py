@@ -11,28 +11,26 @@ from fabric.api import settings
 
 from burlap import Satchel, ServiceSatchel
 from burlap.constants import *
+from burlap.decorators import task
 
 class RabbitMQBleedingSatchel(Satchel):
 
     name = 'rabbitmqbleeding'
     
-    tasks = (
-        'configure',
-    )
-    
+    @task
     def configure(self):
         """
         Enables the repository for a most current version on Debian systems.
         
             https://www.rabbitmq.com/install-debian.html
         """
+        r = self.local_renderer
         
-        self.sudo_or_dryrun("echo 'deb http://www.rabbitmq.com/debian/ testing main' >> /etc/apt/sources.list")
-        self.sudo_or_dryrun('cd /tmp; '
+        r.sudo("echo 'deb http://www.rabbitmq.com/debian/ testing main' >> /etc/apt/sources.list")
+        r.sudo('cd /tmp; '
             'wget https://www.rabbitmq.com/rabbitmq-signing-key-public.asc; '
             'apt-key add rabbitmq-signing-key-public.asc')
-        self.sudo_or_dryrun('apt-get update')
-        
+        r.sudo('apt-get update')
     
     configure.deploy_before = ['packager', 'rabbitmq']
     
@@ -44,18 +42,13 @@ class RabbitMQSatchel(ServiceSatchel):
     
     ignore_errors = True
     
-    tasks = (
-        'configure',
-        'create_user',
-        'enable_management_interface',
-        'set_loopback_users',
-    )
-    
-    required_system_packages = {
-        FEDORA: ['rabbitmq-server'],
-        (UBUNTU, '12.04'): ['rabbitmq-server'],
-        (UBUNTU, '14.04'): ['rabbitmq-server'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            FEDORA: ['rabbitmq-server'],
+            (UBUNTU, '12.04'): ['rabbitmq-server'],
+            (UBUNTU, '14.04'): ['rabbitmq-server'],
+        }
     
     def set_defaults(self):
         self.env.rabbitmq_host = "localhost"
@@ -119,18 +112,21 @@ class RabbitMQSatchel(ServiceSatchel):
         data['rabbitmq_all_site_vhosts'] = vhosts
         return data
     
+    @task
     def list_vhosts(self):
         """
         Displays a list of configured RabbitMQ vhosts.
         """
         self.sudo_or_dryrun('rabbitmqctl list_vhosts')
     
+    @task
     def list_users(self):
         """
         Displays a list of configured RabbitMQ users.
         """
         self.sudo_or_dryrun('rabbitmqctl list_users')
         
+    @task
     def create_user(self, username, password):
         self.genv._rabbitmq_user = username
         self.genv._rabbitmq_password = password
@@ -139,6 +135,7 @@ class RabbitMQSatchel(ServiceSatchel):
         #sudo_or_dryrun('rabbitmqctl set_permissions -p / %(rabbitmq_user)s ".*" ".*" ".*"')
         #sudo_or_dryrun('rabbitmqctl set_permissions -p alphabuyer %(rabbitmq_user)s ".*" ".*" ".*"')
 
+    @task
     def enable_management_interface(self):
         self.sudo_or_dryrun('rabbitmq-plugins enable rabbitmq_management')
         self.sudo_or_dryrun('service rabbitmq-server restart')
@@ -146,6 +143,7 @@ class RabbitMQSatchel(ServiceSatchel):
         print('\n    http://54.83.61.46:15672/')
         print('\nNote, the default login is guest/guest.')
     
+    @task
     def set_loopback_users(self):
         # This allows guest to login through the management interface.
         self.sudo_or_dryrun('touch /etc/rabbitmq/rabbitmq.config')
@@ -197,6 +195,7 @@ class RabbitMQSatchel(ServiceSatchel):
                     
         return params
     
+    @task
     def configure(self, last=None, current=None, site=None, **kwargs):
         
         RABBITMQ = self.name.upper()

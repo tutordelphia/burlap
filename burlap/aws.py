@@ -1,5 +1,7 @@
-from burlap.constants import *
+
 from burlap import Satchel, ServiceSatchel
+from burlap.constants import *
+from burlap.decorators import task
 
 class EC2MonitorSatchel(Satchel):
     """
@@ -9,14 +11,6 @@ class EC2MonitorSatchel(Satchel):
     """
     
     name = 'ec2monitor'
-
-    tasks = (
-        'configure',
-        'install',
-        'uninstall',
-        'verify',
-        'check',
-    )
     
     def set_defaults(self):
         self.env.installed = True
@@ -62,14 +56,17 @@ class EC2MonitorSatchel(Satchel):
     def _get_check_command(self):
         return 'cd {install_path}; export AWS_CREDENTIAL_FILE={awscreds_install_path}; ./mon-put-instance-data.pl {command_options}'
     
+    @task
     def verify(self):
         r = self._get_renderer(verify=True)
         r.run(self._get_check_command())
-        
+    
+    @task
     def check(self):
         r = self._get_renderer(verify=False)
         r.run(self._get_check_command())
     
+    @task
     def install(self):
         r = self._get_renderer()
         r.sudo('apt-get install --yes unzip libwww-perl libdatetime-perl')
@@ -86,10 +83,12 @@ class EC2MonitorSatchel(Satchel):
                 command=self._get_check_command().format(**r.env)
             ))
     
+    @task
     def uninstall(self):
         #todo
         pass
     
+    @task
     def configure(self):
         """
         Executed when your settings have changed since the last deployment.
@@ -99,4 +98,4 @@ class EC2MonitorSatchel(Satchel):
 
     configure.deploy_before = ['packager', 'user']
                 
-EC2MonitorSatchel()
+ec2monitor = EC2MonitorSatchel()

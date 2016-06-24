@@ -15,8 +15,9 @@ from burlap.files import is_link
 from burlap.system import UnsupportedFamily, distrib_family, distrib_id, distrib_release
 from burlap.utils import run_as_root
 
-from burlap.constants import *
 from burlap import Satchel, ServiceSatchel
+from burlap.constants import *
+from burlap.decorators import task
 
 #TODO:deprecated, removed
 ignore_keys = [
@@ -223,31 +224,16 @@ class ApacheSatchel(ServiceSatchel):
     
     name = 'apache'
     
-    ## Service options.
-    
-    #ignore_errors = True
-    
     post_deploy_command = 'reload'
     
-    required_system_packages = {
-        FEDORA: ['httpd'],
-        UBUNTU: ['apache2'],
-        (UBUNTU, '12.04'): ['apache2', 'libapache2-mod-wsgi'],
-        (UBUNTU, '14.04'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'],
-    }
-    
-    tasks = (
-        'configure',
-        'configure_site',
-        'install_auth_basic_user_file',
-        'install_auth_basic_user_file_all',
-        'view_error_log',
-        'install_ssl',
-        'visitors',
-        'optimize_wsgi_processes',
-        'enable_site',
-        'disable_site',
-    )
+    @property
+    def packager_system_packages(self):
+        return {
+            FEDORA: ['httpd'],
+            UBUNTU: ['apache2'],
+            (UBUNTU, '12.04'): ['apache2', 'libapache2-mod-wsgi'],
+            (UBUNTU, '14.04'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'],
+        }
     
     def set_defaults(self):
         
@@ -418,9 +404,11 @@ class ApacheSatchel(ServiceSatchel):
             self.set_apache_specifics()
         return self.genv._apache_settings
     
+    @task
     def enable_site(self, name):
         self.sudo_or_dryrun('a2ensite %s' % name)
         
+    @task
     def disable_site(self, name):
         self.sudo_or_dryrun('a2dissite %s' % name)
     
@@ -448,6 +436,7 @@ class ApacheSatchel(ServiceSatchel):
     
         return apache_specifics
     
+    @task
     def optimize_wsgi_processes(self):
         """
         Based on the number of sites per server and the number of resources on the server,
@@ -468,6 +457,7 @@ class ApacheSatchel(ServiceSatchel):
         #(16/x)*(16/8) = y
         #(16*16)/(num_sites*8) = y
         
+    @task
     def visitors(self, force=0):
         """
         Generates an Apache access report using the Visitors command line tool.
@@ -525,6 +515,7 @@ class ApacheSatchel(ServiceSatchel):
             remote_cert_file = os.path.join(self.genv.apache_ssl_dir, cert_file_template % self.genv)
             yield cert_type, local_cert_file, remote_cert_file
     
+    @task
     def install_ssl(self, site=ALL):
         from burlap.common import iter_sites
         verbose = self.verbose
@@ -554,6 +545,7 @@ class ApacheSatchel(ServiceSatchel):
         self.sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_ssl_dir)s' % self.genv)
         self.sudo_or_dryrun('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s' % self.genv)
     
+    @task
     def install_auth_basic_user_file(self, site=None):
         """
         Installs users for basic httpd auth.
@@ -583,10 +575,12 @@ class ApacheSatchel(ServiceSatchel):
                 else:
                     self.sudo_or_dryrun('htpasswd -b -c %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % self.genv)
     
+    @task
     def install_auth_basic_user_file_all(self):
         self.get_apache_settings()
         self.install_auth_basic_user_file(site='all')
     
+    @task
     def view_error_log(self):
         self.run_or_dryrun('tail -f %(apache_error_log)s' % self.genv)
     
@@ -603,6 +597,7 @@ class ApacheSatchel(ServiceSatchel):
         data['available_sites_by_host'] = self.genv.available_sites_by_host
         return data
 
+    @task
     def configure_site(self, full=1, site=None, delete_old=0):
         """
         Configures Apache to host one or more websites.
@@ -699,6 +694,7 @@ class ApacheSatchel(ServiceSatchel):
     
         #restart()#break apache? run separately?
 
+    @task
     def configure(self):
             
         self.get_apache_settings()
@@ -713,11 +709,12 @@ class ApacheModEvasiveSatchel(Satchel):
     
     name = 'apachemodevasive'
     
-    required_system_packages = {
-        (UBUNTU, '12.04'): ['libapache2-mod-evasive'],
-        (UBUNTU, '14.04'): ['libapache2-mod-evasive'],
-    }
-    
+    @property
+    def packager_system_packages(self):
+        return {
+            (UBUNTU, '12.04'): ['libapache2-mod-evasive'],
+            (UBUNTU, '14.04'): ['libapache2-mod-evasive'],
+        }
         
     def configure():
         self.get_apache_settings()
@@ -737,26 +734,29 @@ class ApacheModRPAFSatchel(Satchel):
     
     name = 'apachemodrpaf'
     
-    required_system_packages = {
-        (UBUNTU, '12.04'): ['libapache2-mod-rpaf'],
-        (UBUNTU, '14.04'): ['libapache2-mod-rpaf'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            (UBUNTU, '12.04'): ['libapache2-mod-rpaf'],
+            (UBUNTU, '14.04'): ['libapache2-mod-rpaf'],
+        }
     
     def configure():
         self.get_apache_settings()
         self.genv.apache_mods_enabled.append('rpaf')
         
-    
     configure.deploy_before = ['apache']
     
 class ApacheModSecurity(Satchel):
     
     name = 'apachemodsecurity'
     
-    required_system_packages = {
-        (UBUNTU, '12.04'): ['libapache2-modsecurity'],
-        (UBUNTU, '14.04'): ['libapache2-modsecurity'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            (UBUNTU, '12.04'): ['libapache2-modsecurity'],
+            (UBUNTU, '14.04'): ['libapache2-modsecurity'],
+        }
     
     def configure():
         self.get_apache_settings()
@@ -789,10 +789,12 @@ class ApacheVisitors(Satchel):
     
     name = 'apachevisitors'
     
-    required_system_packages = {
-        (UBUNTU, '12.04'): ['visitors'],
-        (UBUNTU, '14.04'): ['visitors'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            (UBUNTU, '12.04'): ['visitors'],
+            (UBUNTU, '14.04'): ['visitors'],
+        }
     
 class ApacheMediaSatchel(Satchel):
     

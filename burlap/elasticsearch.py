@@ -1,24 +1,11 @@
 from __future__ import print_function
 
-from burlap import common
-from burlap.common import (
-    ServiceSatchel
-)
+from burlap import ServiceSatchel
+from burlap.constants import *
 
 class ElasticSearchSatchel(ServiceSatchel):
     
     name = 'elasticsearch'
-    
-    ## Service options.
-    
-    #ignore_errors = True
-    
-    # {action: {os_version_distro: command}}
-#     commands = env.networkmanager_service_commands
-    
-    required_system_packages = {
-        common.UBUNTU: ['elasticsearch'],
-    }
     
     def set_defaults(self):
     
@@ -26,26 +13,33 @@ class ElasticSearchSatchel(ServiceSatchel):
         self.env.script_engine_groovy_inline_search = False
     
         self.env.service_commands = {
-            common.START:{
-                common.UBUNTU: 'service elasticsearch start',
+            START:{
+                UBUNTU: 'service elasticsearch start',
             },
-            common.STOP:{
-                common.UBUNTU: 'service elasticsearch stop',
+            STOP:{
+                UBUNTU: 'service elasticsearch stop',
             },
-            common.DISABLE:{
-                common.UBUNTU: 'chkconfig elasticsearch off',
-                (common.UBUNTU, '14.04'): 'update-rc.d -f elasticsearch remove',
+            DISABLE:{
+                UBUNTU: 'chkconfig elasticsearch off',
+                (UBUNTU, '14.04'): 'update-rc.d -f elasticsearch remove',
             },
-            common.ENABLE:{
-                common.UBUNTU: 'chkconfig elasticsearch on',
-                (common.UBUNTU, '14.04'): 'update-rc.d elasticsearch defaults',
+            ENABLE:{
+                UBUNTU: 'chkconfig elasticsearch on',
+                (UBUNTU, '14.04'): 'update-rc.d elasticsearch defaults',
             },
-            common.RESTART:{
-                common.UBUNTU: 'service elasticsearch restart',
+            RESTART:{
+                UBUNTU: 'service elasticsearch restart',
             },
-            common.STATUS:{
-                common.UBUNTU: 'service elasticsearch status',
+            STATUS:{
+                UBUNTU: 'service elasticsearch status',
             },
+        }
+
+    @property
+    def packager_system_packages(self):
+        return {
+            DEBIAN: ['elasticsearch'],
+            UBUNTU: ['elasticsearch'],
         }
         
     def configure(self):
@@ -90,8 +84,7 @@ class ElasticSearchSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-        
     
     configure.deploy_before = ['packager', 'user', 'cron']
 
-ElasticSearchSatchel()
+elasticsearch = ElasticSearchSatchel()

@@ -31,6 +31,7 @@ from burlap.common import (
     set_site,
 )
 from burlap.decorators import task_or_dryrun
+from burlap.decorators import task
 
 if 'dj_settings_loaded' not in env:
     env.dj_settings_loaded = True
@@ -284,7 +285,7 @@ def manage_all(*args, **kwargs):
                 continue
             
         manage(*args, **kwargs)
-    
+
 @task_or_dryrun
 def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_databases=None, database=None, migrate_apps='', delete_ghosts=1):
     """
@@ -809,10 +810,6 @@ class DjangoMediaSatchel(Satchel):
     
     name = 'djangomedia'
     
-    tasks = (
-        'configure',
-    )
-    
     def set_defaults(self):
         self.env.media_dirs = ['static']
         self.env.manage_dir = 'src'
@@ -829,20 +826,11 @@ class DjangoMediaSatchel(Satchel):
             print('latest_timestamp:', latest_timestamp)
         return latest_timestamp
     
+    @task
     def configure(self, *args, **kwargs):
         self.local_or_dryrun('cd %(manage_dir)s; ./manage collectstatic --noinput' % self.lenv)
     
     configure.deploy_before = ['packager', 'apache2', 'pip', 'user']
-
-# common.manifest_recorder[DJANGOMEDIA] = record_manifest_media
-# common.manifest_recorder[DJANGOMIGRATIONS] = record_manifest_migrations
-
-# DJANGOSYNCDB = 'DJANGOSYNCDB'
-# DJANGOMIGRATIONS = 'DJANGOMIGRATIONS'
-
-# common.add_deployer(DJANGOMIGRATIONS, 'dj.update_all_from_diff',
-#     before=['packager', 'apache', 'apache2', 'pip', 'tarball', 'djangomedia'],
-#     takes_diff=True)
 
 DjangoMigrations()
 DjangoMediaSatchel()

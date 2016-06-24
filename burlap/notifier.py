@@ -3,16 +3,13 @@ Helper functions for sending a notification email after each deployment.
 """
 from __future__ import print_function
 
-from burlap.constants import *
 from burlap import Satchel
+from burlap.constants import *
+from burlap.decorators import task
 
 class DeploymentNotifierSatchel(Satchel):
     
     name = 'deploymentnotifier'
-    
-    tasks = (
-        'notify_post_deployment',
-    )
     
     def set_defaults(self):
     
@@ -53,6 +50,7 @@ class DeploymentNotifierSatchel(Satchel):
         s.sendmail(from_email, recipient_list, msg.as_string())
         s.quit()
 
+    @task
     def notify_post_deployment(self, subject=None, message=None, force=0):
         from burlap import common
         force = int(force)
@@ -74,10 +72,6 @@ class LoginNotifierSatchel(Satchel):
     
     name = 'loginnotifier'
     
-    tasks = (
-        'configure',
-    )
-    
     def set_defaults(self):
         self.env.sysadmin_email = 'root@localhost'
         self.env.script_template = 'notifier/loginnotifier.template.sh'
@@ -85,7 +79,8 @@ class LoginNotifierSatchel(Satchel):
         self.env.script_user = 'root'
         self.env.script_group = 'root'
         self.env.script_chmod = 'u+rx,g+rx'
-        
+    
+    @task
     def configure(self):
         
         if self.env.enabled:
@@ -102,7 +97,6 @@ class LoginNotifierSatchel(Satchel):
             
         else:
             self.sudo_or_dryrun('rm {script_installation_path}')
-            
     
     configure.deploy_before = ['packager', 'user']
 
