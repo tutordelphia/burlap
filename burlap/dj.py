@@ -803,7 +803,16 @@ class DjangoMigrations(Satchel):
             for app in migrate_apps:
                 update_all(apps=app, ignore_errors=1)
     
-    configure.deploy_before = ['packager', 'apache', 'apache2', 'pip', 'tarball', 'djangomedia']
+    configure.deploy_before = [
+        'packager',
+        'apache',
+        'apache2',
+        'pip',
+        'tarball',
+        'djangomedia',
+        'postgresql',
+        'mysql',
+    ]
     #configure.takes_diff = True
         
 class DjangoMediaSatchel(Satchel):

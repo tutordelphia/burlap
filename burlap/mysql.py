@@ -250,7 +250,7 @@ class MySQLSatchel(DatabaseSatchel):
             r.env.remote_dump_fn = '/tmp/' + os.path.split(r.env.dump_fn)[-1]
         
         if not prep_only:
-            if int(force_upload) or (not r.genv.is_local and not r.files_exists(r.env.remote_dump_fn)):
+            if int(force_upload) or (not r.genv.is_local and not r.file_exists(r.env.remote_dump_fn)):
                 if not self.dryrun:
                     assert os.path.isfile(r.env.dump_fn), \
                         missing_local_dump_error
@@ -310,7 +310,7 @@ class MySQLSatchel(DatabaseSatchel):
         self.set_root_password()
         
         if r.env.custom_mycnf:
-            fn = r.render_to_file('my.template.cnf', extra=_env)
+            fn = r.render_to_file('mysql/my.template.cnf', extra=r.env)
             r.put(
                 local_path=fn,
                 remote_path=r.env.conf,

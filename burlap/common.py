@@ -380,6 +380,16 @@ class Renderer(object):
             
             return _wrap
             
+        def put_wrap2(func):
+            # For non-command functions, just pass-through.
+            
+            def _wrap(*args, **kwargs):
+                kwargs['local_path'] = self.format(kwargs['local_path'])
+                kwargs['remote_path'] = self.format(kwargs['remote_path'])
+                return func(*args, **kwargs)
+            
+            return _wrap
+            
         ret = getattr(self.obj, attrname)
         
         # If we're calling a command executor, wrap it so that it automatically formats
@@ -392,11 +402,12 @@ class Renderer(object):
         or attrname.startswith('pc') \
         or attrname.startswith('sudo'):
             ret = wrap(ret)
-        elif attrname.startswith('put') \
-        or attrname.startswith('append') \
+        elif attrname.startswith('append') \
         or attrname.startswith('reboot') \
         or attrname.startswith('sed'):
             ret = wrap2(ret)
+        elif attrname.startswith('put'):
+            ret = put_wrap2(ret)
             
         return ret
         
@@ -1647,9 +1658,9 @@ def find_template(template):
                 print('Using template: %s' % (fqfn,))
             final_fqfn = fqfn
             break
-        else:
-            if verbose:
-                print('Template not found: %s' % (fqfn,))
+#         else:
+#             if verbose:
+#                 print('Template not found: %s' % (fqfn,))
     return final_fqfn
 
 def get_template_contents(template):

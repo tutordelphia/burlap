@@ -351,7 +351,7 @@ class DatabaseSatchel(ServiceSatchel):
         
     @task
     @runs_once
-    def dump(self, dest_dir=None, to_local=0, from_local=0, archive=0, dump_fn=None, name=None, site=None, use_sudo=0):
+    def dump(self, dest_dir=None, to_local=1, from_local=0, archive=0, dump_fn=None, name=None, site=None, use_sudo=0):
         """
         Exports the target database to a single transportable file on the localhost,
         appropriate for loading using load().
@@ -392,8 +392,7 @@ class DatabaseSatchel(ServiceSatchel):
         if not from_local and to_local:
             r.local('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {user}@{host_string}:{dump_fn} {dump_fn}')
             
-        # Delete the snapshot file on the remote system.
-        if not r.genv.is_local:
+            # Delete the snapshot file on the remote system.
             r.sudo('rm {dump_fn}')
         
         # Move the database snapshot to an archive directory.

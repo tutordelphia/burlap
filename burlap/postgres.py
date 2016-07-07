@@ -165,6 +165,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         self.env.port = 5432
         self.env.pgass_path = '~/.pgpass'
         self.env.pgpass_chmod = 600
+        self.env.default_version = '9.3'
         self.env.version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
         self.env.engine = 'postgresql' # 'postgresql' | 'postgis'
 
@@ -319,7 +320,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
             r.env.remote_dump_fn = '/tmp/' + os.path.split(r.env.dump_fn)[-1]
         
         if not prep_only:
-            if int(force_upload) or (not r.genv.is_local and not r.files_exists(r.env.remote_dump_fn)):
+            if int(force_upload) or (not r.genv.is_local and not r.file_exists(r.env.remote_dump_fn)):
                 if not self.dryrun:
                     assert os.path.isfile(r.env.dump_fn), \
                         missing_local_dump_error
@@ -372,15 +373,17 @@ class PostgreSQLSatchel(DatabaseSatchel):
 
         self.install_packages()
 
+        r.env.pg_version = r.run('echo {version_command}') or r.env.default_version
+        
 #         r.pc('Backing up PostgreSQL configuration files...')
-        r.sudo('cp /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf.$(date +%%Y%%m%%d%%H%%M).bak')
-        r.sudo('cp /etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf /etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf.$(date +%%Y%%m%%d%%H%%M).bak')
+        r.sudo('cp /etc/postgresql/{pg_version}/main/postgresql.conf /etc/postgresql/{pg_version}/main/postgresql.conf.$(date +%Y%m%d%H%M).bak')
+        r.sudo('cp /etc/postgresql/{pg_version}/main/pg_hba.conf /etc/postgresql/{pg_version}/main/pg_hba.conf.$(date +%Y%m%d%H%M).bak')
         
         r.pc('Allowing remote connections...')
         fn = self.render_to_file('postgresql/pg_hba.template.conf')
         r.put(
             local_path=fn,
-            remote_path='/etc/postgresql/%(db_postgresql_version_command)s/main/pg_hba.conf' % env,
+            remote_path='/etc/postgresql/{pg_version}/main/pg_hba.conf',
             use_sudo=True,
         )
         
@@ -395,6 +398,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
             before='#autovacuum = on',
             after='/autovacuum = on',
             backup='',
+            use_sudo=True,
         )
         #r.sudo('sed -i "s/#track_counts = on/track_counts = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf')
         r.sed(
@@ -402,6 +406,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
             before='#track_counts = on',
             after='track_counts = on',
             backup='',
+            use_sudo=True,
         )
         
         # Set UTF-8 as the default database encoding.
