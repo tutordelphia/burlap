@@ -897,20 +897,15 @@ class PIPSatchel(Satchel):
     @property
     def packager_system_packages(self):
         return {
-            FEDORA: [
-                #'python-pip'#obsolete?
-            ],
-            (UBUNTU, '12.04'): [
+            UBUNTU: [
                 #'python-pip',#obsolete in 14.04?
                 #'python-virtualenv',#obsolete in 14.04?
-                'gcc', 'python-dev', 'build-essential'
-            ],
-            (UBUNTU, '14.04'): [
-                #'python-pip',#obsolete in 14.04?
-                #'python-virtualenv',#obsolete in 14.04?
-                'gcc', 'python-dev', 'build-essential'
+                'gcc', 'python-dev', 'build-essential', 'python-pip',
             ],
         }
+        
+    def set_defaults(self):
+        pass
 
     def record_manifest(self):
         """

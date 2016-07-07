@@ -1,3 +1,10 @@
+"""
+Various debug tasks.
+
+Note, this is a special module, in that all tasks defined here are auto-imported
+into the top-level namespace. That means you access them by calling them directly,
+not through "debug."
+"""
 from __future__ import print_function
 
 import re
@@ -160,6 +167,7 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
         print('Total logical storage: %s GB' % total_logical_storage_gb)
         print('Types: %s' % list_to_str_or_unknown(drive_transports))
 
+@task_or_dryrun
 def list_hosts():
     print('hosts:', env.hosts)
 

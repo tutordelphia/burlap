@@ -15,6 +15,10 @@ class PackagerSatchel(Satchel):
     def set_defaults(self):
         self.env.apt_requirments_fn = 'apt-requirements.txt'
         self.env.yum_requirments_fn = 'yum-requirements.txt'
+        self.env.initial_upgrade = True
+        self.env.apt_packages = None
+        self.env.yum_packages = None
+        self.env.do_reboots = True
     
     def record_manifest(self):
         """
@@ -53,7 +57,7 @@ class PackagerSatchel(Satchel):
             return []
         assert os.path.isfile(apt_req_fqfn)
         
-        lines = []
+        lines = list(self.env.apt_packages or [])
         for _ in open(apt_req_fqfn).readlines():
             if _.strip() and not _.strip().startswith('#') \
             and (not package_name or _.strip() == package_name):
@@ -61,18 +65,13 @@ class PackagerSatchel(Satchel):
         
         if list_only:
             return lines
-            
-#         fd, tmp_fn = tempfile.mkstemp()
-#         fout = open(tmp_fn, 'w')
-#         fout.write('\n'.join(lines))
-#         fout.close()
+        
         tmp_fn = r.write_temp_file('\n'.join(lines))
         apt_req_fqfn = tmp_fn
         
         if not self.genv.is_local:
             r.put(local_path=tmp_fn)
             apt_req_fqfn = self.genv.put_remote_path
-    #    if int(update):
         r.sudo('apt-get update -y --fix-missing')
         r.sudo('apt-get install -y `cat "%s" | tr "\\n" " "`' % apt_req_fqfn)
 
@@ -128,32 +127,28 @@ class PackagerSatchel(Satchel):
         """
         Updates/upgrades all system packages.
         """
+        r = self.local_renderer
         packager = self.packager
         if packager == APT:
-            return self.refresh_apt(*args, **kwargs)
+            r.sudo('apt-get update -y --fix-missing')
         elif package == YUM:
             raise NotImplementedError
             #return upgrade_yum(*args, **kwargs)
         else:
             raise Exception('Unknown packager: %s' % (packager,))
-    
+
     @task
-    def refresh_apt(self):
-        r = self.local_renderer
-        r.sudo('apt-get update -y --fix-missing')
-    
-    @task
-    def upgrade(self, *args, **kwargs):
+    def upgrade(self):
         """
         Updates/upgrades all system packages.
         """
+        r = self.local_renderer
         packager = self.packager
         if packager == APT:
-            #return self.upgrade_apt(*args, **kwargs)
-            return self.sudo_or_dryrun('apt-get upgrade -y')
+            r.sudo('apt-get upgrade -y')
+            r.sudo('apt-get dist-upgrade -y')
         elif package == YUM:
             raise NotImplementedError
-            #return upgrade_yum(*args, **kwargs)
         else:
             raise Exception('Unknown packager: %s' % (packager,))
 
@@ -171,14 +166,19 @@ class PackagerSatchel(Satchel):
             
             if service and satchel_name != service:
                 continue
-                
-            try:
+            
+            if hasattr(satchel, 'packager_repositories'):
                 repos = satchel.packager_repositories
                 for repo_type, repo_lst in repos.items():
+                    assert isinstance(repo_lst, (tuple, list)), \
+                        'Invalid repo list for satchel %s.' % satchel_name
+                    for _name in repo_lst:
+                        # Can be string (for APT) or tuple of strings (for APT SOURCE)
+                        if isinstance(_name, basestring):
+                            _name = _name.strip()
+                            assert _name, 'Invalid repo name for satchel %s.' % satchel_name
                     repositories.setdefault(repo_type, [])
                     repositories[repo_type].extend(repo_lst)
-            except AttributeError:
-                pass
                     
         for repo_type in repositories:
             repositories[repo_type].sort()
@@ -191,6 +191,7 @@ class PackagerSatchel(Satchel):
         repos = self.get_repositories(*args, **kwargs)
         
         # Apt sources.
+        r.pc('Installing apt sources.')
         apt_sources = repos.get(APT_SOURCE, [])
         for line, fn in apt_sources:
             r.env.apt_source = line
@@ -198,12 +199,19 @@ class PackagerSatchel(Satchel):
             r.sudo("sh -c 'echo \"{apt_source}\" > {apt_fn}'")
         
         # Apt keys.
+        r.pc('Installing apt keys.')
         apt_keys = repos.get(APT_KEY, [])
-        for key_server, key_value in apt_keys:
-            r.env.apt_key_server = key_server
-            r.env.apt_key_value = key_value
-            r.sudo("apt-key adv --keyserver {apt_key_server} --recv-key {apt_key_value}")
+        for parts in apt_keys:
+            if isinstance(parts, tuple):
+                r.env.apt_key_server = key_server
+                r.env.apt_key_value = key_value
+                r.sudo("apt-key adv --keyserver {apt_key_server} --recv-key {apt_key_value}")
+            else:
+                assert isinstance(parts, basestring)
+                r.env.apt_key_url = parts
+                r.sudo('wget {apt_key_url} -O - | apt-key add -')
         
+        r.pc('Installing repositories.')
         for repo_type in [APT]:
             if repo_type not in repos:
                 continue
@@ -211,7 +219,7 @@ class PackagerSatchel(Satchel):
             if repo_type is APT:
                 for repo_name in repo_lst:
                     r.env.repo_name = repo_name
-                    r.sudo('add-apt-repository {repo_name}')
+                    r.sudo('add-apt-repository -y {repo_name}')
                 r.sudo('apt-get update -y')
             else:
                 raise NotImplementedError, 'Unsupported repository type: %s' % repo_type
@@ -293,6 +301,34 @@ class PackagerSatchel(Satchel):
                 print('package:', package)
         return packages
     
+    def get_locale(self):
+        version = self.os_version
+        all_locale_dicts = {}
+        for satchel_name, satchel in self.all_other_enabled_satchels.items():
+#             print('satchel_name:',satchel_name)
+            try:
+                locale_dict = satchel.packager_locale.get(version.distro, {})
+#                 print('locale_dict:',locale_dict)
+                for _k, _v in locale_dict.items():
+                    assert all_locale_dicts.get(_k, _v) == _v
+                    all_locale_dicts[_k] = _v
+            except AttributeError:
+                pass
+        return all_locale_dicts
+    
+    @task
+    def update_locale(self):
+        locale_dict = self.get_locale()
+        r = self.local_renderer
+        packager = self.packager
+        if packager == APT:
+            r.env.locale_string = ' '.join('%s=%s' % (_k, _v) for _k, _v in locale_dict.items())
+            r.sudo('update-locale {locale_string}')
+        elif package == YUM:
+            raise NotImplementedError
+        else:
+            raise Exception('Unknown packager: %s' % (packager,))
+    
     @task
     def install_required(self, type=None, service=None, list_only=0, **kwargs):
         """
@@ -328,12 +364,26 @@ class PackagerSatchel(Satchel):
 
     @task
     def configure(self, **kwargs):
+        
+        lm = self.last_manifest
+        
+        if isinstance(lm, list):
+            lm = {'required_packages': lm}
+        #lm_passwords = lm.get('passwords', {})
+        
         enabled_services = map(str.upper, self.genv.services)
         #for satchel_name, satchel in self.all_satchels.iteritems():
         for satchel_name, satchel in self.all_other_enabled_satchels.items():
             if hasattr(satchel, 'packager_pre_configure'):
                 satchel.packager_pre_configure()
+                
         self.refresh()
+        
+        if lm.get('initial_upgrade') is None and self.env.initial_upgrade:
+            self.upgrade()
+            if self.env.do_reboots:
+                self.reboot(wait=300, timeout=60)
+            
         self.install_repositories(**kwargs)
         self.install_required(type=SYSTEM, **kwargs)
         self.install_custom(**kwargs)

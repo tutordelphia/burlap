@@ -7,12 +7,17 @@ This module provides tools for creating PostgreSQL users and databases.
 """
 from __future__ import print_function
 
+import os
+
 from fabric.api import cd, hide, sudo, settings, runs_once
 
 from burlap import Satchel
 from burlap.constants import *
 from burlap.db import DatabaseSatchel
 from burlap.decorators import task
+
+POSTGIS = 'postgis'
+POSTGRESQL = 'postgresql'
 
 def _run_as_pg(command):
     """
@@ -152,7 +157,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
     def set_defaults(self):
         super(PostgreSQLSatchel, self).set_defaults()
         
-        self.env.dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s > %(db_dump_fn)s'
+        self.env.dump_command = 'time pg_dump -c -U {db_user} --blobs --format=c --schema=public --host={db_host} {db_name} > {dump_fn}'
         self.env.createlangs = ['plpgsql'] # plpythonu
         self.env.postgres_user = 'postgres'
         self.env.encoding = 'UTF8'
@@ -161,6 +166,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         self.env.pgass_path = '~/.pgpass'
         self.env.pgpass_chmod = 600
         self.env.version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
+        self.env.engine = 'postgresql' # 'postgresql' | 'postgis'
 
         self.env.service_commands = {
             START:{
@@ -184,82 +190,87 @@ class PostgreSQLSatchel(DatabaseSatchel):
         }
 
     @task
-    def set_root_login(self, db_type=None, db_host=None, e=None):
-        """
-        Looks up the root login for the given database on the given host and sets
-        it to environment variables. 
-        """
-        
-        if e:
-            _env = e
-            _env = type(_env)(_env)
-        else:
-            _env = env
-        
-        # Check the legacy password location.
-        if db_type is None:
-            db_type = 'postgresql'
-        
-        # Check the new password location.
-        db_host = db_host or _env.db_host
-        key = '%s-%s' % (db_type, db_host)
-        if key in _env.db_root_logins:
-            data = _env.db_root_logins[key]
-            if 'username' in data:
-                _env.db_root_user = data['username']
-            if 'password' in data:
-                _env.db_root_password = data['password']
-            
-        return _env
-
-    @task
-    def write_pgpass(self, name=None, use_sudo=0, verbose=1, commands_only=0):
+    def write_pgpass(self, name=None, use_sudo=0):
         """
         Write the file used to store login credentials for PostgreSQL.
         """
-        #from burlap.dj import set_db
-        from burlap.file import appendline
+        
+        r = self.database_renderer(name)
         
         use_sudo = int(use_sudo)
-        commands_only = int(commands_only)
         
-#         if name:
-#             set_db(name=name)
+        r.run('touch {pgass_path}')
+        r.sudo('chmod {pgpass_chmod} {pgass_path}')
         
-        cmds = []
-        cmds.append(
-            'touch {db_postgresql_pgass_path}'.format(
-                db_postgresql_pgass_path=env.db_postgresql_pgass_path))
-        cmds.append(
-            'chmod {db_postgresql_pgpass_chmod} {db_postgresql_pgass_path}'.format(
-                db_postgresql_pgass_path=env.db_postgresql_pgass_path,
-                db_postgresql_pgpass_chmod=env.db_postgresql_pgpass_chmod))
-        
-        pgpass_kwargs = dict(
-            db_host=env.db_host,
-            db_port=env.db_postgresql_port,
-            db_user=env.db_user,
-            db_password=env.db_password,
-        )
-        pgpass_line = '{db_host}:{db_port}:*:{db_user}:{db_password}'\
-            .format(**pgpass_kwargs)
-        cmds.extend(appendline(
-            fqfn=env.db_postgresql_pgass_path,
-            line=pgpass_line,
-            use_sudo=use_sudo,
-            commands_only=1,
-            verbose=0))
-            
-        if not commands_only:
-            for cmd in cmds:
-                if self.verbose:
-                    print(cmd)
-                if use_sudo:
-                    sudo_or_dryrun(cmd)
-                else:
-                    run_or_dryrun(cmd)
+        r.append(
+            '{db_host}:{port}:*:{db_user}:{db_password}',
+            r.env.pgpass_path,
+            use_sudo=use_sudo)
                     
         return cmds
+
+    @task
+    def drop_views(self, name=None, site=None):
+        """
+        Drops all views.
+        """
+        raise NotImplementedError
+    #        SELECT 'DROP VIEW ' || table_name || ';'
+    #        FROM information_schema.views
+    #        WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+    #        AND table_name !~ '^pg_';
+            # http://stackoverflow.com/questions/13643831/drop-all-views-postgresql
+    #        DO$$
+    #        BEGIN
+    #        
+    #        EXECUTE (
+    #           SELECT string_agg('DROP VIEW ' || t.oid::regclass || ';', ' ')  -- CASCADE?
+    #           FROM   pg_class t
+    #           JOIN   pg_namespace n ON n.oid = t.relnamespace
+    #           WHERE  t.relkind = 'v'
+    #           AND    n.nspname = 'my_messed_up_schema'
+    #           );
+    #        
+    #        END
+    #        $$
+
+    @task
+    def exists(self, name='default', site=None):
+        """
+        Returns true if a database with the given name exists. False otherwise.
+        """
+            
+        r = self.database_renderer(name=name, site=site)
+            
+#         kwargs = dict(
+#             db_user=env.db_root_user,
+#             db_password=env.db_root_password,
+#             db_host=env.db_host,
+#             db_name=env.db_name,
+#         )
+#         env.update(kwargs)
+        
+        # Set pgpass file.
+#         if env.db_password:
+#             self.write_pgpass(verbose=verbose, name=name)
+        
+#        cmd = ('psql --username={db_user} --no-password -l '\
+#            '--host={db_host} --dbname={db_name}'\
+#            '| grep {db_name} | wc -l').format(**env)
+
+        ret = None
+        with settings(warn_only=True):
+            ret = r.run('psql --username={db_user} --host={db_host} -l '\
+            '| grep {db_name} | wc -l')
+            if ret is not None:
+                if 'password authentication failed' in ret:
+                    ret = False
+                else:
+                    ret = int(ret) >= 1
+              
+        if ret is not None:
+            print('%s database on site %s %s exist' % (name, env.SITE, 'DOES' if ret else 'DOES NOT'))
+            return ret
 
     @task
     def create(self, name, **kargs):
@@ -280,7 +291,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
 
     @task
     @runs_once
-    def load(self, dump_fn='', prep_only=0, force_upload=0, from_local=0):
+    def load(self, dump_fn='', prep_only=0, force_upload=0, from_local=0, name=None, site=None, dest_dir=None):
         """
         Restores a database snapshot onto the target database server.
         
@@ -302,50 +313,51 @@ class PostgreSQLSatchel(DatabaseSatchel):
         )
         
         # Copy snapshot file to target.
-        if env.is_local:
-            env.db_remote_dump_fn = db_dump_fn
+        if r.genv.is_local:
+            r.env.remote_dump_fn = dump_fn
         else:
-            env.db_remote_dump_fn = '/tmp/'+os.path.split(env.db_dump_fn)[-1]
+            r.env.remote_dump_fn = '/tmp/' + os.path.split(r.env.dump_fn)[-1]
         
         if not prep_only:
-            if int(force_upload) or (not self.dryrun and not env.is_local and not files.exists(env.db_remote_dump_fn)):
-                assert os.path.isfile(env.db_dump_fn), \
-                    missing_local_dump_error
+            if int(force_upload) or (not r.genv.is_local and not r.files_exists(r.env.remote_dump_fn)):
+                if not self.dryrun:
+                    assert os.path.isfile(r.env.dump_fn), \
+                        missing_local_dump_error
                 if self.verbose:
                     print('Uploading database snapshot...')
-                put_or_dryrun(local_path=env.db_dump_fn, remote_path=env.db_remote_dump_fn)
+                r.put(
+                    local_path=r.env.dump_fn,
+                    remote_path=r.env.remote_dump_fn)
         
-        if env.is_local and not prep_only and not self.dryrun:
+        if r.genv.is_local and not prep_only and not self.dryrun:
             assert os.path.isfile(r.env.dump_fn), \
                 missing_local_dump_error
-            
-        self.set_root_login()
         
         with settings(warn_only=True):
-            r.run('dropdb --user={db_postgresql_postgres_user} {db_name}')
+            r.run('dropdb --user={db_root_username} {db_name}')
                 
-        r.run('psql --user={db_postgresql_postgres_user} -c "CREATE DATABASE {db_name};"')
+        r.run('psql --user={db_root_username} -c "CREATE DATABASE {db_name};"')
         
         with settings(warn_only=True):
             
-            if 'postgis' in env.db_engine:
-                r.run('psql --user={postgres_user} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis;"')
-                r.run('psql --user={postgres_user} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis_topology;"')
+            if r.env.engine == POSTGIS:
+                r.run('psql --user={db_root_username} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis;"')
+                r.run('psql --user={db_root_username} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis_topology;"')
             
-            r.run('psql --user={postgres_user} -c "DROP OWNED BY {db_user} CASCADE;"')
+            r.run('psql --user={db_root_username} -c "DROP OWNED BY {db_user} CASCADE;"')
             
-        r.run('psql --user=%(db_postgresql_postgres_user)s -c "DROP USER IF EXISTS %(db_user)s; '
-            'CREATE USER %(db_user)s WITH PASSWORD \'%(db_password)s\'; '
-            'GRANT ALL PRIVILEGES ON DATABASE %(db_name)s to %(db_user)s;"')
-        for createlang in env.db_postgresql_createlangs:
+        r.run('psql --user={db_root_username} -c "DROP USER IF EXISTS {db_user}; '
+            'CREATE USER {db_user} WITH PASSWORD \'{db_password}\'; '
+            'GRANT ALL PRIVILEGES ON DATABASE {db_name} to {db_user};"')
+        for createlang in r.env.createlangs:
             r.env.createlang = createlang
-            r.run('createlang -U {postgres_user} {createlang} {db_name} || true')
+            r.run('createlang -U {db_root_username} {createlang} {db_name} || true')
         
         if not prep_only:
             if r.env.load_command:
                 r.run(r.env.load_command)
             else:
-                r.run('pg_restore --jobs=8 -U {postgres_user} --create --dbname={db_name} {db_remote_dump_fn}')
+                r.run('pg_restore --jobs=8 -U {db_root_username} --create --dbname={db_name} {remote_dump_fn}')
 
     @task
     def configure(self, *args, **kwargs):

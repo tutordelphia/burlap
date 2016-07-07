@@ -5,11 +5,8 @@ import re
 import json
 
 from fabric.api import (
-    env,
     require,
     settings,
-    cd,
-    task,
     runs_once,
 )
 
@@ -17,27 +14,10 @@ try:
     import boto
 except ImportError:
     boto = None
-    
-from fabric.contrib import files
-from fabric.tasks import Task
 
-from burlap import common
-from burlap.common import (
-    run_or_dryrun,
-    put_or_dryrun,
-    sudo_or_dryrun,
-    local_or_dryrun,
-    get_dryrun,
-    SITE,
-    ROLE,
-)
-from burlap.decorators import task_or_dryrun
 from burlap.constants import *
 from burlap import Satchel, ServiceSatchel
 from burlap.decorators import task
-
-env.AWS_ACCESS_KEY_ID = None
-env.AWS_SECRET_ACCESS_KEY = None
 
 S3SYNC_PATH_PATTERN = r'(?:->)\s+([^\n]+)'
 
@@ -50,6 +30,7 @@ class S3Satchel(Satchel):
         self.env.sync_sets = {}
         self.env.media_postfix = ''
         self.env.sync_enabled = False
+        self.env.s3cmd_path = 's3cmd'
 
     @task
     @runs_once
@@ -74,18 +55,18 @@ class S3Satchel(Satchel):
         
         render_remote_paths()
         
-        site_data = r.genv.sites[env.SITE]
+        site_data = r.genv.sites[r.genv.SITE]
         r.env.update(site_data)
         
         rets = []
         for paths in r.env.sync_sets[sync_set]:
             is_local = paths.get('is_local', True)
-            local_path = paths['local_path'] % env
+            local_path = paths['local_path'] % r.genv
             remote_path = paths['remote_path']
             remote_path = remote_path.replace(':/', '/')
             if not remote_path.startswith('s3://'):
                 remote_path = 's3://' + remote_path
-            local_path = local_path % env
+            local_path = local_path % r.genv
             
             if is_local:
                 #local_or_dryrun('which s3sync')#, capture=True)
@@ -97,7 +78,7 @@ class S3Satchel(Satchel):
             if local_path.endswith('/') and not r.env.local_path.endswith('/'):
                 r.env.local_path = r.env.local_path + '/'
                 
-            r.env.remote_path = remote_path % env
+            r.env.remote_path = remote_path % r.genv
             
             print('Syncing %s to %s...' % (r.env.local_path, r.env.remote_path))
             
@@ -107,11 +88,11 @@ class S3Satchel(Satchel):
             else:
                 r.env.sync_cmd = 'sync'
             cmd = (
-                'export AWS_ACCESS_KEY_ID={AWS_ACCESS_KEY_ID}; '\
-                'export AWS_SECRET_ACCESS_KEY={AWS_SECRET_ACCESS_KEY}; '\
-                's3cmd {s3_sync_cmd} --progress --acl-public --guess-mime-type --no-mime-magic '\
+                'export AWS_ACCESS_KEY_ID={aws_access_key_id}; '\
+                'export AWS_SECRET_ACCESS_KEY={aws_secret_access_key}; '\
+                '{s3cmd_path} {sync_cmd} --progress --acl-public --guess-mime-type --no-mime-magic '\
                 '--delete-removed --cf-invalidate --recursive {sync_force_flag} '\
-                '{s3_local_path} {s3_remote_path}') % env
+                '{local_path} {remote_path}')
             if r.genv.is_local:
                 r.local(cmd)
             else:
@@ -167,10 +148,21 @@ class S3Satchel(Satchel):
 
     @task
     def get_or_create_bucket(self, name):
+        """
+        Gets an S3 bucket of the given name, creating one if it doesn't already exist.
+        
+        Should be called with a role, if AWS credentials are stored in role settings. e.g.
+        
+            fab local s3.get_or_create_bucket:mybucket
+        """
+        from boto.s3 import connection
         if self.dryrun:
             print('boto.connect_s3().create_bucket(%s)' % repr(name))
         else:
-            conn = boto.connect_s3()
+            conn = connection.S3Connection(
+                self.genv.aws_access_key_id,
+                self.genv.aws_secret_access_key
+            )
             bucket = conn.create_bucket(name)
             return bucket
 

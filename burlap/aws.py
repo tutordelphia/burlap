@@ -25,6 +25,8 @@ class EC2MonitorSatchel(Satchel):
             '--swap-util',
             # --verify --verbose
         ]
+        self.env.access_key_id = None
+        self.env.secret_access_key = None
         
         #r = self._get_renderer(verify=False)
         #cmd = #.format(**r.env)

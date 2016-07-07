@@ -1,6 +1,8 @@
 from __future__ import print_function
 
 import os
+import re
+import getpass
 
 from fabric.api import (
     env,
@@ -70,11 +72,22 @@ class HostSatchel(Satchel):
         self.env.default_user = None
         self.env.default_password = None
         self.env.default_key_filename = None
+        self.env.post_initrole_tasks = []
+        
+        self.env.original_user = None
+        self.env.original_key_filename = None
+        
+        self.env.login_check = False
             
 #         self.env.os_type = None # Linux/Windows/etc
 #         self.env.os_distro = None # Ubuntu/Fedora/etc
 #         self.env.os_release = None # 12.04/14.04/etc
-    
+
+    def hostname_to_ip(self, hostname):
+        r = self.local_renderer
+        r.env.hostname = hostname
+        return r._local("getent hosts {hostname} | awk '{{ print $1 }}'", capture=True) or ''
+        
     @task
     def is_present(self, host=None):
         """
@@ -89,10 +102,89 @@ class HostSatchel(Satchel):
         ret = ret.strip()
         if self.verbose:
             print('Host %s %s present.' % (r.env.host, 'IS' if bool(ret) else 'IS NOT'))
-        return bool(ret)
+        ip = ret
+        ret = bool(ret)
+        if not ret:
+            return False
+        
+        r.env.ip = ip
+        with settings(warn_only=True):
+            ret = r._local('ping -c 1 {ip}', capture=True) or ''
+        packet_loss = re.findall(r'([0-9]+)% packet loss', ret)
+#         print('packet_loss:',packet_loss)
+        ip_accessible = packet_loss and int(packet_loss[0]) < 100
+        if self.verbose:
+            print('IP %s accessible: %s' % (ip, ip_accessible))
+        return bool(ip_accessible)
+    
+    @task
+    def purge_keys(self):
+        """
+        Deletes all SSH keys on the localhost associated with the current remote host.
+        """
+        r = self.local_renderer
+        r.env.default_ip = self.hostname_to_ip(self.env.default_hostname)
+        r.env.home_dir = '/home/%s' % getpass.getuser()
+        r.local('ssh-keygen -f "{home_dir}/.ssh/known_hosts" -R {host_string}')
+        if self.env.default_hostname:
+            r.local('ssh-keygen -f "{home_dir}/.ssh/known_hosts" -R {default_hostname}')
+        if r.env.default_ip:
+            r.local('ssh-keygen -f "{home_dir}/.ssh/known_hosts" -R {default_ip}')
+    
+    @task
+    def find_working_password(self, usernames=None, host_strings=None):
+        """
+        Returns the first working combination of username and password for the current host.
+        """
+        r = self.local_renderer
+        
+        if host_strings is None:
+            host_strings = []
+        
+        if not host_strings:
+            host_strings.append(self.genv.host_string)
+        
+        if usernames is None:
+            usernames = []
+        
+        if not usernames:
+            usernames.append(self.genv.user)
+        
+        for host_string in host_strings:
+            
+            for username in usernames:
+                
+                passwords = []
+                passwords.append(self.genv.user_default_passwords[username])
+                passwords.append(self.genv.user_passwords[username])
+                passwords.append(self.env.default_password)
+                
+                for password in passwords:
+                    
+                    with settings(warn_only=True):
+                        r.env.host_string = host_string
+                        r.env.password = password
+                        r.env.user = username
+                        ret = r._local("sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {user}@{host_string} echo hello", capture=True)
+                        print('ret.return_code:', ret.return_code)
+            #             print('ret000:[%s]' % ret)
+                        #code 1 = good password, but prompts needed
+                        #code 5 = bad password
+                        #code 6 = good password, but host public key is unknown
+                        
+                    if ret.return_code in (1, 6) or 'hello' in ret:
+                        # Login succeeded, so we haven't yet changed the password, so use the default password.
+                        return host_string, username, password
+                        
+        raise Exception, 'No working login found.'
     
     @task
     def needs_initrole(self, stop_on_error=False):
+        """
+        Returns true if the host does not exist at the expected location and may need
+        to have its initial configuration set.
+        Returns false if the host exists at the expected location. 
+        """
         
         ret = False
             
@@ -125,22 +217,95 @@ class HostSatchel(Satchel):
         login setup.
         """
         
+        if self.env.original_user is None:
+            self.env.original_user = self.genv.user
+            
+        if self.env.original_key_filename is None:
+            self.env.original_key_filename = self.genv.key_filename
+        
+        host_string = None
+        user = None
+        password = None
+        if self.env.login_check:
+            host_string, user, password = self.find_working_password(
+                usernames=[self.genv.user, self.env.default_user],
+                host_strings=[self.genv.host_string, self.env.default_hostname],
+            )
+            if self.verbose:
+                print('host.initrole.host_string:', host_string)
+                print('host.initrole.user:', user)
+                print('host.initrole.password:', password)
+        
         needs = True
         if check:
             needs = self.needs_initrole(stop_on_error=True)
+        
+        if host_string is not None:
+            self.genv.host_string = host_string
+        if user is not None:
+            self.genv.user = user
+        if password is not None:
+            self.genv.password = password
+            
         if not needs:
             return
         
         assert self.env.default_hostname, 'No default hostname set.'
         assert self.env.default_user, 'No default user set.'
+        
         self.genv.host_string = self.env.default_hostname
         if self.env.default_hosts:
             self.genv.hosts = self.env.default_hosts
         else:
             self.genv.hosts = [self.env.default_hostname]
+            
         self.genv.user = self.env.default_user
         self.genv.password = self.env.default_password
         self.genv.key_filename = self.env.default_key_filename
+        
+        # If the host has been reformatted, the SSH keys will mismatch, throwing an error, so clear them.
+        self.purge_keys()
+        
+        # Do a test login with the default password to determine which password we should use.
+#         r.env.password = self.env.default_password
+#         with settings(warn_only=True):
+#             ret = r._local("sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {user}@{host_string} echo hello", capture=True)
+#             print('ret.return_code:', ret.return_code)
+# #             print('ret000:[%s]' % ret)
+#             #code 1 = good password, but prompts needed
+#             #code 5 = bad password
+#             #code 6 = good password, but host public key is unknown
+#         if ret.return_code in (1, 6) or 'hello' in ret:
+#             # Login succeeded, so we haven't yet changed the password, so use the default password.
+#             self.genv.password = self.env.default_password
+#         elif self.genv.user in self.genv.user_passwords:
+#             # Otherwise, use the password or key set in the config.
+#             self.genv.password = self.genv.user_passwords[self.genv.user]
+#         else:
+#             # Default password fails and there's no current password, so clear.
+#             self.genv.password = None
+#         self.genv.password = self.find_working_password()
+#         print('host.initrole,using password:', self.genv.password)
+        
+        # Execute post-init callbacks.
+        for task_name in self.env.post_initrole_tasks:
+            if self.verbose:
+                print('Calling post initrole task %s' % task_name)
+            satchel_name, method_name = task_name.split('.')
+            satchel = self.get_satchel(name=satchel_name)
+            getattr(satchel, method_name)()
+        
+        print('^'*80)
+        print('host.initrole.host_string:', self.genv.host_string)
+        print('host.initrole.user:', self.genv.user)
+        print('host.initrole.password:', self.genv.password)
+    
+    @task
+    def reboot_test(self):
+        r = self.local_renderer
+        r.run('echo before reboot')
+        r.reboot(wait=300)
+        r.run('echo after reboot')
     
     def deploy_pre_run(self):
         
@@ -151,24 +316,66 @@ class HostSatchel(Satchel):
     def configure(self):
         # Just a stub. All the magic happens in deploy_pre_run().
         pass
-        
+
+UNKNOWN = '?'
+
 class HostnameSatchel(Satchel):
     
     name = 'hostname'
+    
+    def set_defaults(self):
+        
+        self.env.hostnames = {} # {ip: hostname}
+        
+        self.env.default_hostnames = {} # {target hostname: original hostname}
+        
+        self.env.use_retriever = False
+        
+        # The bash command to run to get our public IP as we appear on the WAN.
+        self.env.get_public_ip_command = 'wget -qO- http://ipecho.net/plain ; echo'
     
     def record_manifest(self):
         """
         Returns a dictionary representing a serialized state of the service.
         """
         data = {}
-        data['hostnames'] = sorted(list(set(iter_hostnames())))
+        #data['hostnames'] = sorted(list(set(iter_hostnames())))
+        data['hostnames'] = self.env.hostnames
         return data
-    
-    def set_defaults(self):
-        self.env.hostname = None
-        
-        # The bash command to run to get our public IP as we appear on the WAN.
-        self.env.get_public_ip_command = 'wget -qO- http://ipecho.net/plain ; echo'
+
+    def hostname_to_ip(self, hostname):
+        r = self.local_renderer
+        r.env.hostname = hostname
+        print('self.genv.hosts:',self.genv.hosts)
+        print('self.genv.host_string:',self.genv.host_string)
+        ret = r._local("getent hosts {hostname} | awk '{{ print $1 }}'", capture=True) or ''
+        print('ret:', ret)
+        return ret
+
+    def iter_hostnames(self):
+        """
+        Yields a list of tuples of the form (ip, hostname).
+        """
+        from burlap.common import get_hosts_retriever
+        if self.env.use_retriever:
+            retriever = get_hosts_retriever()
+            hosts = list(retriever(verbose=self.verbose, extended=1))
+            for _hostname, _data in hosts:
+                assert _data.ip, 'Missing IP.'
+                yield _data.ip, _data.public_dns_name
+        else:
+            for ip, hostname in self.env.hostnames.iteritems():
+                print('ip lookup:', ip, hostname)
+                if ip == UNKNOWN:
+                    print('a1')
+                    ip = self.hostname_to_ip(hostname)
+                    if not ip and hostname in self.env.default_hostnames:
+                        ip = self.hostname_to_ip(self.env.default_hostnames[hostname])
+                elif not ip[0].isdigit():
+                    print('a2')
+                    ip = self.hostname_to_ip(ip)
+                assert ip, 'Invalid IP.'
+                yield ip, hostname
 
     @task
     def get_public_ip(self):
@@ -189,30 +396,18 @@ class HostnameSatchel(Satchel):
         Note, we add the name to /etc/hosts since not all programs use
         /etc/hostname to reliably identify the server hostname.
         """
-        from burlap.common import get_hosts_retriever
-        
         r = self.local_renderer
-        
-        verbose = self.verbose
-        
-        retriever = get_hosts_retriever()
-        
-        hostname = self.env.hostname
-        hosts = list(retriever(verbose=verbose, extended=1))
-        for _hostname, _data in hosts:
-            if _data.ip == env.host_string:
-                hostname = _hostname
-                break
-            elif _data.public_dns_name == env.host_string:
-                hostname = _hostname
-                break
-                
-        assert hostname, 'Unable to lookup hostname.'
-        
-        r.env.hostname = hostname
-        r.sudo('echo "{hostname}" > /etc/hostname')
-        r.sudo('echo "127.0.0.1 {hostname}" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts')
-        r.sudo('service hostname restart; sleep 3')
+        for ip, hostname in self.iter_hostnames():
+            print('ip/hostname:', ip, hostname)
+            r.genv.host_string = ip
+            r.env.hostname = hostname
+            with settings(warn_only=True):
+                r.sudo('echo "{hostname}" > /etc/hostname')
+                r.sudo('echo "127.0.0.1 {hostname}" | cat - /etc/hosts > /tmp/out && mv /tmp/out /etc/hosts')
+                #Deprecated in Ubuntu 15?
+                #r.sudo('service hostname restart; sleep 3')
+                r.sudo('hostname {hostname}')
+                r.reboot(new_hostname=hostname)
     
     configure.deploy_before = []
 

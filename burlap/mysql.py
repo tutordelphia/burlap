@@ -11,6 +11,7 @@ import os
 from pipes import quote
 
 from fabric.api import env, hide, puts, run, settings, runs_once
+from fabric.colors import red, green
 
 from burlap import Satchel
 from burlap.constants import *
@@ -70,31 +71,6 @@ class MySQLSatchel(DatabaseSatchel):
                 UBUNTU: 'service mysql status',
             },
         }
-    
-    def set_root_login(self, r):
-        """
-        Looks up the root login for the given database on the given host and sets
-        it to environment variables.
-        
-        Populates these standard variables:
-        
-            db_root_password
-            db_root_username
-            
-        """
-        
-        # Check the legacy password location.
-        r.env.db_root_username = r.env.root_username
-        r.env.db_root_password = r.env.root_password
-        
-        # Check the new password location.
-        key = r.env.db_host
-        if key in r.env.root_logins:
-            data = r.env.root_logins[key]
-            if 'username' in data:
-                r.env.db_root_username = data['username']
-            if 'password' in data:
-                r.env.db_root_password = data['password']
         
     @task
     def set_collation(self, name=None, site=None):
@@ -123,7 +99,7 @@ class MySQLSatchel(DatabaseSatchel):
         self.prep_root_password()
         
     @task
-    def prep_root_password(self):
+    def prep_root_password(self, **kwargs):
         """
         Enters the root password prompt entries into the debconf cache
         so we can set them without user interaction.
@@ -132,17 +108,117 @@ class MySQLSatchel(DatabaseSatchel):
         this before installing the base MySQL package, because that will also prompt the user
         for a root login.
         """
-        r = self.database_renderer()
+        r = self.database_renderer(**kwargs)
         r.sudo("dpkg --configure -a")
         r.sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password password {db_root_password}'")
         r.sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password {db_root_password}'")
     
     @task
-    def set_root_password(self):
-        self.prep_root_password()
-        r = self.database_renderer()
+    def set_root_password(self, **kwargs):
+        self.prep_root_password(**kwargs)
+        r = self.database_renderer(**kwargs)
         r.sudo("dpkg-reconfigure -fnoninteractive `dpkg --list | egrep -o 'mysql-server-([0-9.]+)'`")
 
+    @task
+    def drop_views(self, name=None, site=None):
+        """
+        Drops all views.
+        """
+        
+        r = self.database_renderer
+            
+        result = r.sudo("mysql --batch -v -h {db_host} " \
+            #"-u {db_root_username} -p'{db_root_password}' " \
+            "-u {db_user} -p'{db_password}' " \
+            "--execute=\"SELECT GROUP_CONCAT(CONCAT(TABLE_SCHEMA,'.',table_name) SEPARATOR ', ') AS views FROM INFORMATION_SCHEMA.views WHERE TABLE_SCHEMA = '{db_name}' ORDER BY table_name DESC;\"")
+        result = re.findall(
+            '^views[\s\t\r\n]+(.*)',
+            result,
+            flags=re.IGNORECASE|re.DOTALL|re.MULTILINE)
+        if not result:
+            return
+        r.env.db_view_list = result[0]
+        #cmd = ("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' " \
+        r.sudo("mysql -v -h {db_host} -u {db_user} -p'{db_password}' " \
+            "--execute=\"DROP VIEW {db_view_list} CASCADE;\"")
+        
+    @task
+    @runs_once
+    def exists(self, **kwargs):
+        """
+        Returns true if a database with the given name exists. False otherwise.
+        """
+        
+        name = kwargs.pop('name', 'default')
+        site = kwargs.pop('site', None)
+        
+        r = self.database_renderer(name=name, site=site)
+        
+        ret = r.run('mysql -h {db_host} -u {db_root_username} '\
+            '-p"{db_root_password}" -N -B -e "SELECT IF(\'{db_name}\''\
+            ' IN(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA), '\
+            '\'exists\', \'notexists\') AS found;"')
+            
+        if ret is not None:
+            ret = 'notexists' not in (ret or 'notexists')
+        
+        if ret is not None:
+            msg = '%s database on site %s %s exist.' \
+                % (name.title(), env.SITE, 'DOES' if ret else 'DOES NOT')
+            if ret:
+                print(green(msg))
+            else:
+                print(red(msg))
+            return ret
+
+    @task
+    @runs_once
+    def create(self, **kwargs):
+        
+        name = kwargs.pop('name', 'default')
+        site = kwargs.pop('site', None)
+        drop = int(kwargs.pop('drop', 0))
+        #post_process = int(kwargs.pop('post_process', 0))
+        
+        r = self.database_renderer(name=name, site=site)
+        
+        # Do nothing if we're not dropping and the database already exists.
+        print('Checking to see if database already exists...')
+        if self.exists(name=name, site=site) and not drop:
+            print('Database already exists. Aborting creation. '\
+                'Use drop=1 to override.')
+            return
+            
+        r.env.db_drop_flag = '--drop' if drop else ''
+        
+        if int(drop):
+            r.sudo("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "\
+                "--execute='DROP DATABASE IF EXISTS {db_name}'")
+            
+        r.sudo("mysqladmin -h {db_host} -u {db_root_username} -p'{db_root_password}' create {db_name}")
+ 
+        self.set_collation(name=name, site=site)
+            
+        # Create user.
+        r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "\
+            "--execute=\"GRANT USAGE ON *.* TO {db_user}@'%%'; DROP USER {db_user}@'%%';\"")
+        
+        # Grant user access to the database.
+        r.run("mysql -v -h {db_host} -u {db_root_username} "\
+            "-p'{db_root_password}' --execute=\"GRANT ALL PRIVILEGES "\
+            "ON {db_name}.* TO {db_user}@'%%' IDENTIFIED BY "\
+            "'{db_password}'; FLUSH PRIVILEGES;\"")
+        #TODO:why is this necessary? why doesn't the user@% pattern above give
+        #localhost access?!
+        r.run("mysql -v -h {db_host} -u {db_root_username} "\
+            "-p'{db_root_password}' --execute=\"GRANT ALL PRIVILEGES "\
+            "ON {db_name}.* TO {db_user}@{db_host} IDENTIFIED BY "\
+            "'{db_password}'; FLUSH PRIVILEGES;\"")
+    
+        # Let the primary login do so from everywhere.
+#        cmd = 'mysql -h {db_host} -u {} -p'{db_root_password}' --execute="USE mysql; GRANT ALL ON {db_name}.* to {db_user}@\'%\' IDENTIFIED BY \'{db_password}\'; FLUSH PRIVILEGES;"'
+#        sudo_or_dryrun(cmd)
+        
     @task
     @runs_once
     def load(self, dump_fn='', prep_only=0, force_upload=0, from_local=0, name=None, site=None, dest_dir=None):
@@ -184,12 +260,10 @@ class MySQLSatchel(DatabaseSatchel):
                     local_path=r.env.dump_fn,
                     remote_path=r.env.remote_dump_fn)
         
-        if env.is_local and not prep_only and not self.dryrun:
+        if r.genv.is_local and not prep_only and not self.dryrun:
             assert os.path.isfile(r.env.dump_fn), \
                 missing_local_dump_error
         
-        if r.env.load_command:
-            r.run(r.env.load_command)
         
         # Drop the database if it's there.
         r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "
@@ -214,16 +288,20 @@ class MySQLSatchel(DatabaseSatchel):
             r.run(command)
         
         # Restore the database content from the dump file.
-        r.run('gunzip < {remote_dump_fn} | mysql -u {db_root_username} '
-            '--password={db_root_password} --host={db_host} '
-            '-D {db_name}')
+        if not prep_only:
+            if r.env.load_command:
+                r.run(r.env.load_command)
+            else:
+                r.run('gunzip < {remote_dump_fn} | mysql -u {db_root_username} '
+                    '--password={db_root_password} --host={db_host} '
+                    '-D {db_name}')
         
         self.set_collation(name=name, site=site)
 
     @task
-    def configure(self, do_packages=0):
+    def configure(self, do_packages=0, name='default', site=None):
 
-        r = self.database_renderer()
+        r = self.database_renderer(name=name, site=site)
         
         if int(do_packages):
             self.prep_root_password()

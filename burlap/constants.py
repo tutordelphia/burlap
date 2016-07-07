@@ -6,6 +6,9 @@ APT_SOURCE = 'apt-source'
 OS_TYPES = LINUX, WINDOWS = ('linux', 'windows')
 OS_DISTRO = FEDORA, UBUNTU, DEBIAN, RASPBIAN, CENTOS = ('fedora', 'ubuntu', 'debian', 'raspbian', 'centos')
 
+WHEEZY = 'wheezy'
+JESSIE = 'jessie'
+
 SYSTEM = 'system'
 RUBY = 'ruby'
 PYTHON = 'python'

@@ -12,6 +12,7 @@ from fabric.api import (
     cd,
     task,
     hide,
+    runs_once,
 )
 
 try:
@@ -82,6 +83,7 @@ def generate_self_signed_certificate(domain='', r=None):
     local_or_dryrun(cmd)
 
 @task_or_dryrun
+@runs_once
 def generate_csr(domain='', r=None):
     """
     Creates a certificate signing request to be submitted to a formal
@@ -90,7 +92,7 @@ def generate_csr(domain='', r=None):
     Note, the provider may say the CSR must be created on the target server,
     but this is not necessary.
     """
-    from apache import set_apache_specifics, set_apache_site_specifics
+    from apache import set_apache_site_specifics
     
     env.ssl_domain = domain or env.ssl_domain
     role = r or env.ROLE or ALL
@@ -98,8 +100,6 @@ def generate_csr(domain='', r=None):
     print('ssl_dst:', ssl_dst)
     if not os.path.isdir(ssl_dst):
         os.makedirs(ssl_dst)
-
-    #apache_specifics = set_apache_specifics()
     
     for site, site_data in common.iter_sites(setter=set_apache_site_specifics):
         print('site:', site, file=sys.stderr)

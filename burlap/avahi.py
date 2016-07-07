@@ -22,11 +22,13 @@ class AvahiSatchel(ServiceSatchel):
                 DEBIAN: 'service %s stop' % self.env.daemon_name,
             },
             DISABLE:{
-                UBUNTU: 'chkconfig %s off' % self.env.daemon_name,
+                #UBUNTU: 'chkconfig %s off' % self.env.daemon_name,
+                UBUNTU: 'systemctl disable %s.service' % self.env.daemon_name,
                 DEBIAN: 'update-rc.d %s disable' % self.env.daemon_name,
             },
             ENABLE:{
-                UBUNTU: 'chkconfig %s on' % self.env.daemon_name,
+                #UBUNTU: 'chkconfig %s on' % self.env.daemon_name,
+                UBUNTU: 'systemctl enable %s.service' % self.env.daemon_name,
                 DEBIAN: 'update-rc.d %s enable' % self.env.daemon_name,
             },
             RESTART:{
@@ -49,7 +51,6 @@ class AvahiSatchel(ServiceSatchel):
     @task
     def configure(self):
         if self.env.enabled:
-            self.install_packages()
             self.enable()
             self.restart()
         else:

@@ -319,13 +319,13 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
     
     _env = type(env)(env)
     _env.django_migrate_migration = migration or ''
-    print('_env.django_migrate_migration:', _env.django_migrate_migration)
+#     print('_env.django_migrate_migration:', _env.django_migrate_migration)
     _env.django_migrate_fake_str = '--fake' if int(fake) else ''
     _env.django_migrate_database = '--database=%s' % database if database else ''
     _env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts else ''
     for site, site_data in iter_unique_databases(site=site):
-        print('-'*80, file=sys.stderr)
-        print('site:', site, file=sys.stderr)
+#         print('-'*80, file=sys.stderr)
+#         print('site:', site, file=sys.stderr)
         
         if env.available_sites_by_host:
             hostname = common.get_current_hostname()
@@ -339,16 +339,16 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
             migrate_apps.append(' ')
             
         for app in migrate_apps:
-            print('app:', app)
+#             print('app:', app)
             _env.django_migrate_app = app
-            print('_env.django_migrate_app:', _env.django_migrate_app)
+#             print('_env.django_migrate_app:', _env.django_migrate_app)
             _env.SITE = site
             cmd = (
                 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
                 '%(django_manage)s migrate --noinput --traceback %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
                 '%(django_migrate_fake_str)s'
             ) % _env
-            print('cmd:', cmd)
+#             print('cmd:', cmd)
             cmd = cmd.strip()
             with settings(warn_only=ignore_errors):
                 run_or_dryrun(cmd)

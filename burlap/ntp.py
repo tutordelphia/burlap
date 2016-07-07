@@ -20,8 +20,10 @@ class NTPClientSatchel(ServiceSatchel):
     def packager_system_packages(self):
         return {
             FEDORA: ['ntpdate','ntp'],
+            UBUNTU: ['ntpdate','ntp'],
             (UBUNTU, '12.04'): ['ntpdate','ntp'],
             (UBUNTU, '14.04'): ['ntpdate','ntp'],
+            (UBUNTU, '16.04'): ['ntpdate','ntp'],
             DEBIAN: ['ntpdate','ntp'],
         }
     
@@ -37,13 +39,11 @@ class NTPClientSatchel(ServiceSatchel):
                 DEBIAN: 'service ntp stop',
             },
             DISABLE:{
-                UBUNTU: 'chkconfig ntp off',
-                (UBUNTU, '14.04'): 'update-rc.d -f ntp remove',
+                UBUNTU: 'update-rc.d -f ntp remove',
                 DEBIAN: 'update-rc.d ntp disable',
             },
             ENABLE:{
-                UBUNTU: 'chkconfig ntp on',
-                (UBUNTU, '14.04'): 'update-rc.d ntp defaults',
+                UBUNTU: 'update-rc.d ntp defaults',
                 DEBIAN: 'update-rc.d ntp enable',
             },
             RESTART:{

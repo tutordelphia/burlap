@@ -306,11 +306,15 @@ class Renderer(object):
     env_type = None
     
     def __init__(self, obj, lenv=None):
+        from fabric.context_managers import env
+        
         # Satchel instance.
         self.obj = obj
-        # Copy the environment dictionary so we don't modify the original.
+        
+        # Copy the local environment dictionary so we don't modify the original.
         self.lenv = type(env)(obj.lenv if lenv is None else lenv)
-        self.genv = type(env)(obj.genv)
+        
+        self.genv = env#type(env)(obj.genv)
     
     def format(self, s):
 
@@ -383,12 +387,14 @@ class Renderer(object):
         if attrname.startswith('local') \
         or attrname.startswith('_local') \
         or attrname.startswith('run') \
+        or attrname.startswith('_run') \
         or attrname.startswith('comment') \
         or attrname.startswith('pc') \
         or attrname.startswith('sudo'):
             ret = wrap(ret)
         elif attrname.startswith('put') \
         or attrname.startswith('append') \
+        or attrname.startswith('reboot') \
         or attrname.startswith('sed'):
             ret = wrap2(ret)
             
@@ -534,7 +540,6 @@ class Satchel(object):
             for name, satchel in self.all_satchels.items()
             if name != self.name.upper() and name.lower() in map(str.lower, self.genv.services)
         )
-        
     
     def get_satchel(self, *args, **kwargs):
         return get_satchel(*args, **kwargs)
@@ -628,6 +633,9 @@ class Satchel(object):
     
     def _local(self, *args, **kwargs):
         return _local(*args, **kwargs)
+    
+    def _run(self, *args, **kwargs):
+        return _run(*args, **kwargs)
     
     def render_to_string(self, *args, **kwargs):
         return render_to_string(*args, **kwargs)
@@ -743,9 +751,13 @@ class Satchel(object):
     def append(self, *args, **kwargs):
         return append_or_dryrun(*args, **kwargs)
     
-    def files_exists(self, *args, **kwargs):
+    def file_exists(self, *args, **kwargs):
         return files_exists_or_dryrun(*args, **kwargs)
     
+    def file_contains(self, *args, **kwargs):
+        from fabric.contrib.files import contains
+        return contains(*args, **kwargs)
+        
     def sed(self, *args, **kwargs):
         return sed_or_dryrun(*args, **kwargs)
     
@@ -1041,21 +1053,29 @@ def append_or_dryrun(*args, **kwargs):
     
     http://docs.fabfile.org/en/0.9.1/api/contrib/files.html#fabric.contrib.files.append
     """
+    from fabric.contrib.files import append
+    
     dryrun = get_dryrun(kwargs.get('dryrun'))
+    
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
         
     use_sudo = kwargs.get('use_sudo', False)
         
+    text = args[0] if len(args) >= 1 else kwargs.pop('text')
+    
+    filename = args[1] if len(args) >= 2 else kwargs.pop('filename')
+    
     if dryrun:
-        text = args[0] if len(args) >= 1 else kwargs['text']
-        filename = args[1] if len(args) >= 2 else kwargs['filename']
-        cmd = 'echo "%s" >> %s' % (text, filename)
+        text = text.replace('\n', '\\n')
+        cmd = 'echo -e "%s" >> %s' % (text, filename)
         cmd_run = 'sudo' if use_sudo else 'run'
         if BURLAP_COMMAND_PREFIX:
             print('%s %s: %s' % (render_command_prefix(), cmd_run, cmd))
         else:
             print(cmd)
+    else:
+        append(filename=filename, text=text.replace(r'\n', '\n'), use_sudo=use_sudo, **kwargs)
 
 def files_exists_or_dryrun(path, *args, **kwargs):
 #     dryrun = get_dryrun(kwargs.get('dryrun'))
@@ -1168,17 +1188,73 @@ def sudo_or_dryrun(*args, **kwargs):
         return _sudo(*args, **kwargs)
 
 def reboot_or_dryrun(*args, **kwargs):
-    from fabric.operations import reboot
+    """
+    An improved version of fabric.operations.reboot with better error handling.
+    """
+    from fabric.state import connections
+    
+    verbose = get_verbose()
+    
     dryrun = get_dryrun(kwargs.get('dryrun'))
+    
+    # Use 'wait' as max total wait time
+    kwargs.setdefault('wait', 120)
+    wait = int(kwargs['wait'])
+    
+    command = kwargs.get('command', 'reboot')
+    
+    # Shorter timeout for a more granular cycle than the default.
+    timeout = int(kwargs.get('timeout', 30))
+    
+    reconnect_hostname = kwargs.pop('new_hostname', env.host_string)
+    
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
+        
     if dryrun:
         print('%s sudo: reboot' % (render_command_prefix(),))
     else:
         if env.is_local:
-            if raw_input('reboot now? ').strip()[0].lower() != 'y':
+            if raw_input('reboot localhost now? ').strip()[0].lower() != 'y':
                 return
-        reboot(*args, **kwargs)
+                
+        attempts = int(round(float(wait) / float(timeout)))
+        # Don't bleed settings, since this is supposed to be self-contained.
+        # User adaptations will probably want to drop the "with settings()" and
+        # just have globally set timeout/attempts values.
+        with settings(warn_only=True):
+            _sudo(command)
+        
+        env.host_string = reconnect_hostname
+        success = False
+        for attempt in xrange(attempts):
+            
+            # Try to make sure we don't slip in before pre-reboot lockdown
+            if verbose:
+                print('Waiting for %s seconds, wait %i of %i' % (timeout, attempt+1, attempts))
+            time.sleep(timeout)
+            
+            # This is actually an internal-ish API call, but users can simply drop
+            # it in real fabfile use -- the next run/sudo/put/get/etc call will
+            # automatically trigger a reconnect.
+            # We use it here to force the reconnect while this function is still in
+            # control and has the above timeout settings enabled.
+            try:
+                if verbose:
+                    print('Reconnecting to:', env.host_string)
+                # This will fail until the network interface comes back up.
+                connections.connect(env.host_string)
+                # This will also fail until SSH is running again.
+                with settings(timeout=timeout):
+                    _run('echo hello')
+                success = True
+                break
+            except Exception as e:
+                print('Exception:', e)
+            
+        if not success:
+            raise Exception, 'Reboot failed or took longer than %s seconds.' % wait
+            
 
 def put_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))

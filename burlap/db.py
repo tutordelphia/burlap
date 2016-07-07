@@ -136,6 +136,8 @@ class DatabaseSatchel(ServiceSatchel):
         # Settings for specific databases within the server.
         self.env.databases = {} # {name: {}}
         
+        self.env.default_db_name = 'default'
+        
         # Local cache for renderers.
         self._database_renderers = {} # {(name, site): renderer}
 
@@ -148,12 +150,37 @@ class DatabaseSatchel(ServiceSatchel):
             connection_handler=None,
         )
 
-    def set_root_login(self, db_host=None, name=None, site=None):
+    @task
+    def set_root_login(self, r):
         """
         Looks up the root login for the given database on the given host and sets
-        it to environment variables. 
+        it to environment variables.
+        
+        Populates these standard variables:
+        
+            db_root_password
+            db_root_username
+            
         """
-        pass
+        
+        # Check the legacy password location.
+        try:
+            r.env.db_root_username = r.env.root_username
+        except AttributeError:
+            pass
+        try:
+            r.env.db_root_password = r.env.root_password
+        except AttributeError:
+            pass
+        
+        # Check the new password location.
+        key = r.env.db_host
+        if key in r.env.root_logins:
+            data = r.env.root_logins[key]
+            if 'username' in data:
+                r.env.db_root_username = data['username']
+            if 'password' in data:
+                r.env.db_root_password = data['password']
 
     def database_renderer(self, name=None, site=None, role=None):
         """
@@ -169,6 +196,8 @@ class DatabaseSatchel(ServiceSatchel):
         key = (name, site, role)
         if key not in self._database_renderers:
             
+#             print('key:', key)
+#             print('name:', name)
             d = type(self.genv)(self.lenv)
             d.update(self.get_database_defaults())
             d.update(self.env.databases[name])
@@ -227,12 +256,12 @@ class DatabaseSatchel(ServiceSatchel):
             raise NotImplementedError
 
     @task
-    def load_db_set(self, name):
+    def load_db_set(self, name, r):
         """
         Loads database parameters from a specific named set.
         """
-        db_set = env.db_sets.get(name, {})
-        env.update(db_set)
+        db_set = r.genv.db_sets.get(name, {})
+        r.genv.update(db_set)
 
     @task
     def loadable(self, src, dst):
@@ -322,38 +351,45 @@ class DatabaseSatchel(ServiceSatchel):
         
     @task
     @runs_once
-    def dump(self, dest_dir=None, to_local=None, from_local=0, archive=0, dump_fn=None, name=None, site=None):
+    def dump(self, dest_dir=None, to_local=0, from_local=0, archive=0, dump_fn=None, name=None, site=None, use_sudo=0):
         """
         Exports the target database to a single transportable file on the localhost,
         appropriate for loading using load().
         """
         
         r = self.database_renderer(name=name, site=site)
+        
         r.pc('Dumping database snapshot.')
+        
+        use_sudo = int(use_sudo)
         
         from_local = int(from_local)
         
-        dump_fn = dump_fn or r.env.dump_fn_template
+        to_local = int(to_local)
         
-        if to_local is None and not r.genv.is_local:
-            to_local = 1
+        dump_fn = dump_fn or r.env.dump_fn_template
         
         # Render the snapshot filename.
         r.env.dump_fn = self.get_default_db_fn(
             fn_template=dump_fn,
             dest_dir=dest_dir,
             name=name,
-            site=site
+            site=site,
         )
+        
+        if to_local and os.path.isfile(os.path.abspath(r.env.dump_fn)):
+            return
     
         # Dump the database to a snapshot file.
-        if r.genv.is_local:
+        if from_local:
             r.local(r.env.dump_command)
-        else:
+        elif use_sudo:
             r.sudo(r.env.dump_command)
+        else:
+            r.run(r.env.dump_command)
         
         # Download the database dump file on the remote host to localhost.
-        if not from_local and (0 if to_local is None else int(to_local)) and not env.is_local:
+        if not from_local and to_local:
             r.local('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {user}@{host_string}:{dump_fn} {dump_fn}')
             
         # Delete the snapshot file on the remote system.
@@ -377,7 +413,7 @@ class DatabaseSatchel(ServiceSatchel):
         If prep_only=1, commands for preparing the load will be generated,
         but not the command to finally load the snapshot.
         """
-        raise NotImplemented
+        raise NotImplementedError
         
     @task
     def shell(self, name='default', user=None, password=None, root=0, verbose=1, write_password=1, no_db=0, no_pw=0):
@@ -387,6 +423,8 @@ class DatabaseSatchel(ServiceSatchel):
         """
         from burlap.dj import set_db
         
+        r = self.database_renderer
+        
         verbose = self.verbose
         
         root = int(root)
@@ -395,8 +433,8 @@ class DatabaseSatchel(ServiceSatchel):
         no_pw = int(no_pw)
         
         # Load database credentials.
-        set_db(name=name, verbose=verbose)
-        load_db_set(name=name, verbose=verbose)
+        #set_db(name=name, verbose=verbose, e=r.genv)
+        #load_db_set(name=name, verbose=verbose, r=r)
         set_root_login()
         if root:
             env.db_user = env.db_root_user
@@ -454,204 +492,23 @@ class DatabaseSatchel(ServiceSatchel):
                 else:
                     run_or_dryrun(cmd)
 
-    #TODO:relocate this to db-specific classes
     @task
-    def create(self, drop=0, name='default', site=None, post_process=0, db_engine=None, db_user=None, db_host=None, db_password=None, db_name=None):
+    def create(self, **kwargs):
         """
         Creates the target database.
         """
-        from burlap.dj import set_db, render_remote_paths
-        assert env[ROLE]
+        raise NotImplementedError
         
-        require('app_name')
-        drop = int(drop)
-        
-        # Do nothing if we're not dropping and the database already exists.
-        print('Checking to see if database already exists...')
-        if self.exists(name=name, site=site) and not drop:
-            print('Database already exists. Aborting creation. '\
-                'Use drop=1 to override.')
-            return
-        
-        env.db_drop_flag = '--drop' if drop else ''
-        if name:
-            set_db(name=name, site=site)
-            load_db_set(name=name)
-        if db_engine:
-            env.db_engine = db_engine
-        if db_user:
-            env.db_user = db_user
-        if db_host:
-            env.db_host = db_host
-        if db_password:
-            env.db_password = db_password
-        if db_name:
-            env.db_name = db_name
-        
-        if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-            
-            pass
-                
-        elif 'mysql' in env.db_engine:
-            
-            set_root_login()
-            
-            if int(drop):
-                cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute='DROP DATABASE IF EXISTS %(db_name)s'" % env
-                sudo_or_dryrun(cmd)
-                
-            cmd = "mysqladmin -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' create %(db_name)s" % env
-            sudo_or_dryrun(cmd)
-     
-            set_collation_mysql()
-                
-            # Create user.
-            cmd = "mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' --execute=\"GRANT USAGE ON *.* TO %(db_user)s@'%%'; DROP USER %(db_user)s@'%%';\"" % env
-            run_or_dryrun(cmd)
-            
-            # Grant user access to the database.
-            cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s "\
-                "-p'%(db_root_password)s' --execute=\"GRANT ALL PRIVILEGES "\
-                "ON %(db_name)s.* TO %(db_user)s@'%%' IDENTIFIED BY "\
-                "'%(db_password)s'; FLUSH PRIVILEGES;\"") % env
-            run_or_dryrun(cmd)
-            
-            #TODO:why is this necessary? why doesn't the user@% pattern above give
-            #localhost access?!
-            cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s "\
-                "-p'%(db_root_password)s' --execute=\"GRANT ALL PRIVILEGES "\
-                "ON %(db_name)s.* TO %(db_user)s@%(db_host)s IDENTIFIED BY "\
-                "'%(db_password)s'; FLUSH PRIVILEGES;\"") % env
-            run_or_dryrun(cmd)
-                
-            # Let the primary login do so from everywhere.
-    #        cmd = 'mysql -h %(db_host)s -u %()s -p'%(db_root_password)s' --execute="USE mysql; GRANT ALL ON %(db_name)s.* to %(db_user)s@\'%\' IDENTIFIED BY \'%(db_password)s\'; FLUSH PRIVILEGES;"'
-    #        sudo_or_dryrun(cmd)
-        
-        else:
-            raise NotImplemented
-
     @task
     def drop_views(self, name=None, site=None):
         """
         Drops all views.
         """
-        from burlap.dj import set_db
-        set_db(name=name, site=site)
-        if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-    #        SELECT 'DROP VIEW ' || table_name || ';'
-    #        FROM information_schema.views
-    #        WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-    #        AND table_name !~ '^pg_';
-            # http://stackoverflow.com/questions/13643831/drop-all-views-postgresql
-    #        DO$$
-    #        BEGIN
-    #        
-    #        EXECUTE (
-    #           SELECT string_agg('DROP VIEW ' || t.oid::regclass || ';', ' ')  -- CASCADE?
-    #           FROM   pg_class t
-    #           JOIN   pg_namespace n ON n.oid = t.relnamespace
-    #           WHERE  t.relkind = 'v'
-    #           AND    n.nspname = 'my_messed_up_schema'
-    #           );
-    #        
-    #        END
-    #        $$
-            todo
-        elif 'mysql' in env.db_engine:
-            
-            set_root_login()
-            
-            cmd = ("mysql --batch -v -h %(db_host)s " \
-                #"-u %(db_root_user)s -p'%(db_root_password)s' " \
-                "-u %(db_user)s -p'%(db_password)s' " \
-                "--execute=\"SELECT GROUP_CONCAT(CONCAT(TABLE_SCHEMA,'.',table_name) SEPARATOR ', ') AS views FROM INFORMATION_SCHEMA.views WHERE TABLE_SCHEMA = '%(db_name)s' ORDER BY table_name DESC;\"") % env
-            result = sudo_or_dryrun(cmd)
-            result = re.findall(
-                '^views[\s\t\r\n]+(.*)',
-                result,
-                flags=re.IGNORECASE|re.DOTALL|re.MULTILINE)
-            if not result:
-                return
-            env.db_view_list = result[0]
-            #cmd = ("mysql -v -h %(db_host)s -u %(db_root_user)s -p'%(db_root_password)s' " \
-            cmd = ("mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' " \
-                "--execute=\"DROP VIEW %(db_view_list)s CASCADE;\"") % env
-            sudo_or_dryrun(cmd)
-        else:
-            raise NotImplementedError
+        raise NotImplementedError
 
     @task
     def exists(self, name='default', site=None):
         """
         Returns true if a database with the given name exists. False otherwise.
         """
-        
-        if self.verbose:
-            print('!'*80)
-            print('db.exists:', name)
-        
-        if name and self.env.connection_handler == CONNECTION_HANDLER_DJANGO:
-            from burlap.dj import set_db
-            set_db(name=name, site=site, verbose=verbose)
-            load_db_set(name=name)
-            
-        self.set_root_login()
-        
-        ret = None
-        if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-            
-            kwargs = dict(
-                db_user=env.db_root_user,
-                db_password=env.db_root_password,
-                db_host=env.db_host,
-                db_name=env.db_name,
-            )
-            env.update(kwargs)
-            
-            # Set pgpass file.
-            if env.db_password:
-                self.write_pgpass(verbose=verbose, name=name)
-            
-    #        cmd = ('psql --username={db_user} --no-password -l '\
-    #            '--host={db_host} --dbname={db_name}'\
-    #            '| grep {db_name} | wc -l').format(**env)
-            cmd = ('psql --username={db_user} --host={db_host} -l '\
-                '| grep {db_name} | wc -l').format(**env)
-            if verbose:
-                print(cmd)
-            with settings(warn_only=True):
-                ret = run_or_dryrun(cmd)
-                #print 'ret:', ret
-                if ret is not None:
-                    if 'password authentication failed' in ret:
-                        ret = False
-                    else:
-                        ret = int(ret) >= 1
-                
-        elif 'mysql' in env.db_engine:
-            
-            kwargs = dict(
-                db_user=env.db_root_user,
-                db_password=env.db_root_password,
-                db_host=env.db_host,
-                db_name=env.db_name,
-            )
-            env.update(kwargs)
-                
-            cmd = ('mysql -h {db_host} -u {db_user} '\
-                '-p"{db_password}" -N -B -e "SELECT IF(\'{db_name}\''\
-                ' IN(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA), '\
-                '\'exists\', \'notexists\') AS found;"').format(**env)
-            if verbose:
-                print(cmd)
-            ret = run_or_dryrun(cmd)
-            if ret is not None:
-                ret = 'notexists' not in (ret or 'notexists')
-    
-        else:
-            raise NotImplementedError
-        
-        if ret is not None:
-            print('%s database on site %s %s exist' % (name, env.SITE, 'DOES' if ret else 'DOES NOT'))
-            return ret
+        raise NotImplementedError

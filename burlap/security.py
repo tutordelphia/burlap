@@ -20,6 +20,8 @@ class UnattendedUpgradesSatchel(Satchel):
             UBUNTU: ['unattended-upgrades'],
             (UBUNTU, '12.04'): ['unattended-upgrades'],
             (UBUNTU, '14.04'): ['unattended-upgrades'],
+            DEBIAN: ['unattended-upgrades'],
+            RASPBIAN: ['unattended-upgrades'],
         }
     
     def set_defaults(self):
@@ -37,9 +39,10 @@ class UnattendedUpgradesSatchel(Satchel):
     @task
     def configure(self):
         
-        #TODO:generalize for other distros?
-        assert not self.genv.host_os_distro or self.genv.host_os_distro == UBUNTU, \
-            'Only Ubuntu is supported.'
+        os_version = self.os_version
+        
+        assert os_version.distro in (DEBIAN, RASPBIAN, UBUNTU), \
+            'Unsupported OS: %s' % os_version.distro
         
         r = self.local_renderer
         
@@ -47,7 +50,6 @@ class UnattendedUpgradesSatchel(Satchel):
             
             # Enable automatic package updates for Ubuntu.
             # Taken from the guide at https://help.ubuntu.com/lts/serverguide/automatic-updates.html.
-            r.sudo('apt-get install --yes unattended-upgrades')
             fn = self.render_to_file('unattended_upgrades/etc_apt_aptconfd_50unattended_upgrades')
             r.put(local_path=fn, remote_path='/etc/apt/apt.conf.d/50unattended-upgrades', use_sudo=True)
             fn = self.render_to_file('unattended_upgrades/etc_apt_aptconfd_10periodic')

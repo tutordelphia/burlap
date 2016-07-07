@@ -212,7 +212,8 @@ class RemoteFile(object):
     def flush(self):
         if self.fresh:
             return
-            
+        
+        print('Flushing contents to remote file.')
         _, tmp_fn = tempfile.mkstemp()
         os.remove(tmp_fn)
         fout = open(tmp_fn, 'w')
@@ -229,6 +230,7 @@ class RemoteFile(object):
         _fs_cache['is_file'][self.fqfn] = True
         
     def close(self):
+        print('Closing remote file.')
         self.flush()
 
 def open_file(fqfn, mode='r'):
@@ -388,6 +390,7 @@ class Plan(object):
             fout.write(','.join(HISTORY_HEADERS))
             fout.close()
         if verbose: print('loading plan history')
+        
         self.load_history()
         
         if verbose: print('init plan index')
@@ -1039,7 +1042,6 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
         print('\nTo execute this plan on all hosts run:\n\n    fab %s deploy.run' % env.ROLE)
         return components, plan_funcs
     else:
-#         raw_input('enter')
         with open('/tmp/burlap.progress', 'w') as fout:
             print('%s Beginning plan execution!' % (datetime.datetime.now(),), file=fout)
             fout.flush()
@@ -1047,14 +1049,21 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
                 print('%s Executing step %s...' % (datetime.datetime.now(), func_name))
                 print('%s Executing step %s...' % (datetime.datetime.now(), func_name), file=fout)
                 fout.flush()
-#                 raw_input('enter'); continue
                 if callable(plan_func):
                     plan_func()
+                    
+                    # Record this step complete.
+                    if not only_components:
+                        try:
+                            thumbprint(components=func_name.split('.')[0])
+                        except AssertionError:
+                            # On new installs where the host is not yet present, this may fail.
+                            pass
+                        
                 print('%s Done!' % (datetime.datetime.now(),), file=fout)
                 fout.flush()
             print('%s Plan execution complete!' % (datetime.datetime.now(),), file=fout)
             fout.flush()
-#         raw_input('final')
     
     # Create thumbprint.
     if not common.get_dryrun():

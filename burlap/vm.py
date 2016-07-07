@@ -27,6 +27,7 @@ from burlap.common import (
     get_dryrun,
     get_verbose,
 )
+from burlap import constants as c
 from burlap.decorators import task_or_dryrun
 
 try:
@@ -79,19 +80,20 @@ if 'vm_name_tag' not in env:
     # Usually stored in a shelf file.
     env.vm_elastic_ip_mappings = None
 
-def retrieve_ec2_hosts(verbose=0, extended=0, site=None):
-    verbose = int(verbose)
+def retrieve_ec2_hosts(extended=0, site=None):
+    verbose = common.get_verbose()
     extended = int(extended)
-    for name, data in list_instances(show=0, verbose=verbose).iteritems():
+    if verbose:
+        print('site:', site)
+    for host_name, data in list_instances(show=0, verbose=verbose).iteritems():
         if verbose:
-            print('name:', name)
+            print('host_name:', host_name)
             pprint(data, indent=4)
         
         # Ignore hosts that are disabled for the given site.
-#        if 'shell' in sys.argv:
-#         if site and env.available_sites_by_host and name in env.available_sites_by_host:
-#             if site not in env.available_sites_by_host[name]:
-#                 continue
+        if site not in (None, c.ALL) and env.available_sites_by_host and host_name in env.available_sites_by_host:
+            if site not in env.available_sites_by_host[host_name]:
+                continue
             
         if extended:
             yield (name, data)
@@ -102,7 +104,8 @@ def retrieve_ec2_hosts(verbose=0, extended=0, site=None):
 
 env.hosts_retrievers[EC2] = retrieve_ec2_hosts
 
-def translate_ec2_hostname(hostname, verbose=0):
+def translate_ec2_hostname(hostname):
+    verbose = common.get_verbose()
     for name, data in list_instances(show=0, verbose=verbose).iteritems():
         if name == hostname:
             return data.public_dns_name

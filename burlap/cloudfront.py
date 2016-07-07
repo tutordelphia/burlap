@@ -1,52 +1,53 @@
 from __future__ import print_function
 
-from fabric.api import (
-    env,
-)
+import time
 
 try:
     import boto
 except ImportError:
     boto = None
+
+from burlap.constants import *
+from burlap import Satchel
+from burlap.decorators import task
+
+class CloudfrontSatchel(Satchel):
     
-from fabric.contrib import files
-from fabric.tasks import Task
+    name = 'cloudfront'
 
-from burlap import common
-from burlap.common import (
-    run_or_dryrun,
-    put_or_dryrun,
-    sudo_or_dryrun,
-    local_or_dryrun,
-    get_dryrun,
-    SITE,
-    ROLE,
-)
-from burlap.decorators import task_or_dryrun
+    def set_defaults(self):
+        pass
 
-env.AWS_ACCESS_KEY_ID = None
-env.AWS_SECRET_ACCESS_KEY = None
-
-@task_or_dryrun
-def get_or_create_distribution(s3_bucket):
-    if not get_dryrun():
-        conn = boto.connect_cloudfront()
-        origin_dns = '%s.s3.amazonaws.com' % s3_bucket.name
-        origin = boto.cloudfront.origin\
-            .S3Origin(origin_dns)
-#        origin = boto.cloudfront.origin\
-#            .S3Origin(s3_bucket.get_website_endpoint())
-        
-        distro = None
-        dists = conn.get_all_distributions()
-        for d in dists:
-            if origin_dns == d.get_distribution().config.origin.dns_name:
-                distro = d
-                break
-        
-        if not distro:
-            distro = conn.create_distribution(origin=origin, enabled=True)
+    @task
+    def get_or_create_distribution(self, s3_bucket_name):
+        assert isinstance(s3_bucket_name, basestring)
+        if not self.dryrun:
+            conn = boto.connect_cloudfront(
+                self.genv.aws_access_key_id,
+                self.genv.aws_secret_access_key
+            )
+            origin_dns = '%s.s3.amazonaws.com' % s3_bucket_name
+            origin = boto.cloudfront.origin.S3Origin(origin_dns)
             
-        return distro
-    else:
-        print('boto.connect_cloudfront().create_distribution(%s)' % repr(name))
+            distro = None
+            dists = conn.get_all_distributions()
+            for d in dists:
+                print('Checking existing Cloudfront distribution %s...' \
+                    % d.get_distribution().config.origin.dns_name)
+                if origin_dns == d.get_distribution().config.origin.dns_name:
+                    print('Found existing distribution!')
+                    distro = d
+                    break
+                    
+                # Necessary to avoid "Rate exceeded" errors.
+                time.sleep(0.2)
+            
+            if not distro:
+                print('Creating new distribution from %s...' % origin)
+                distro = conn.create_distribution(origin=origin, enabled=True)
+                
+            return distro
+        else:
+            print('boto.connect_cloudfront().create_distribution(%s)' % repr(name))
+
+cloudfront = CloudfrontSatchel()

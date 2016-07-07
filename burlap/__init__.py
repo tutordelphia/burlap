@@ -105,6 +105,7 @@ def _get_environ_handler(name, d):
         hostname = hostname or kwargs.get('h')
 
         verbose = int(kwargs.get('verbose', '0'))
+        common.set_verbose(verbose)
         
         # Load environment for current role.
         env.update(env_default)
@@ -146,7 +147,7 @@ def _get_environ_handler(name, d):
 #            print('hosts:',env.hosts)
             if verbose:
                 print('Building host list...')
-            env.hosts = list(retriever(verbose=verbose, site=site))
+            env.hosts = list(retriever(site=site))
             if verbose:
                 print('Found hosts:')
                 print(env.hosts)
@@ -189,11 +190,11 @@ def update_merge(d, u):
             d[k] = u[k]
     return d
 
-def find_yaml_settings_fn(name, local=False):
+def find_yaml_settings_fn(name, local=False, fn='settings.yaml'):
     if local:
         settings_fn = os.path.join(common.ROLE_DIR, name, 'settings_local.yaml')
     else:
-        settings_fn = os.path.join(common.ROLE_DIR, name, 'settings.yaml')
+        settings_fn = os.path.join(common.ROLE_DIR, name, fn)
     if os.path.isfile(settings_fn):
         return settings_fn
 
@@ -213,7 +214,7 @@ def load_yaml_settings(name, priors=None, verbose=0):
     if verbose:
         print('Loading settings:', settings_fn)
     config.update(yaml.safe_load(open(settings_fn)) or type(env)())
-    #if verbose: sys.stdout.write('sites0:'); pprint(config['sites'], indent=4)
+    
     if 'inherits' in config:
         parent_name = config['inherits']
         del config['inherits']
@@ -223,14 +224,39 @@ def load_yaml_settings(name, priors=None, verbose=0):
             verbose=verbose)
         parent_config.update(config)
         config = parent_config
-    #if verbose: sys.stdout.write('sites1:'); pprint(config['sites'], indent=4)
+    
+    # Load includes.
+    includes = config.pop('includes', [])
+    load_includes = []
+    for _include_fn in includes:
+        load_includes.append(_include_fn)
+        include_fn = find_yaml_settings_fn(name=name, fn=_include_fn)
+        assert include_fn, 'Invalid include file: %s' % _include_fn
+        if verbose:
+            print('Loading include settings:', include_fn)
+        data = yaml.safe_load(open(include_fn))
+        config.update(data)
     
     # Load local overrides.
     settings_local_fn = find_yaml_settings_fn(name, local=True)
     if settings_local_fn:
         if verbose:
             print('Loading local settings:', settings_local_fn)
-        config.update(yaml.safe_load(open(settings_local_fn)) or type(env)())
+        data = yaml.safe_load(open(settings_local_fn)) or type(env)()
+        includes = data.pop('includes', [])
+        config.update(data)
+        
+        # Load local includes.
+        for _include_fn in includes:
+            load_includes.append(_include_fn)
+            include_fn = find_yaml_settings_fn(name=name, fn=_include_fn)
+            assert include_fn, 'Invalid include file: %s' % _include_fn
+            if verbose:
+                print('Loading include settings:', include_fn)
+            data = yaml.safe_load(open(include_fn))
+            config.update(data)
+    
+    config['includes'] = load_includes
     
     return config
 
