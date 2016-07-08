@@ -274,9 +274,9 @@ class PostgreSQLSatchel(DatabaseSatchel):
             return ret
 
     @task
-    def create(self, name, **kargs):
+    def create(self, name='default', site=None, **kargs):
         
-        r = self.database_renderer(name)
+        r = self.database_renderer(name=name, site=site)
         
         # Create role/user.
         with settings(warn_only=True):

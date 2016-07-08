@@ -34,7 +34,7 @@ class S3Satchel(Satchel):
 
     @task
     @runs_once
-    def sync(self, sync_set, force=0):
+    def sync(self, sync_set, force=0, site=None, role=None):
         """
         Uploads media to an Amazon S3 bucket using s3sync.
         
@@ -47,7 +47,7 @@ class S3Satchel(Satchel):
         
         r.env.sync_force_flag = ' --force ' if force else ''
         
-        _settings = get_settings(verbose=1)
+        _settings = get_settings(verbose=1, site=site, role=role)
         assert _settings, 'Unable to import settings.'
         for k in _settings.__dict__.iterkeys():
             if k.startswith('AWS_'):
