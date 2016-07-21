@@ -427,7 +427,7 @@ def get_settings(site=None, role=None):
         sys.path.insert(0, env.src_dir)
         if site and site.endswith('_secure'):
             site = site[:-7]
-        site = site or env.SITE
+        site = site or env.SITE or env.default_site
         if verbose:
             print('get_settings.site:',env.SITE)
             print('get_settings.role:',env.ROLE)

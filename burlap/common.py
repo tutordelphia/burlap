@@ -390,6 +390,35 @@ class Renderer(object):
             
             return _wrap
             
+        def sed_wrap2(func):
+            # For non-command functions, just pass-through.
+            
+            def _wrap(*args, **kwargs):
+                kwargs['filename'] = self.format(kwargs['filename'])
+                return func(*args, **kwargs)
+            
+            return _wrap
+            
+        def append_wrap2(func):
+            # For non-command functions, just pass-through.
+            
+            def _wrap(*args, **kwargs):
+                args = list(args)
+                
+                if len(args) >= 1:
+                    args[0] = self.format(args[0])
+                else:
+                    kwargs['text'] = self.format(kwargs['text'])
+                    
+                if len(args) >= 2:
+                    args[1] = self.format(args[1])
+                else:
+                    kwargs['filename'] = self.format(kwargs['filename'])
+                    
+                return func(*args, **kwargs)
+            
+            return _wrap
+            
         ret = getattr(self.obj, attrname)
         
         # If we're calling a command executor, wrap it so that it automatically formats
@@ -402,12 +431,14 @@ class Renderer(object):
         or attrname.startswith('pc') \
         or attrname.startswith('sudo'):
             ret = wrap(ret)
-        elif attrname.startswith('append') \
-        or attrname.startswith('reboot') \
-        or attrname.startswith('sed'):
+        elif attrname.startswith('reboot'):
             ret = wrap2(ret)
         elif attrname.startswith('put'):
             ret = put_wrap2(ret)
+        elif attrname.startswith('sed'):
+            ret = sed_wrap2(ret)
+        elif attrname.startswith('append'):
+            ret = append_wrap2(ret)
             
         return ret
         
@@ -1045,14 +1076,17 @@ def set_show(v):
 def get_show():
     return _show_command_output
     
-def render_command_prefix():
+def render_command_prefix(is_local=False):
     extra = {}
     if env.key_filename:
         extra['key'] = env.key_filename
     extra_s = ''
     if extra:
         extra_s = json.dumps(extra)
-    s = '[%s@%s%s]' % (env.user, env.host_string, extra_s)
+    if is_local:
+        s = '[%s@localhost]' % getpass.getuser()
+    else:
+        s = '[%s@%s%s]' % (env.user, env.host_string, extra_s)
     return s
 
 def print_command(cmd):
@@ -1071,7 +1105,7 @@ def append_or_dryrun(*args, **kwargs):
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
         
-    use_sudo = kwargs.get('use_sudo', False)
+    use_sudo = kwargs.pop('use_sudo', False)
         
     text = args[0] if len(args) >= 1 else kwargs.pop('text')
     
@@ -1292,12 +1326,12 @@ def put_or_dryrun(*args, **kwargs):
         
         if env.host_string in LOCALHOSTS:
             cmd = 'rsync --progress --verbose %s %s' % (local_path, remote_path)
-            print('%s put: %s' % (render_command_prefix(), cmd))
+            print('%s put: %s' % (render_command_prefix(is_local=True), cmd))
             env.put_remote_path = local_path
         else:
             cmd = 'rsync --progress --verbose %s %s@%s:%s' % (local_path, env.user, env.host_string, remote_path)
             env.put_remote_path = remote_path
-            print('%s put: %s' % (render_command_prefix(), cmd))
+            print('%s put: %s' % (render_command_prefix(is_local=True), cmd))
             
         if real_remote_path and use_sudo:
             sudo_or_dryrun('mv %s %s' % (remote_path, real_remote_path))

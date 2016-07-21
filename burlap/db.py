@@ -7,6 +7,7 @@ import datetime
 import glob
 import tempfile
 import subprocess
+import warnings
 from collections import defaultdict
 
 from fabric.api import (
@@ -120,8 +121,12 @@ class DatabaseSatchel(ServiceSatchel):
         # share the same server.
         self.env.allow_remote_connections = False
         
+        # Directory where database snapshots will be temporarily stored.
         self.env.dump_dest_dir = '/tmp'
+        
         self.env.dump_archive_dir = 'snapshots'
+        
+        # Default filename of database snapshots.
         self.env.dump_fn_template = '{dump_dest_dir}/db_{db_type}_{SITE}_{ROLE}_$(date +%Y%m%d).sql.gz'
         
         # This overrides the built-in dump command.
@@ -175,12 +180,18 @@ class DatabaseSatchel(ServiceSatchel):
         
         # Check the new password location.
         key = r.env.db_host
+        #print('root login key:', key)
         if key in r.env.root_logins:
             data = r.env.root_logins[key]
             if 'username' in data:
                 r.env.db_root_username = data['username']
             if 'password' in data:
                 r.env.db_root_password = data['password']
+        else:
+            msg = 'Warning: No root login entry found for host %s in role %s.' \
+                % (r.env.db_host, self.genv.ROLE)
+            print(msg, file=sys.stderr)
+            #warnings.warn(msg, UserWarning)
 
     def database_renderer(self, name=None, site=None, role=None):
         """
@@ -194,10 +205,9 @@ class DatabaseSatchel(ServiceSatchel):
         role = role or self.genv.ROLE
         
         key = (name, site, role)
+#         print('key:', key)
         if key not in self._database_renderers:
             
-#             print('key:', key)
-#             print('name:', name)
             d = type(self.genv)(self.lenv)
             d.update(self.get_database_defaults())
             d.update(self.env.databases[name])
@@ -206,7 +216,7 @@ class DatabaseSatchel(ServiceSatchel):
             if d.connection_handler == CONNECTION_HANDLER_DJANGO:
                 from burlap.dj import set_db
                 _d = type(self.genv)()
-                set_db(name=name, site=site, e=_d)
+                set_db(name=name, site=site, role=role, e=_d)
                 d.update(_d)
             
             r = LocalRenderer(self, lenv=d)
@@ -351,15 +361,13 @@ class DatabaseSatchel(ServiceSatchel):
         
     @task
     @runs_once
-    def dump(self, dest_dir=None, to_local=1, from_local=0, archive=0, dump_fn=None, name=None, site=None, use_sudo=0):
+    def dump(self, dest_dir=None, to_local=1, from_local=0, archive=0, dump_fn=None, name=None, site=None, use_sudo=0, cleanup=1):
         """
         Exports the target database to a single transportable file on the localhost,
         appropriate for loading using load().
         """
         
         r = self.database_renderer(name=name, site=site)
-        
-        r.pc('Dumping database snapshot.')
         
         use_sudo = int(use_sudo)
         
@@ -377,10 +385,9 @@ class DatabaseSatchel(ServiceSatchel):
             site=site,
         )
         
-        if to_local and os.path.isfile(os.path.abspath(r.env.dump_fn)):
-            return
-    
         # Dump the database to a snapshot file.
+        #if not os.path.isfile(os.path.abspath(r.env.dump_fn))):
+        r.pc('Dumping database snapshot.')
         if from_local:
             r.local(r.env.dump_command)
         elif use_sudo:
@@ -390,13 +397,17 @@ class DatabaseSatchel(ServiceSatchel):
         
         # Download the database dump file on the remote host to localhost.
         if not from_local and to_local:
+            r.pc('Downloading database snapshot to localhost.')
             r.local('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {user}@{host_string}:{dump_fn} {dump_fn}')
             
             # Delete the snapshot file on the remote system.
-            r.sudo('rm {dump_fn}')
+            if int(cleanup):
+                r.pc('Deleting database snapshot on remote host.')
+                r.sudo('rm {dump_fn}')
         
         # Move the database snapshot to an archive directory.
         if to_local and int(archive):
+            r.pc('Archiving database snapshot.')
             db_fn = r.render_fn(r.env.dump_fn)
             r.env.archive_fn = '%s/%s' % (env.db_dump_archive_dir, os.path.split(db_fn)[-1])
             r.local('mv %s %s' % (db_fn, env.archive_fn))
@@ -420,6 +431,7 @@ class DatabaseSatchel(ServiceSatchel):
         Opens a SQL shell to the given database, assuming the configured database
         and user supports this feature.
         """
+        raise NotImplementedError
         from burlap.dj import set_db
         
         r = self.database_renderer
@@ -434,7 +446,7 @@ class DatabaseSatchel(ServiceSatchel):
         # Load database credentials.
         #set_db(name=name, verbose=verbose, e=r.genv)
         #load_db_set(name=name, verbose=verbose, r=r)
-        set_root_login()
+        #set_root_login()
         if root:
             env.db_user = env.db_root_user
             env.db_password = env.db_root_password
@@ -463,11 +475,6 @@ class DatabaseSatchel(ServiceSatchel):
             if write_password and env.db_password:
                 cmds.extend(write_postgres_pgpass(verbose=0, commands_only=1, name=name))
             
-            if not no_db:
-                env.db_name_str = ' --dbname=%(db_name)s' % env
-            
-            cmds.append(('/bin/bash -i -c \"psql --username=%(db_user)s '\
-                '--host=%(db_shell_host)s%(db_name_str)s\"') % env)
         elif 'mysql' in env.db_engine:
             
             if not no_db:
@@ -477,8 +484,7 @@ class DatabaseSatchel(ServiceSatchel):
                 cmds.append(('/bin/bash -i -c \"mysql -u %(db_user)s '\
                     '-p\'%(db_password)s\' -h %(db_shell_host)s%(db_name_str)s\"') % env)
             else:
-                cmds.append(('/bin/bash -i -c \"mysql -u %(db_user)s '\
-                    '-h %(db_shell_host)s%(db_name_str)s\"') % env)
+                cmds.append(('/bin/bash -i -c "mysql -u {db_user} -h {db_shell_host}{db_name_str}"') % env)
         else:
             raise NotImplementedError
             

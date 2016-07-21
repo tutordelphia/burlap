@@ -70,7 +70,7 @@ class PackagerSatchel(Satchel):
         apt_req_fqfn = tmp_fn
         
         if not self.genv.is_local:
-            r.put(local_path=tmp_fn)
+            r.put(local_path=tmp_fn, remote_path=tmp_fn)
             apt_req_fqfn = self.genv.put_remote_path
         r.sudo('apt-get update -y --fix-missing')
         r.sudo('apt-get install -y `cat "%s" | tr "\\n" " "`' % apt_req_fqfn)

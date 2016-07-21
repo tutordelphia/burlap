@@ -133,9 +133,6 @@ class RabbitMQSatchel(ServiceSatchel):
         self.genv._rabbitmq_user = username
         self.genv._rabbitmq_password = password
         self.sudo_or_dryrun('rabbitmqctl add_user %(_rabbitmq_user)s %(_rabbitmq_password)s' % self.genv)
-        #sudo_or_dryrun('rabbitmqctl set_user_tags %(rabbitmq_user)s administrator')
-        #sudo_or_dryrun('rabbitmqctl set_permissions -p / %(rabbitmq_user)s ".*" ".*" ".*"')
-        #sudo_or_dryrun('rabbitmqctl set_permissions -p alphabuyer %(rabbitmq_user)s ".*" ".*" ".*"')
 
     @task
     def enable_management_interface(self):

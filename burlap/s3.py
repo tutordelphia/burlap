@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import os
+import sys
 import re
 import json
 
@@ -30,7 +31,7 @@ class S3Satchel(Satchel):
         self.env.sync_sets = {}
         self.env.media_postfix = ''
         self.env.sync_enabled = False
-        self.env.s3cmd_path = 's3cmd'
+        self.env.s3cmd_path = '{virtualenv_bin_dir}/s3cmd'
 
     @task
     @runs_once
@@ -38,7 +39,10 @@ class S3Satchel(Satchel):
         """
         Uploads media to an Amazon S3 bucket using s3sync.
         
-        Requires the s3sync gem: sudo gem install s3sync
+        Requires s3cmd. Install with:
+        
+            pip install s3cmd
+            
         """
         from burlap.dj import get_settings, render_remote_paths
         force = int(force)
@@ -57,6 +61,8 @@ class S3Satchel(Satchel):
         
         site_data = r.genv.sites[r.genv.SITE]
         r.env.update(site_data)
+        
+        r.env.virtualenv_bin_dir = os.path.split(sys.executable)[0]
         
         rets = []
         for paths in r.env.sync_sets[sync_set]:
@@ -87,16 +93,12 @@ class S3Satchel(Satchel):
                 r.env.sync_cmd = 'put'
             else:
                 r.env.sync_cmd = 'sync'
-            cmd = (
+            r.local(
                 'export AWS_ACCESS_KEY_ID={aws_access_key_id}; '\
                 'export AWS_SECRET_ACCESS_KEY={aws_secret_access_key}; '\
                 '{s3cmd_path} {sync_cmd} --progress --acl-public --guess-mime-type --no-mime-magic '\
                 '--delete-removed --cf-invalidate --recursive {sync_force_flag} '\
                 '{local_path} {remote_path}')
-            if r.genv.is_local:
-                r.local(cmd)
-            else:
-                r.run(cmd)
     
     @task
     def invalidate(self, *paths):
@@ -126,7 +128,6 @@ class S3Satchel(Satchel):
             if not paths:
                 break
             
-            #print 'paths:',paths
             c = boto.connect_cloudfront()
             rs = c.get_all_distributions()
             target_dist = None

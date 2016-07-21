@@ -83,7 +83,11 @@ def _get_environ_handler(name, d):
     
     def func(site=None, **kwargs):
         from fabric import state
-        site = site or d.get('default_site') or env.SITE
+        
+        # We can't auto-set default_site, because that break tasks that have
+        # to operate over multiple sites.
+        # If a task requires a site, it can pull from default_site as needed.
+        #site = site or d.get('default_site') or env.SITE
         
         BURLAP_SHELL_PREFIX = int(os.environ.get('BURLAP_SHELL_PREFIX', '0'))
         if BURLAP_SHELL_PREFIX:
@@ -356,7 +360,7 @@ if common and not no_load:
 #         print('Importing: %s' % module_name, file=sys.stderr)
         module = loader.find_module(module_name).load_module(module_name)
         sub_modules[module_name] = module
-
+    
     if burlap_populate_stack:
         populate_fabfile()
     

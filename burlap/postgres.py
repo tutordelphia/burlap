@@ -157,17 +157,24 @@ class PostgreSQLSatchel(DatabaseSatchel):
     def set_defaults(self):
         super(PostgreSQLSatchel, self).set_defaults()
         
-        self.env.dump_command = 'time pg_dump -c -U {db_user} --blobs --format=c --schema=public --host={db_host} {db_name} > {dump_fn}'
+        self.env.dump_command = 'time pg_dump -c -U {db_user} --no-password --blobs --format=c --schema=public --host={db_host} {db_name} > {dump_fn}'
         self.env.createlangs = ['plpgsql'] # plpythonu
         self.env.postgres_user = 'postgres'
         self.env.encoding = 'UTF8'
         self.env.custom_load_cmd = ''
         self.env.port = 5432
-        self.env.pgass_path = '~/.pgpass'
+        self.env.pgpass_path = '~/.pgpass'
         self.env.pgpass_chmod = 600
         self.env.default_version = '9.3'
         self.env.version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
         self.env.engine = 'postgresql' # 'postgresql' | 'postgis'
+
+        self.env.apt_repo_enabled = False
+        
+        # Populated from https://www.postgresql.org/download/linux/ubuntu/
+        self.env.apt_repo = None
+        
+        self.env.apt_key = 'https://www.postgresql.org/media/keys/ACCC4CF8.asc'
 
         self.env.service_commands = {
             START:{
@@ -191,24 +198,31 @@ class PostgreSQLSatchel(DatabaseSatchel):
         }
 
     @task
-    def write_pgpass(self, name=None, use_sudo=0):
+    def write_pgpass(self, name=None, site=None, use_sudo=0, root=0):
         """
         Write the file used to store login credentials for PostgreSQL.
         """
         
-        r = self.database_renderer(name)
+        r = self.database_renderer(name=name, site=site)
+        
+        root = int(root)
         
         use_sudo = int(use_sudo)
         
-        r.run('touch {pgass_path}')
-        r.sudo('chmod {pgpass_chmod} {pgass_path}')
+        r.run('touch {pgpass_path}')
+        r.sudo('chmod {pgpass_chmod} {pgpass_path}')
+        
+        if root:
+            r.env.shell_username = r.env.db_root_username
+            r.env.shell_password = r.env.db_root_password
+        else:
+            r.env.shell_username = r.env.db_user
+            r.env.shell_password = r.env.db_password
         
         r.append(
-            '{db_host}:{port}:*:{db_user}:{db_password}',
+            '{db_host}:{port}:*:{shell_username}:{shell_password}',
             r.env.pgpass_path,
             use_sudo=use_sudo)
-                    
-        return cmds
 
     @task
     def drop_views(self, name=None, site=None):
@@ -320,15 +334,14 @@ class PostgreSQLSatchel(DatabaseSatchel):
             r.env.remote_dump_fn = '/tmp/' + os.path.split(r.env.dump_fn)[-1]
         
         if not prep_only:
-            if int(force_upload) or (not r.genv.is_local and not r.file_exists(r.env.remote_dump_fn)):
-                if not self.dryrun:
-                    assert os.path.isfile(r.env.dump_fn), \
-                        missing_local_dump_error
-                if self.verbose:
-                    print('Uploading database snapshot...')
-                r.put(
-                    local_path=r.env.dump_fn,
-                    remote_path=r.env.remote_dump_fn)
+            if not self.dryrun:
+                assert os.path.isfile(r.env.dump_fn), \
+                    missing_local_dump_error
+            r.pc('Uploading database snapshot...')
+#                 r.put(
+#                     local_path=r.env.dump_fn,
+#                     remote_path=r.env.remote_dump_fn)
+            r.local('rsync -rvz --progress --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {dump_fn} {user}@{host_string}:{remote_dump_fn}')
         
         if r.genv.is_local and not prep_only and not self.dryrun:
             assert os.path.isfile(r.env.dump_fn), \
@@ -361,6 +374,29 @@ class PostgreSQLSatchel(DatabaseSatchel):
                 r.run('pg_restore --jobs=8 -U {db_root_username} --create --dbname={db_name} {remote_dump_fn}')
 
     @task
+    def shell(self, name='default', site=None, **kwargs):
+        """
+        Opens a SQL shell to the given database, assuming the configured database
+        and user supports this feature.
+        """
+        r = self.database_renderer(name=name, site=site)
+        self.write_pgpass(name=name, site=site, root=True)
+        
+        db_name = kwargs.get('db_name')
+        if db_name:
+            r.env.db_name = db_name
+            r.run('/bin/bash -i -c "psql --username={db_root_username} --host={db_host} --dbname={db_name}"')
+        else:
+            r.run('/bin/bash -i -c "psql --username={db_root_username} --host={db_host}"')
+        
+    @task
+    def configure_apt_repository(self):
+        r = self.local_renderer
+        r.sudo("add-apt-repository '{apt_repo}'")
+        r.sudo('wget --quiet -O - {apt_key} | apt-key add -')
+        r.sudo('apt-get update') 
+
+    @task
     def configure(self, *args, **kwargs):
         #TODO:set postgres user password?
         #https://help.ubuntu.com/community/PostgreSQL
@@ -372,6 +408,9 @@ class PostgreSQLSatchel(DatabaseSatchel):
         r = self.local_renderer
 
         self.install_packages()
+
+        if r.env.apt_repo_enabled:
+            self.configure_apt_repository()
 
         r.env.pg_version = r.run('echo {version_command}') or r.env.default_version
         
@@ -394,15 +433,15 @@ class PostgreSQLSatchel(DatabaseSatchel):
         r.pc('Enabling auto-vacuuming...')
         #r.sudo('sed -i "s/#autovacuum = on/autovacuum = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf')
         r.sed(  
-            filename='/etc/postgresql/{version_command}/main/postgresql.conf'.format(**self.lenv),
+            filename='/etc/postgresql/{pg_version}/main/postgresql.conf',
             before='#autovacuum = on',
-            after='/autovacuum = on',
+            after='autovacuum = on',
             backup='',
             use_sudo=True,
         )
         #r.sudo('sed -i "s/#track_counts = on/track_counts = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf')
         r.sed(
-            filename='/etc/postgresql/{version_command}/main/postgresql.conf'.format(**self.lenv),
+            filename='/etc/postgresql/{pg_version}/main/postgresql.conf',
             before='#track_counts = on',
             after='track_counts = on',
             backup='',
@@ -428,17 +467,25 @@ class PostgreSQLClientSatchel(Satchel):
 
     name = 'postgresqlclient'
 
+    def set_defaults(self):
+        self.env.default_version = '9.3'
+        
     @property
     def packager_system_packages(self):
         return {
             FEDORA: ['postgresql-client'],
             (UBUNTU, '12.04'): [
-                'postgresql-client-9.1',
+                'postgresql-client-%s' % self.env.default_version,
                 #'python-psycopg2',#install from pip instead
                 #'postgresql-server-dev-9.1',
             ],
             (UBUNTU, '14.04'): [
-                'postgresql-client-9.3',
+                'postgresql-client-%s' % self.env.default_version,
+                #'python-psycopg2',#install from pip instead
+                #'postgresql-server-dev-9.3',
+            ],
+            UBUNTU: [
+                'postgresql-client-%s' % self.env.default_version,
                 #'python-psycopg2',#install from pip instead
                 #'postgresql-server-dev-9.3',
             ],

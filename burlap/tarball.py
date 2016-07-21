@@ -16,22 +16,32 @@ class TarballSatchel(Satchel):
     name = 'tarball'
     
     def set_defaults(self):
+        
         self.env.clean = 1
+        
         self.env.gzip = 1
+        
         self.env.method = TARBALL
         
         self.env.rsync_source_dir = 'src'
+        
         self.env.rsync_source_dirs = [] # This overrides rsync_source_dir
+        
         self.env.rsync_target_dir = None
+        
         self.env.rsync_target_host = '%(user)s@%(host_string)s:'
-        self.env.rsync_auth = '--rsh "ssh -t -o StrictHostKeyChecking=no -i %(key_filename)s"' 
-        self.env.rsync_command_template = ('rsync '
+        
+        self.env.rsync_auth = '--rsh "ssh -t -o StrictHostKeyChecking=no -i %(key_filename)s"'
+         
+        self.env.rsync_command_template = (
+            'rsync '
             '--recursive --verbose --perms --times --links '
             '--compress --copy-links %(tarball_exclude_str)s '
-            '--delete --delete-before '
+            '--delete --delete-before --force '
             '%(tarball_rsync_auth)s '
             '%(tarball_rsync_source_dir)s '
-            '%(tarball_rsync_target_host)s%(tarball_rsync_target_dir)s')
+            '%(tarball_rsync_target_host)s%(tarball_rsync_target_dir)s'
+        )
             
         self.env.exclusions = [
             '*_local.py',
@@ -44,10 +54,13 @@ class TarballSatchel(Satchel):
         ]
         
         self.env.dir = '.burlap/tarball_cache'
+        
         self.env.extra_dirs = []
         
         self.env.user = 'www-data'
+        
         self.env.group = 'www-data'
+        
         self.env.set_permissions = True
     
     def render_template_paths(self, d=None):

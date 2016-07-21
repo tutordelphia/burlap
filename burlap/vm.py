@@ -93,6 +93,8 @@ def retrieve_ec2_hosts(extended=0, site=None):
         # Ignore hosts that are disabled for the given site.
         if site not in (None, c.ALL) and env.available_sites_by_host and host_name in env.available_sites_by_host:
             if site not in env.available_sites_by_host[host_name]:
+                if verbose:
+                    print('skipping because site %s is not set for this host' % site)
                 continue
             
         if extended:
