@@ -171,6 +171,9 @@ def _get_environ_handler(name, d):
                 env.is_local = 'localhost' in env.hosts or '127.0.0.1' in env.hosts
             elif env.host_string:
                 env.is_local = 'localhost' in env.host_string or '127.0.0.1' in env.host_string
+
+        for cb in common.post_role_load_callbacks:
+            cb()
         
         print('Loaded role %s.' % (name,), file=sys.stderr)
     func.__doc__ = 'Sets enivronment variables for the "%s" role.' % (name,)

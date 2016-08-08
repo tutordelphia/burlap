@@ -804,6 +804,10 @@ class ApacheMediaSatchel(Satchel):
         """
         Uploads select media to an Apache accessible directory.
         """
+        
+        # Ensure a site is selected.
+        self.genv.SITE = self.genv.SITE or self.genv.default_site
+        
         apache.get_apache_settings()
         
         from burlap.dj import render_remote_paths

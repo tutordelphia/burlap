@@ -298,6 +298,45 @@ def assert_valid_satchel(name):
 CMD_VAR_REGEX = re.compile(r'(?:^|[^{]+){([^{}]+)}')
 CMD_ESCAPED_VAR_REGEX = re.compile(r'\{{2}[^\{\}]+\}{2}')
 
+def format(s, lenv, genv):
+
+    # Resolve all variable names.
+    cnt = 0
+    while 1:
+        cnt += 1
+        if cnt > 10:
+            raise Exception, 'Too many variables containing variables.'
+        
+        var_names = CMD_VAR_REGEX.findall(s)
+        if not var_names:
+            break
+        
+        # Lookup local and global variable values.
+        var_values = {}
+        for var_name in var_names:
+            if var_name in lenv:
+                var_values[var_name] = lenv[var_name]
+            elif var_name in genv:
+                var_values[var_name] = genv[var_name]
+            else:
+                raise Exception, (
+                    'Command references variable "%s" which is not found '
+                    'in either the local or global namespace.') % var_name
+        
+        escaped_var_names = dict(
+            (k, str(uuid.uuid4()))
+            for k in CMD_ESCAPED_VAR_REGEX.findall(s)
+        )
+        for k, v in escaped_var_names.iteritems():
+            s = s.replace(k, v)
+        
+        s = s.format(**var_values)
+        
+        for k, v in escaped_var_names.iteritems():
+            s = s.replace(v, k)
+        
+    return s
+
 class Renderer(object):
     """
     Base convenience wrapper around command executioners.
@@ -317,43 +356,7 @@ class Renderer(object):
         self.genv = env#type(env)(obj.genv)
     
     def format(self, s):
-
-        # Resolve all variable names.
-        cnt = 0
-        while 1:
-            cnt += 1
-            if cnt > 10:
-                raise Exception, 'Too many variables containing variables.'
-            
-            var_names = CMD_VAR_REGEX.findall(s)
-            if not var_names:
-                break
-            
-            # Lookup local and global variable values.
-            var_values = {}
-            for var_name in var_names:
-                if var_name in self.lenv:
-                    var_values[var_name] = self.lenv[var_name]
-                elif var_name in self.genv:
-                    var_values[var_name] = self.genv[var_name]
-                else:
-                    raise Exception, (
-                        'Command references variable "%s" which is not found '
-                        'in either the local or global namespace.') % var_name
-            
-            escaped_var_names = dict(
-                (k, str(uuid.uuid4()))
-                for k in CMD_ESCAPED_VAR_REGEX.findall(s)
-            )
-            for k, v in escaped_var_names.iteritems():
-                s = s.replace(k, v)
-            
-            s = s.format(**var_values)
-            
-            for k, v in escaped_var_names.iteritems():
-                s = s.replace(v, k)
-            
-        return s
+        return format(s, lenv=self.lenv, genv=self.genv)
     
     def __getattr__(self, attrname):
         
@@ -555,6 +558,11 @@ class Satchel(object):
                 tasks.add(_name)
         return sorted(tasks)
     
+    def add_post_role_load_callback(self, cb):
+        global post_role_load_callbacks
+        post_role_load_callbacks.append(cb)
+#         print('post_role_load_callbacksZ:', id(post_role_load_callbacks), post_role_load_callbacks)
+    
     @task
     def list_tasks(self):
         for _task in self.get_tasks():
@@ -582,6 +590,12 @@ class Satchel(object):
             for name, satchel in self.all_satchels.items()
             if name != self.name.upper() and name.lower() in map(str.lower, self.genv.services)
         )
+    
+    @property
+    def is_selected(self):
+#         print('self.genv.services:', self.genv.services)
+#         print('self.name.lower():', self.name.lower())
+        return self.name.lower() in self.genv.services
     
     def get_satchel(self, *args, **kwargs):
         return get_satchel(*args, **kwargs)
@@ -1010,6 +1024,8 @@ env.available_sites_by_host = {}
 env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{print $5 " " $1}'"
 
 env.post_callbacks = []
+
+post_role_load_callbacks = []
 
 env.burlap_data_dir = '.burlap'
 
@@ -1778,13 +1794,22 @@ def install_script(local_path=None, remote_path=None, render=True, extra=None):
     put_or_dryrun(local_path=local_path, remote_path=remote_path, use_sudo=True)
     sudo_or_dryrun('chmod +x %s' % env.put_remote_path)
     
-def write_to_file(content, fn=None):
+def write_to_file(content, fn=None, **kwargs):
     import tempfile
+    dryrun = get_dryrun(kwargs.get('dryrun'))
     if fn:
         fout = open(fn, 'w')
     else:
         fd, fn = tempfile.mkstemp()
         fout = os.fdopen(fd, 'wt')
+        
+    if dryrun:
+        cmd = 'echo -e %s > %s' % (shellquote(content), fn)
+        if BURLAP_COMMAND_PREFIX:
+            print('%s local: %s' % (render_command_prefix(is_local=True), cmd))
+        else:
+            print(cmd)
+            
     fout.write(content)
     fout.close()
     return fn

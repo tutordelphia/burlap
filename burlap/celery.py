@@ -116,7 +116,10 @@ def create_supervisor_services():
     #print 'create_supervisor_services:',env.celery_has_worker
     if not env.celery_has_worker:
         return
-    
+
+    if CELERY.lower() not in env.services:
+        return
+        
     render_paths()
     
     conf_name = 'celery_%s.conf' % env.SITE

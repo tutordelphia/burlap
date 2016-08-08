@@ -63,6 +63,7 @@ class NetworkManagerSatchel(ServiceSatchel):
         
         self.env.check_script_path = '/usr/local/bin/check_networkmanager.sh'
         self.env.cron_script_path = '/etc/cron.d/check_networkmanager'
+        self.env.check_script_template = '%s/check_networkmanager.sh' % self.name
         self.env.cron_perms = '600'
         
         self.env.connections = {} # {ssid: passphrase}
@@ -90,7 +91,28 @@ class NetworkManagerSatchel(ServiceSatchel):
     def dev_wifi_list(self):
         r = self.local_renderer
         r.sudo('nmcli device wifi list')
-        
+    
+    @task
+    def configure_checker(self):
+        r = self.local_renderer
+        if r.env.check_enabled:
+            # Installs a crontab to check Network-Manager every ten minutes
+            # and restart it if theres' no Internet connection.
+            self.install_script(
+                local_path=r.env.check_script_template,
+                remote_path=self.lenv.check_script_path)
+            remote_path = r.put(
+                local_path=self.find_template('%s/etc_crond_check_networkmanager' % self.name),
+                remote_path=self.env.cron_script_path, use_sudo=True)[0]
+            r.sudo('chown root:root %s' % remote_path)#env.put_remote_path)
+            # Must be 600, otherwise gives INSECURE MODE error.
+            # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
+            r.sudo('chmod %s %s' % (self.env.cron_perms, remote_path))#env.put_remote_path)
+            r.sudo('service cron restart')
+        else:
+            r.sudo('rm -f {cron_script_path}'.format(**self.lenv))
+            r.sudo('service cron restart')
+    
     @task
     def configure(self):
         
@@ -113,24 +135,8 @@ class NetworkManagerSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-        
-        if r.env.check_enabled:
-            # Installs a crontab to check Network-Manager every ten minutes
-            # and restart it if theres' no Internet connection.
-            self.install_script(
-                local_path='%s/check_networkmanager.sh' % self.name,
-                remote_path=self.lenv.check_script_path)
-            remote_path = r.put(
-                local_path=self.find_template('%s/etc_crond_check_networkmanager' % self.name),
-                remote_path=self.env.cron_script_path, use_sudo=True)[0]
-            r.sudo('chown root:root %s' % remote_path)#env.put_remote_path)
-            # Must be 600, otherwise gives INSECURE MODE error.
-            # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
-            r.sudo('chmod %s %s' % (self.env.cron_perms, remote_path))#env.put_remote_path)
-            r.sudo('service cron restart')
-        else:
-            r.sudo('rm -f {cron_script_path}'.format(**self.lenv))
-            r.sudo('service cron restart')
+            
+        self.configure_checker()
         
         # When enabling wifi for the first time, a reboot is required.
         if not lm_connections and r.env.connections and r.env.enabled:

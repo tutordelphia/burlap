@@ -2,6 +2,7 @@
 
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=""
 
 # minute hour day month weekday (0-6, 0 = Sunday) user command
  
