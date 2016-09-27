@@ -96,9 +96,10 @@ def retrieve_ec2_hosts(extended=0, site=None):
                 if verbose:
                     print('skipping because site %s is not set for this host' % site)
                 continue
-            
+        
+        print('host_name:', host_name)
         if extended:
-            yield (name, data)
+            yield (host_name, data)
         elif data.public_dns_name:
             yield data.public_dns_name
         else:

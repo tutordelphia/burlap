@@ -221,11 +221,13 @@ def shell():
     os.system(cmd)
     
 @task_or_dryrun
-def syncdb(site=None, all=0, database=None):
+def syncdb(site=None, all=0, database=None, ignore_errors=1):
     """
     Runs the standard Django syncdb command for one or more sites.
     """
     #print 'Running syncdb...'
+    
+    ignore_errors = int(ignore_errors)
     
     _env = type(env)(env)
     
@@ -237,10 +239,12 @@ def syncdb(site=None, all=0, database=None):
 
     _env = render_remote_paths(e=_env)
     for site, site_data in iter_unique_databases(site=site):
-        cmd = (
-            'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
-            '%(django_manage)s syncdb --noinput %(db_syncdb_all_flag)s %(db_syncdb_database)s') % _env
-        run_or_dryrun(cmd)
+        _env.SITE = site
+        with settings(warn_only=ignore_errors):
+            run_or_dryrun((
+                'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
+                '%(django_manage)s syncdb --noinput %(db_syncdb_all_flag)s %(db_syncdb_database)s'
+            ) % _env)
 
 @task_or_dryrun
 def manage(cmd, *args, **kwargs):
@@ -317,6 +321,8 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
 
     render_remote_paths()
     
+    print('ignore_errors:', ignore_errors)
+    
     _env = type(env)(env)
     _env.django_migrate_migration = migration or ''
 #     print('_env.django_migrate_migration:', _env.django_migrate_migration)
@@ -345,7 +351,7 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
             _env.SITE = site
             cmd = (
                 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
-                '%(django_manage)s migrate --noinput --traceback %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
+                '%(django_manage)s migrate --noinput --merge --traceback %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
                 '%(django_migrate_fake_str)s'
             ) % _env
 #             print('cmd:', cmd)
@@ -462,14 +468,20 @@ def get_settings(site=None, role=None):
     return module
 
 @task_or_dryrun
-def execute_sql(fn, name='default', site=None):
+def execute_sql(sql, name='default', site=None, as_text=False):
     """
     Executes an arbitrary SQL file.
     """
     from burlap.dj import set_db
-    from burlap.db import load_db_set
+    from burlap.db import db
     
-    assert os.path.isfile(fn), 'Missing file: %s' % fn
+    load_db_set = db.load_db_set
+    
+    if as_text:
+        env.sql = sql
+    else:
+        fn = sql
+        assert os.path.isfile(fn), 'Missing file: %s' % fn
     
     site_summary = {} # {site: ret}
     
@@ -477,18 +489,25 @@ def execute_sql(fn, name='default', site=None):
         try:
                     
             set_db(name=name, site=site)
-            load_db_set(name=name)
+#             load_db_set(name=name)
             env.SITE = site
-                    
-            put_or_dryrun(local_path=fn)
+
+            if not as_text:
+                put_or_dryrun(local_path=fn)
             
             with settings(warn_only=True):
                 ret = None
                 if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-                    ret = run_or_dryrun("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s" % env)
+                    if as_text:
+                        ret = run_or_dryrun("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s --command=%(sql)s" % env)
+                    else:
+                        ret = run_or_dryrun("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s" % env)
                                 
                 elif 'mysql' in env.db_engine:
-                    ret = run_or_dryrun("mysql -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s" % env)
+                    if as_text:
+                        ret = run_or_dryrun('mysql -h %(db_host)s -u %(db_user)s -p\'%(db_password)s\' %(db_name)s -e "%(sql)s"' % env)
+                    else:
+                        ret = run_or_dryrun("mysql -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s" % env)
                     
                 else:
                     raise NotImplementedError('Unknown database type: %s' % env.db_engine)
@@ -713,7 +732,7 @@ def record_manifest_migrations(verbose=0):
 
 @task_or_dryrun
 #@runs_once
-def update(name=None, site=None, skip_databases=None, do_install_sql=0, apps=''):
+def update(name=None, site=None, skip_databases=None, do_install_sql=0, apps='', ignore_errors=0):
     """
     Updates schema and custom SQL.
     """
@@ -725,7 +744,8 @@ def update(name=None, site=None, skip_databases=None, do_install_sql=0, apps='')
     migrate(
         site=site,
         skip_databases=skip_databases,
-        migrate_apps=apps)
+        migrate_apps=apps,
+        ignore_errors=ignore_errors)
     if int(do_install_sql):
         install_sql(name=name, site=site, apps=apps)
     #TODO:run syncdb --all to force population of new content types?
@@ -746,12 +766,14 @@ def update_all(skip_databases=None, do_install_sql=0, apps='', ignore_errors=0):
         sites = env.available_sites
     
     for site in sites:
+        
         with settings(warn_only=int(ignore_errors)):
             update(
                 site=site,
                 skip_databases=skip_databases,
                 do_install_sql=do_install_sql,
-                apps=apps)
+                apps=apps,
+                ignore_errors=ignore_errors)
 
 #DEPRECATED
 @task_or_dryrun
@@ -771,7 +793,9 @@ class DjangoMigrations(Satchel):
     name = 'djangomigrations'
 
     def set_defaults(self):
-        pass
+        
+        self.env.app_dir = None
+        self.env.ignore_errors = 0
 
     def record_manifest(self):
         data = {} # {app: latest_migration_name}
@@ -785,7 +809,24 @@ class DjangoMigrations(Satchel):
             print('%s.migrations:' % self.name)
             pprint(data, indent=4)
         return data
-        
+    
+    @task
+    def truncate(self, app):
+        assert self.genv.SITE, 'This should only be run for a specific site.'
+        r = self.local_renderer
+        r.env.app = app
+        r.run('rm -f {app_dir}/{app}/migrations/*.py')
+        r.run('rm -f {app_dir}/{app}/migrations/*.pyc')
+        r.run('touch {app_dir}/{app}/migrations/__init__.py')
+        r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; ./manage schemamigration {app} --initial')
+        execute_sql(
+            sql="DELETE FROM south_migrationhistory WHERE app_name='{app}';".format(**r.env),
+            site=self.genv.SITE,
+            as_text=True,
+        )
+        r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; ./manage migrate {app} --fake')
+    
+    @task    
     def configure(self):
         last = self.last_manifest or {}
         current = self.current_manifest or {}
@@ -801,7 +842,7 @@ class DjangoMigrations(Satchel):
             # Note, Django's migrate command doesn't support multiple app name arguments
             # with all options, so we run it separately for each app.
             for app in migrate_apps:
-                update_all(apps=app, ignore_errors=1)
+                update_all(apps=app, ignore_errors=self.env.ignore_errors)
     
     configure.deploy_before = [
         'packager',

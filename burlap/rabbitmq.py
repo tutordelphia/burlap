@@ -28,10 +28,12 @@ class RabbitMQBleedingSatchel(Satchel):
         """
         r = self.local_renderer
         
-        r.sudo("echo 'deb http://www.rabbitmq.com/debian/ testing main' >> /etc/apt/sources.list")
-        r.sudo('cd /tmp; '
-            'wget https://www.rabbitmq.com/rabbitmq-signing-key-public.asc; '
-            'apt-key add rabbitmq-signing-key-public.asc')
+#         r.sudo("echo 'deb http://www.rabbitmq.com/debian/ testing main' >> /etc/apt/sources.list")
+        r.sudo("echo 'deb http://www.rabbitmq.com/debian/ testing main' >> /etc/apt/sources.list.d/rabbitmq.list")
+#         r.sudo('cd /tmp; '
+#             'wget https://www.rabbitmq.com/rabbitmq-signing-key-public.asc; '
+#             'apt-key add rabbitmq-signing-key-public.asc')
+        r.sudo('cd /tmp; wget -O- https://www.rabbitmq.com/rabbitmq-release-signing-key.asc | sudo apt-key add -')
         r.sudo('apt-get update')
     
     configure.deploy_before = ['packager', 'rabbitmq']

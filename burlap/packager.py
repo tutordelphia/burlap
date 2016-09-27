@@ -164,7 +164,7 @@ class PackagerSatchel(Satchel):
         
         for satchel_name, satchel in self.all_other_enabled_satchels.items():
             
-            if service and satchel_name != service:
+            if service and satchel_name.upper() != service:
                 continue
             
             if hasattr(satchel, 'packager_repositories'):
@@ -203,6 +203,8 @@ class PackagerSatchel(Satchel):
         apt_keys = repos.get(APT_KEY, [])
         for parts in apt_keys:
             if isinstance(parts, tuple):
+                assert len(parts) == 2
+                key_server, key_value = parts
                 r.env.apt_key_server = key_server
                 r.env.apt_key_value = key_value
                 r.sudo("apt-key adv --keyserver {apt_key_server} --recv-key {apt_key_value}")
@@ -261,6 +263,8 @@ class PackagerSatchel(Satchel):
                     _pkgs = satchel.packager_system_packages
                     for _key in [(version.distro, version.release), version.distro]:
                         if _key in _pkgs:
+                            if self.verbose:
+                                print('satchel %s requires:' % satchel, _pkgs[_key])
                             _new.extend(_pkgs[_key])
                 except AttributeError:
                     pass
@@ -347,6 +351,7 @@ class PackagerSatchel(Satchel):
             types = PACKAGE_TYPES
         for type in types:
             if type == SYSTEM:
+                print('system')
                 content = '\n'.join(self.list_required(type=type, service=service))
                 if list_only:
                     lst.extend(_ for _ in content.split('\n') if _.strip())
@@ -365,6 +370,10 @@ class PackagerSatchel(Satchel):
     @task
     def configure(self, **kwargs):
         
+        initial_upgrade = int(kwargs.pop('initial_upgrade', 1))
+        
+        service = kwargs.pop('service', '')
+        
         lm = self.last_manifest
         
         if isinstance(lm, list):
@@ -379,13 +388,13 @@ class PackagerSatchel(Satchel):
                 
         self.refresh()
         
-        if lm.get('initial_upgrade') is None and self.env.initial_upgrade:
+        if initial_upgrade and lm.get('initial_upgrade') is None and self.env.initial_upgrade:
             self.upgrade()
             if self.env.do_reboots:
                 self.reboot(wait=300, timeout=60)
             
-        self.install_repositories(**kwargs)
-        self.install_required(type=SYSTEM, **kwargs)
+        self.install_repositories(service=service, **kwargs)
+        self.install_required(type=SYSTEM, service=service, **kwargs)
         self.install_custom(**kwargs)
     
     configure.deploy_before = ['user', 'ubuntumultiverse']

@@ -50,9 +50,9 @@ class UnattendedUpgradesSatchel(Satchel):
             
             # Enable automatic package updates for Ubuntu.
             # Taken from the guide at https://help.ubuntu.com/lts/serverguide/automatic-updates.html.
-            fn = self.render_to_file('unattended_upgrades/etc_apt_aptconfd_50unattended_upgrades')
+            fn = self.render_to_file('unattendedupgrades/etc_apt_aptconfd_50unattended_upgrades')
             r.put(local_path=fn, remote_path='/etc/apt/apt.conf.d/50unattended-upgrades', use_sudo=True)
-            fn = self.render_to_file('unattended_upgrades/etc_apt_aptconfd_10periodic')
+            fn = self.render_to_file('unattendedupgrades/etc_apt_aptconfd_10periodic')
             r.put(local_path=fn, remote_path='/etc/apt/apt.conf.d/10periodic', use_sudo=True)
             
         else:

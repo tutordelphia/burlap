@@ -23,6 +23,7 @@ def iter_hostnames():
     
     retriever = get_hosts_retriever()
     
+    print('a')
     hosts = list(retriever(extended=1))
     for _hostname, _data in hosts:
         yield _hostname
@@ -72,6 +73,9 @@ class HostSatchel(Satchel):
         self.env.default_user = None
         self.env.default_password = None
         self.env.default_key_filename = None
+        
+        self.env.do_initrole = True
+        
         self.env.post_initrole_tasks = []
         
         self.env.original_user = None
@@ -311,7 +315,8 @@ class HostSatchel(Satchel):
         
         # If the desired hostname is not present but the default hostname is present,
         # then we assume the host is new or has been reset and needs to be reconfigured.
-        self.initrole()
+        if self.env.do_initrole:
+            self.initrole()
         
     def configure(self):
         # Just a stub. All the magic happens in deploy_pre_run().
@@ -358,12 +363,23 @@ class HostnameSatchel(Satchel):
         """
         from burlap.common import get_hosts_retriever
         if self.env.use_retriever:
+            print('using retriever')
+            print('hosts:', self.genv.hosts)
             retriever = get_hosts_retriever()
-            hosts = list(retriever(verbose=self.verbose, extended=1))
+            hosts = list(retriever(extended=1))
             for _hostname, _data in hosts:
+                
+                # Skip hosts that aren't selected for this run.
+                if self.genv.hosts \
+                and _data.ip not in self.genv.hosts \
+                and _data.public_dns_name not in self.genv.hosts \
+                and _hostname not in self.genv.hosts:
+                    continue
+                    
                 assert _data.ip, 'Missing IP.'
-                yield _data.ip, _data.public_dns_name
+                yield _data.ip, _hostname#_data.public_dns_name
         else:
+            print('using default')
             for ip, hostname in self.env.hostnames.iteritems():
                 print('ip lookup:', ip, hostname)
                 if ip == UNKNOWN:
@@ -397,6 +413,7 @@ class HostnameSatchel(Satchel):
         /etc/hostname to reliably identify the server hostname.
         """
         r = self.local_renderer
+        print('a0')
         for ip, hostname in self.iter_hostnames():
             print('ip/hostname:', ip, hostname)
             r.genv.host_string = ip

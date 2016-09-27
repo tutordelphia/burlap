@@ -60,7 +60,7 @@ class IPSatchel(ServiceSatchel):
         Configures the server to use a static IP.
         """
         fn = self.render_to_file('ip/ip_interfaces_dynamic.template')
-        self.put_or_dryrun(local_path=fn, remote_path=env.interfaces_fn, use_sudo=True)
+        self.put_or_dryrun(local_path=fn, remote_path=self.env.interfaces_fn, use_sudo=True)
     
     @task
     def configure(self):

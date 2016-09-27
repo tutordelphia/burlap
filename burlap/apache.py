@@ -706,6 +706,11 @@ class ApacheSatchel(ServiceSatchel):
     configure.deploy_before = ['packager', 'user', 'hostname', 'ip']
 
 class ApacheModEvasiveSatchel(Satchel):
+    """
+    Installs the mod-evasive Apache module for combating DDOS attacks.
+    
+    https://www.linode.com/docs/websites/apache-tips-and-tricks/modevasive-on-apache
+    """
     
     name = 'apachemodevasive'
     
@@ -716,21 +721,45 @@ class ApacheModEvasiveSatchel(Satchel):
             (UBUNTU, '14.04'): ['libapache2-mod-evasive'],
         }
         
-    def configure():
-        self.get_apache_settings()
-        
-        self.genv.apache_mods_enabled.append('mod-evasive')#Ubuntu 12.04
-        self.genv.apache_mods_enabled.append('evasive')#Ubuntu 14.04
-        
-        # Write conf.
-        fn = self.render_to_file('apache_modevasive.template.conf')
-        self.put_or_dryrun(local_path=fn, remote_path='/etc/apache2/mods-available/mod-evasive.conf', use_sudo=True)#Ubuntu 12.04
-        self.put_or_dryrun(local_path=fn, remote_path='/etc/apache2/mods-available/evasive.conf', use_sudo=True)#Ubuntu 14.04
-        
+    @task
+    def configure(self):
+        self.push_genv()
+        try:
+            r = self.local_renderer
+            
+            self.install_packages()
+            
+            _settings = apache.get_apache_settings()
+#             print('_settings:', _settings)
+#             return
+            self.genv.update(_settings)
+            
+            self.genv.apache_mods_enabled.append('mod-evasive')#Ubuntu 12.04
+            self.genv.apache_mods_enabled.append('evasive')#Ubuntu 14.04
+            
+            # Write conf for each Ubuntu version since they don't conflict.
+            fn = r.render_to_file('apache/apache_modevasive.template.conf')
+            # Ubuntu 12.04
+            r.put(
+                local_path=fn,
+                remote_path='/etc/apache2/mods-available/mod-evasive.conf',
+                use_sudo=True)
+            # Ubuntu 14.04
+            r.put(
+                local_path=fn,
+                remote_path='/etc/apache2/mods-available/evasive.conf',
+                use_sudo=True)
+        finally:
+            self.pop_genv()
     
     configure.deploy_before = ['apache']
     
 class ApacheModRPAFSatchel(Satchel):
+    """
+    Installs the mod-rpaf Apache module.
+    
+    https://github.com/gnif/mod_rpaf
+    """
     
     name = 'apachemodrpaf'
     
@@ -741,13 +770,20 @@ class ApacheModRPAFSatchel(Satchel):
             (UBUNTU, '14.04'): ['libapache2-mod-rpaf'],
         }
     
-    def configure():
+    @task
+    def configure(self):
+        self.install_packages()
         self.get_apache_settings()
         self.genv.apache_mods_enabled.append('rpaf')
         
     configure.deploy_before = ['apache']
     
 class ApacheModSecurity(Satchel):
+    """
+    Installs the mod-security Apache module.
+    
+    https://www.modsecurity.org
+    """
     
     name = 'apachemodsecurity'
     
@@ -758,7 +794,10 @@ class ApacheModSecurity(Satchel):
             (UBUNTU, '14.04'): ['libapache2-modsecurity'],
         }
     
-    def configure():
+    @task
+    def configure(self):
+        self.install_packages()
+        
         self.get_apache_settings()
         
         self.genv.apache_mods_enabled.append('mod-security')
@@ -868,7 +907,8 @@ class ApacheMediaSatchel(Satchel):
         if self.verbose:
             print('date:', data)
         return data
-        
+    
+    @task
     def configure(self):
         self.sync_media()
     
@@ -876,16 +916,16 @@ class ApacheMediaSatchel(Satchel):
             
 apache = ApacheSatchel()
 
-# apache_modevasive = ApacheModEvasiveSatchel()
+apache_modevasive = ApacheModEvasiveSatchel()
 # apache_modevasive.requires_satchel(apache)
 # 
-# apache_modrpaf = ApacheModRPAFSatchel()
+apache_modrpaf = ApacheModRPAFSatchel()
 # apache_modrpaf.requires_satchel(apache)
 # 
-# apache_modsecurity = ApacheModSecurity()
+apache_modsecurity = ApacheModSecurity()
 # apache_modsecurity.requires_satchel(apache)
 # 
-# apache_visitors = ApacheVisitors()
+apache_visitors = ApacheVisitors()
 # apache_visitors.requires_satchel(apache)
 # 
 apachemedia = ApacheMediaSatchel()

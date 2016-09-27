@@ -339,15 +339,13 @@ class MySQLClientSatchel(Satchel):
     @property
     def packager_system_packages(self):
         return {
-            FEDORA: ['mysql-server'],
-            (UBUNTU, '12.04'): ['mysql-server', 'libmysqlclient-dev'],
-            (UBUNTU, '14.04'): ['mysql-server', 'libmysqlclient-dev'],
+            (UBUNTU, '12.04'): ['libmysqlclient-dev', 'mysql-client'],
+            (UBUNTU, '14.04'): ['libmysqlclient-dev', 'mysql-client'],
+            (UBUNTU, '16.04'): ['libmysqlclient-dev', 'mysql-client'],
         }
-
 
 mysql = MySQLSatchel()
 mysqlclient = MySQLClientSatchel()
-
 
 def query(query, use_sudo=True, **kwargs):
     """

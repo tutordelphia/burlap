@@ -17,6 +17,7 @@ import getpass
 import inspect
 import subprocess
 import uuid
+import warnings
 from collections import namedtuple, OrderedDict
 from pprint import pprint
 from datetime import date
@@ -99,6 +100,9 @@ manifest_deployers_befores = type(env)() #{component:[pending components that mu
 manifest_deployers_takes_diff = type(env)()
 
 _post_import_modules = set()
+
+def deprecation(message):
+    warnings.warn(message, DeprecationWarning, stacklevel=2)
 
 class Colors:
     HEADER = '\033[95m'
@@ -436,7 +440,8 @@ class Renderer(object):
             ret = wrap(ret)
         elif attrname.startswith('reboot'):
             ret = wrap2(ret)
-        elif attrname.startswith('put'):
+        elif attrname.startswith('put') \
+        or attrname.startswith('install_script'):
             ret = put_wrap2(ret)
         elif attrname.startswith('sed'):
             ret = sed_wrap2(ret)
@@ -487,6 +492,8 @@ class Satchel(object):
         
         # Global environment.
         self.genv = env
+        
+        self._genv = None
         
         self._requires_satchels = set()
         
@@ -557,6 +564,16 @@ class Satchel(object):
             if hasattr(attr, '__call__') and getattr(attr, 'is_task', False):
                 tasks.add(_name)
         return sorted(tasks)
+    
+    def push_genv(self):
+        self._genv = type(self.genv)(self.genv.copy())
+        
+    def pop_genv(self):
+        if self._genv is not None:
+            _genv = self._genv
+            self.genv = type(self._genv)(self._genv.copy())
+            self._genv = None
+            return _genv
     
     def add_post_role_load_callback(self, cb):
         global post_role_load_callbacks
@@ -721,10 +738,33 @@ class Satchel(object):
     def install_script(self, *args, **kwargs):
         return install_script(*args, **kwargs)
     
+    def vprint(self, *args, **kwargs):
+        """
+        When verbose is set, acts like the normal print() function.
+        Otherwise, does nothing.
+        """
+        if self.verbose:
+            print(*args, **kwargs)
+    
     def install_packages(self):
+        """
+        Installs all required packages listed for this satchel.
+        Normally called indirectly by running packager.configure().
+        """
         os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
-#         print('os_version:', os_version)
-        req_packages = self.required_system_packages
+        self.vprint('os_version:', os_version)
+        
+        # Lookup legacy package list.
+        # OS: [package1, package2, ...],
+        req_packages1 = self.required_system_packages
+        if req_packages1:
+            deprecation('The required_system_packages attribute is deprecated, '
+                'use the packager_system_packages property instead.')
+        
+        # Lookup new package list.
+        # OS: [package1, package2, ...],
+        req_packages2 = self.packager_system_packages
+        
         patterns = [
             (os_version.type, os_version.distro, os_version.release),
             (os_version.distro, os_version.release),
@@ -732,14 +772,16 @@ class Satchel(object):
             (os_version.distro,),
             os_version.distro,
         ]
-#         print('req_packages:', req_packages)
+        self.vprint('req_packages1:', req_packages1)
+        self.vprint('req_packages2:', req_packages2)
         package_list = None
         for pattern in patterns:
-#             print('pattern:', pattern)
-            if pattern in req_packages:
-                package_list = req_packages[pattern]
-                break
-#         print('package_list:', package_list)
+            self.vprint('pattern:', pattern)
+            for req_packages in (req_packages1, req_packages2):
+                if pattern in req_packages:
+                    package_list = req_packages[pattern]
+                    break
+        self.vprint('package_list:', package_list)
         if package_list:
             package_list_str = ' '.join(package_list)
             if os_version.distro == UBUNTU:
@@ -1790,6 +1832,7 @@ def install_script(local_path=None, remote_path=None, render=True, extra=None):
     local_path = find_template(local_path)
     if render:
         extra = extra or {}
+#         print('extra:', extra.keys())
         local_path = render_to_file(template=local_path, extra=extra)
     put_or_dryrun(local_path=local_path, remote_path=remote_path, use_sudo=True)
     sudo_or_dryrun('chmod +x %s' % env.put_remote_path)

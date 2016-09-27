@@ -214,7 +214,7 @@ def shell(gui=0, command=''):
     if command:
         _env.shell_interactive_shell_str = command
     else:
-        _env.shell_interactive_shell_str = _env.shell_interactive_shell % _env
+        _env.shell_interactive_shell_str = (_env.shell_interactive_shell or '') % _env
     
     if _env.is_local:
         cmd = '%(shell_interactive_shell_str)s' % _env
