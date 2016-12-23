@@ -5,6 +5,7 @@ OpenSSH tasks
 This module provides tools to manage OpenSSH server and client.
 
 """
+from __future__ import print_function
 
 from fabric.api import hide, shell_env
 from fabric.contrib.files import append, sed
@@ -12,6 +13,9 @@ from fabric.contrib.files import append, sed
 from burlap.service import is_running, restart
 from burlap.files import watch
 
+from burlap import Satchel
+from burlap.constants import *
+from burlap.decorators import task, task_or_dryrun
 
 def harden(allow_root_login=False, allow_password_auth=False,
            sshd_config='/etc/ssh/sshd_config'):
@@ -106,3 +110,41 @@ def _append(filename, regex, use_sudo):
     """
     with hide('stdout', 'warnings'):
         return append(filename, regex, use_sudo=use_sudo)
+
+class SSHNiceSatchel(Satchel):
+
+    name = 'sshnice'
+    
+    @property
+    def packager_system_packages(self):
+        return {
+            FEDORA: ['cron'],
+            UBUNTU: ['cron'],
+            DEBIAN: ['cron'],
+        }
+    
+    def set_defaults(self):
+        self.env.enabled = False
+        self.env.cron_script_path = '/etc/cron.d/sshnice'
+        self.env.cron_perms = '600'
+    
+    @task
+    def configure(self):
+        r = self.local_renderer
+        if self.env.enabled:
+            self.install_packages()
+            remote_path = r.env.remote_path = self.env.cron_script_path
+            r.put(
+                local_path=self.find_template('sshnice/etc_crond_sshnice'),
+                remote_path=remote_path, use_sudo=True)
+            r.sudo('chown root:root %s' % remote_path)
+            # Must be 600, otherwise gives INSECURE MODE error.
+            # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
+            r.sudo('chmod {cron_perms} {remote_path}')
+            r.sudo('service cron restart')
+        else:
+            r.sudo('rm -f {cron_script_path}')
+            r.sudo('service cron restart')
+    configure.deploy_before = ['packager']
+
+sshnice = SSHNiceSatchel()

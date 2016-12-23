@@ -333,11 +333,12 @@ class PostgreSQLSatchel(DatabaseSatchel):
         else:
             r.env.remote_dump_fn = '/tmp/' + os.path.split(r.env.dump_fn)[-1]
         
-        if not prep_only:
+        print('r.genv.is_local:', r.genv.is_local, r.genv.hosts)
+        if not prep_only and not r.genv.is_local:
             if not self.dryrun:
                 assert os.path.isfile(r.env.dump_fn), \
                     missing_local_dump_error
-            r.pc('Uploading database snapshot...')
+            r.pc('Uploading PostgreSQL database snapshot...')
 #                 r.put(
 #                     local_path=r.env.dump_fn,
 #                     remote_path=r.env.remote_dump_fn)
@@ -357,7 +358,11 @@ class PostgreSQLSatchel(DatabaseSatchel):
             if r.env.engine == POSTGIS:
                 r.run('psql --user={db_root_username} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis;"')
                 r.run('psql --user={db_root_username} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis_topology;"')
+        
+        with settings(warn_only=True):
+            r.run('psql --user={db_root_username} -c "REASSIGN OWNED BY {db_user} TO {db_root_username};"')
             
+        with settings(warn_only=True):
             r.run('psql --user={db_root_username} -c "DROP OWNED BY {db_user} CASCADE;"')
             
         r.run('psql --user={db_root_username} -c "DROP USER IF EXISTS {db_user}; '

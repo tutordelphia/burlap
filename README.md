@@ -9,9 +9,11 @@ Overview
 Burlap is a [configuration management](https://en.wikipedia.org/wiki/Comparison_of_open-source_configuration_management_software)
 tool and framework for deploying software to servers.
 
-It's written in Python and is built onto of [Fabric](http://www.fabfile.org/) to run commands remotely over SSH.
+It's written in Python and is built ontop of [Fabric](http://www.fabfile.org/) to run commands remotely over SSH.
 
 Unlike [Chef](https://www.chef.io/) or [Ansible](http://www.ansible.com/) that target large "web-scale" platforms at the expense of great complexity, Burlap targets small to medium-scale platforms and keeps its configuration simple.
+
+Much of the code is also heavily influenced by [Fabtools](https://github.com/fabtools/fabtools), another Fabric-based toolkit.
 
 Installation
 ------------

@@ -186,11 +186,8 @@ class SupervisorSatchel(ServiceSatchel):
         
         return data
 
-    def deploy_services(self, site=None):
-        """
-        Collects the configurations for all registered services and writes
-        the appropriate supervisord.conf file.
-        """
+    @task
+    def write_configs(self, site=None):
         from burlap.common import iter_sites
         
         verbose = self.verbose
@@ -200,6 +197,7 @@ class SupervisorSatchel(ServiceSatchel):
         supervisor_services = []
         process_groups = []
         
+        #TODO:check available_sites_by_host and remove dead?
         for site, site_data in iter_sites(site=site, renderer=self.render_paths):
             if verbose:
                 print(site)
@@ -223,14 +221,59 @@ class SupervisorSatchel(ServiceSatchel):
     
         fn = self.render_to_file(self.env.config_template)
         self.put_or_dryrun(local_path=fn, remote_path=self.env.config_path, use_sudo=True)
+
+    def deploy_services(self, site=None):
+        """
+        Collects the configurations for all registered services and writes
+        the appropriate supervisord.conf file.
+        """
+        from burlap.common import iter_sites
+        
+        verbose = self.verbose
+        
+        self.render_paths()
+        
+        supervisor_services = []
+        process_groups = []
+        
+        # We use supervisorctl to configure supervisor, but this will throw a uselessly vague
+        # error message is supervisor isn't running.
+        if not self.is_running():
+            self.start()
+        
+        #TODO:check available_sites_by_host and remove dead?
+        self.write_configs(site=site)
+        for site, site_data in iter_sites(site=site, renderer=self.render_paths):
+            if verbose:
+                print(site)
+            for cb in self.genv._supervisor_create_service_callbacks:
+                ret = cb()
+                if isinstance(ret, basestring):
+                    supervisor_services.append(ret)
+                elif isinstance(ret, tuple):
+                    assert len(ret) == 2
+                    conf_name, conf_content = ret
+                    if verbose:
+                        print('conf_name:', conf_name)
+                        print('conf_content:', conf_content)
+                    remote_fn = os.path.join(self.env.conf_dir, conf_name)
+                    local_fn = self.write_to_file(conf_content)
+#                     self.put_or_dryrun(local_path=local_fn, remote_path=remote_fn, use_sudo=True)
+#                     
+                    process_groups.append(os.path.splitext(conf_name)[0])
+                    
+        self.env.services_rendered = '\n'.join(supervisor_services)
+    
+        fn = self.render_to_file(self.env.config_template)
+        self.put_or_dryrun(local_path=fn, remote_path=self.env.config_path, use_sudo=True)
         
         for pg in process_groups:
             self.sudo_or_dryrun('supervisorctl add %s' % pg)
         
         #TODO:are all these really necessary?
-        self.sudo_or_dryrun('supervisorctl restart all')
         self.sudo_or_dryrun('supervisorctl reread')
         self.sudo_or_dryrun('supervisorctl update')
+        self.sudo_or_dryrun('supervisorctl restart all')
     
     @task
     def configure(self, **kwargs):

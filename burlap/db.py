@@ -127,7 +127,7 @@ class DatabaseSatchel(ServiceSatchel):
         self.env.dump_archive_dir = 'snapshots'
         
         # Default filename of database snapshots.
-        self.env.dump_fn_template = '{dump_dest_dir}/db_{db_type}_{SITE}_{ROLE}_$(date +%Y%m%d).sql.gz'
+        self.env.dump_fn_template = '{dump_dest_dir}/db_{db_type}_{SITE}_{ROLE}_{db_name}_$(date +%Y%m%d).sql.gz'
         
         # This overrides the built-in dump command.
         self.env.dump_command = None
@@ -180,13 +180,17 @@ class DatabaseSatchel(ServiceSatchel):
         
         # Check the new password location.
         key = r.env.db_host
-        #print('root login key:', key)
+#         print('root login key:', key)
+#         print('r.env.root_logins:', r.env.root_logins)
         if key in r.env.root_logins:
             data = r.env.root_logins[key]
+#             print('data:', data)
             if 'username' in data:
                 r.env.db_root_username = data['username']
+                r.genv.db_root_username = data['username']
             if 'password' in data:
                 r.env.db_root_password = data['password']
+                r.genv.db_root_password = data['password']
         else:
             msg = 'Warning: No root login entry found for host %s in role %s.' \
                 % (r.env.db_host, self.genv.ROLE)
@@ -216,7 +220,9 @@ class DatabaseSatchel(ServiceSatchel):
             if d.connection_handler == CONNECTION_HANDLER_DJANGO:
                 from burlap.dj import set_db
                 _d = type(self.genv)()
+                print('Loading Django DB settings for site {} and role {}.'.format(site, role), file=sys.stderr)
                 set_db(name=name, site=site, role=role, e=_d)
+                print('Loaded:', _d, file=sys.stderr)
                 d.update(_d)
             
             r = LocalRenderer(self, lenv=d)

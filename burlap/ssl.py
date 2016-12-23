@@ -5,187 +5,153 @@ import sys
 import re
 from datetime import datetime, date
 
-from fabric.api import (
-    env,
-    require,
-    settings,
-    cd,
-    task,
-    hide,
-    runs_once,
-)
-
-try:
-    import boto
-except ImportError:
-    boto = None
-
-import pytz
-
-from fabric.contrib import files
-from fabric.tasks import Task
-
-import dateutil.parser
-
+from burlap import ServiceSatchel
+from burlap.constants import *
+from burlap.decorators import task
 from burlap import common
-from burlap.common import (
-    ALL,
-    run_or_dryrun,
-    put_or_dryrun,
-    sudo_or_dryrun,
-    local_or_dryrun,
-    SITE,
-    ROLE,
-)
-from burlap.decorators import task_or_dryrun
 
-env.ssl_country = '?'
-env.ssl_state = '?'
-env.ssl_city = '?'
-env.ssl_organization = '?'
-env.ssl_common_name = '?'
-env.ssl_days = 365
-env.ssl_length = 4096
-env.ssl_domain = ''
+# import dateutil.parser
+# import pytz
+from fabric.api import runs_once, hide
 
-@task_or_dryrun
-def generate_self_signed_certificate(domain='', r=None):
-    """
-    Generates a self-signed certificate for use in an internal development
-    environment for testing SSL pages.
-    """
-    env.ssl_domain = domain or env.ssl_domain
-    assert env.ssl_domain, 'No SSL domain defined.'
-    role = r or env.ROLE or ALL
-    ssl_dst = 'roles/%s/ssl' % (role,)
-    if not os.path.isdir(ssl_dst):
-        os.makedirs(ssl_dst)
-
-    env.ssl_base_dst = '%s/%s' % (ssl_dst, env.ssl_domain)
-#    http://almostalldigital.wordpress.com/2013/03/07/self-signed-ssl-certificate-for-ec2-load-balancer/
-
-    #openssl req -new -newkey rsa:4096 -days 365 -nodes -x509 -subj "/C=US/ST=Denial/L=Springfield/O=Dis/CN=www.example.com" -keyout www.example.com.key  -out www.example.com.cert
-#    local_or_dryrun('openssl genrsa -des3 -passout "pass:" -out %(ssl_base_dst)s.key 1024' % env)
-#    #enter simple passphrase, we'll remove it later
-#
-#    local_or_dryrun('openssl req -nodes -newkey rsa:2048 -keyout %(ssl_base_dst)s.key -out %(ssl_base_dst)s.csr' % env)
-#
-#    local_or_dryrun('cp %(ssl_base_dst)s.key %(ssl_base_dst)s.key.org' % env)
-#    local_or_dryrun('openssl rsa -in %(ssl_base_dst)s.key.org -out %(ssl_base_dst)s.key' % env)
-#    local_or_dryrun('rm -f %(ssl_base_dst)s.key.org' % env)
-#
-#    local_or_dryrun('openssl x509 -req -days 365 -in %(ssl_base_dst)s.csr -signkey %(ssl_base_dst)s.key -out %(ssl_base_dst)s.crt' % env)
-#
-#    local_or_dryrun('openssl rsa -in %(ssl_base_dst)s.key -text' % env)
-#    local_or_dryrun('openssl x509 -inform PEM -in %(ssl_base_dst)s.crt' % env)
-    cmd = 'openssl req -new -newkey rsa:%(ssl_length)s -days %(ssl_days)s -nodes -x509 -subj "/C=%(ssl_country)s/ST=%(ssl_state)s/L=%(ssl_city)s/O=%(ssl_organization)s/CN=%(ssl_domain)s" -keyout %(ssl_base_dst)s.key  -out %(ssl_base_dst)s.crt' % env
-    print(cmd)
-    local_or_dryrun(cmd)
-
-@task_or_dryrun
-@runs_once
-def generate_csr(domain='', r=None):
-    """
-    Creates a certificate signing request to be submitted to a formal
-    certificate authority to generate a certificate.
+class SSLSatchel(ServiceSatchel):
     
-    Note, the provider may say the CSR must be created on the target server,
-    but this is not necessary.
-    """
-    from apache import set_apache_site_specifics
-    
-    env.ssl_domain = domain or env.ssl_domain
-    role = r or env.ROLE or ALL
-    ssl_dst = 'roles/%s/ssl' % (role,)
-    print('ssl_dst:', ssl_dst)
-    if not os.path.isdir(ssl_dst):
-        os.makedirs(ssl_dst)
-    
-    for site, site_data in common.iter_sites(setter=set_apache_site_specifics):
-        print('site:', site, file=sys.stderr)
-#        
-        assert env.ssl_domain, 'No SSL domain defined.'
-    
-        #2048?
-        env.ssl_base_dst = '%s/%s' % (ssl_dst, env.ssl_domain.replace('*.', ''))
-        env.ssl_csr_year = date.today().year
-        cmd = 'openssl req -nodes -newkey rsa:%(ssl_length)s -subj "/C=%(ssl_country)s/ST=%(ssl_state)s/L=%(ssl_city)s/O=%(ssl_organization)s/CN=%(ssl_domain)s" -keyout %(ssl_base_dst)s.%(ssl_csr_year)i.key -out %(ssl_base_dst)s.%(ssl_csr_year)i.csr' % env
-        local_or_dryrun(cmd)
+    name = 'ssl'
 
-def get_expiration_date(fn):
-    """
-    Reads the expiration date of a local crt file.
-    """
-    env.ssl_crt_fn = fn
-    with hide('running'):
-        ret = local_or_dryrun('openssl x509 -noout -in %(ssl_crt_fn)s -dates' % env, capture=True)
-    matches = re.findall('notAfter=(.*?)$', ret, flags=re.IGNORECASE)
-    if matches:
-        return dateutil.parser.parse(matches[0])
+    def set_defaults(self):
+        self.env.country = '?'
+        self.env.state = '?'
+        self.env.city = '?'
+        self.env.organization = '?'
+        self.env.common_name = '?'
+        self.env.days = 365
+        self.env.length = 4096
+        self.env.domain = ''
 
-@task_or_dryrun
-def list_expiration_dates(base='roles/all/ssl'):
-    """
-    Scans through all local .crt files and displays the expiration dates.
-    """
-    max_fn_len = 0
-    max_date_len = 0
-    data = []
-    for fn in os.listdir(base):
-        fqfn = os.path.join(base, fn)
-        if not os.path.isfile(fqfn):
-            continue
-        if not fn.endswith('.crt'):
-            continue
-        expiration_date = get_expiration_date(fqfn)
-        max_fn_len = max(max_fn_len, len(fn))
-        max_date_len = max(max_date_len, len(str(expiration_date)))
-        data.append((fn, expiration_date))
-    print('%s %s %s' % ('Filename'.ljust(max_fn_len), 'Expiration Date'.ljust(max_date_len), 'Expired'))
-    now = datetime.now().replace(tzinfo=pytz.UTC)
-    for fn, dt in sorted(data):
+    @task
+    def generate_self_signed_certificate(self, domain='', r=None):
+        """
+        Generates a self-signed certificate for use in an internal development
+        environment for testing SSL pages.
         
-        if dt is None:
-            expired = '?'
-        elif dt < now:
-            expired = 'YES'
+        http://almostalldigital.wordpress.com/2013/03/07/self-signed-ssl-certificate-for-ec2-load-balancer/
+        """
+        r = self.local_renderer
+        r.env.domain = domain or r.env.domain
+        assert r.env.domain, 'No SSL domain defined.'
+        role = r or self.genv.ROLE or ALL
+        ssl_dst = 'roles/%s/ssl' % (role,)
+        if not os.path.isdir(ssl_dst):
+            os.makedirs(ssl_dst)
+        r.env.base_dst = '%s/%s' % (ssl_dst, r.env.domain)
+        r.local('openssl req -new -newkey rsa:{ssl_length} -days {ssl_days} -nodes -x509 -subj "/C={ssl_country}/ST={ssl_state}/L={ssl_city}/O={ssl_organization}/CN={ssl_domain}" -keyout {ssl_base_dst}.key -out {ssl_base_dst}.crt')
+    
+    @task
+    @runs_once
+    def generate_csr(self, domain='', r=None):
+        """
+        Creates a certificate signing request to be submitted to a formal
+        certificate authority to generate a certificate.
+        
+        Note, the provider may say the CSR must be created on the target server,
+        but this is not necessary.
+        """
+        from apache import set_apache_site_specifics
+        
+        r = r or self.local_renderer
+        r.env.domain = domain or r.env.domain
+        role = self.genv.ROLE or ALL
+        site = self.genv.SITE or self.genv.default_site
+        print('self.genv.default_site:', self.genv.default_site, file=sys.stderr)
+        print('site.csr0:', site, file=sys.stderr)
+        ssl_dst = 'roles/%s/ssl' % (role,)
+        print('ssl_dst:', ssl_dst)
+        if not os.path.isdir(ssl_dst):
+            os.makedirs(ssl_dst)
+        for site, site_data in common.iter_sites(setter=set_apache_site_specifics):
+            print('site.csr1:', site, file=sys.stderr)
+            assert self.env.domain, 'No SSL domain defined.'
+            r.env.ssl_base_dst = '%s/%s' % (ssl_dst, self.env.domain.replace('*.', ''))
+            r.env.ssl_csr_year = date.today().year
+            r.local('openssl req -nodes -newkey rsa:{ssl_length} -subj "/C={ssl_country}/ST={ssl_state}/L={ssl_city}/O={ssl_organization}/CN={ssl_domain}" -keyout {ssl_base_dst}.{ssl_csr_year}.key -out {ssl_base_dst}.{ssl_csr_year}.csr')
+    
+    def get_expiration_date(self, fn):
+        """
+        Reads the expiration date of a local crt file.
+        """
+        r = self.local_renderer
+        r.env.crt_fn = fn
+        with hide('running'):
+            ret = r.local('openssl x509 -noout -in {ssl_crt_fn} -dates', capture=True)
+        matches = re.findall('notAfter=(.*?)$', ret, flags=re.IGNORECASE)
+        if matches:
+            return dateutil.parser.parse(matches[0])
+    
+    @task
+    def list_expiration_dates(self, base='roles/all/ssl'):
+        """
+        Scans through all local .crt files and displays the expiration dates.
+        """
+        max_fn_len = 0
+        max_date_len = 0
+        data = []
+        for fn in os.listdir(base):
+            fqfn = os.path.join(base, fn)
+            if not os.path.isfile(fqfn):
+                continue
+            if not fn.endswith('.crt'):
+                continue
+            expiration_date = get_expiration_date(fqfn)
+            max_fn_len = max(max_fn_len, len(fn))
+            max_date_len = max(max_date_len, len(str(expiration_date)))
+            data.append((fn, expiration_date))
+        print('%s %s %s' % ('Filename'.ljust(max_fn_len), 'Expiration Date'.ljust(max_date_len), 'Expired'))
+        now = datetime.now().replace(tzinfo=pytz.UTC)
+        for fn, dt in sorted(data):
+            
+            if dt is None:
+                expired = '?'
+            elif dt < now:
+                expired = 'YES'
+            else:
+                expired = 'NO'
+            print('%s %s %s' % (fn.ljust(max_fn_len), str(dt).ljust(max_date_len), expired))
+    
+    @task
+    def verify_certificate_chain(self, base=None, crt=None, csr=None, key=None):
+        """
+        Confirms the key, CSR, and certificate files all match.
+        """
+        from burlap.common import get_verbose, print_fail, print_success
+        
+        r = self.local_renderer
+        
+        if base:
+            crt = base + '.crt'
+            csr = base + '.csr'
+            key = base + '.key'
         else:
-            expired = 'NO'
-        print('%s %s %s' % (fn.ljust(max_fn_len), str(dt).ljust(max_date_len), expired))
-
-@task_or_dryrun
-def verify_certificate_chain(base=None, crt=None, csr=None, key=None):
-    """
-    Confirms the key, CSR, and certificate files all match.
-    """
-    from burlap.common import get_verbose, print_fail, print_success
-    verbose = get_verbose()
+            assert crt and csr and key, 'If base not provided, crt and csr and key must be given.'
     
-    if base:
-        crt = base + '.crt'
-        csr = base + '.csr'
-        key = base + '.key'
-    else:
-        assert crt and csr and key, 'If base not provided, crt and csr and key must be given.'
+        assert os.path.isfile(crt)
+        assert os.path.isfile(csr)
+        assert os.path.isfile(key)
+    
+        csr_md5 = r.local('openssl req -noout -modulus -in %s | openssl md5' % csr, capture=True)
+        key_md5 = r.local('openssl rsa -noout -modulus -in %s | openssl md5' % key, capture=True)
+        crt_md5 = r.local('openssl x509 -noout -modulus -in %s | openssl md5' % crt, capture=True)
+    
+        match = crt_md5 == csr_md5 == key_md5
+            
+        if self.verbose or not match:
+            print('crt:', crt_md5)
+            print('csr:', csr_md5)
+            print('key:', key_md5)
+    
+        if match:
+            print_success('Files look good!')
+        else:
+            print_fail('Files no not match!')
+            raise Exception('Files no not match!')
 
-    assert os.path.isfile(crt)
-    assert os.path.isfile(csr)
-    assert os.path.isfile(key)
-
-    csr_md5 = local_or_dryrun('openssl req -noout -modulus -in %s | openssl md5' % csr, capture=True)
-    key_md5 = local_or_dryrun('openssl rsa -noout -modulus -in %s | openssl md5' % key, capture=True)
-    crt_md5 = local_or_dryrun('openssl x509 -noout -modulus -in %s | openssl md5' % crt, capture=True)
-
-    match = crt_md5 == csr_md5 == key_md5
-        
-    if verbose or not match:
-        print('crt:', crt_md5)
-        print('csr:', csr_md5)
-        print('key:', key_md5)
-
-    if match:
-        print_success('Files look good!')
-    else:
-        print_fail('Files no not match!')
-        raise Exception('Files no not match!')
-        
+ssl = SSLSatchel()

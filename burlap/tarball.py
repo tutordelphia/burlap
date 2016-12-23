@@ -109,7 +109,6 @@ class TarballSatchel(Satchel):
         """
         Generates a tarball of all deployable code.
         """
-        
         assert self.genv.SITE, 'Site unspecified.'
         assert self.genv.ROLE, 'Role unspecified.'
         self.env.gzip = bool(int(gzip))
@@ -120,7 +119,7 @@ class TarballSatchel(Satchel):
         cmd = ("cd %(tarball_absolute_src_dir)s; " \
             "tar %(tarball_exclusions_str)s --exclude-vcs %(tarball_gzip_flag)s " \
             "--create --verbose --dereference --file %(tarball_path)s *") % self.genv
-        self.local_or_dryrun(cmd)
+        self.local(cmd)
     
     @task
     def get_tarball_hash(fn=None, refresh=1, verbose=0):
@@ -166,7 +165,7 @@ class TarballSatchel(Satchel):
         genv.tarball_rsync_target_dir = tmp_dir
         genv.tarball_rsync_source_dir = src
         tmp_rsync_command = (self.env.rsync_command_template % genv) % genv
-        self.local_or_dryrun(tmp_rsync_command)
+        self.local(tmp_rsync_command)
         
         # Then rsync from the temp directory as sudo to complete the operation.
         genv.tarball_rsync_tmp_dir = tmp_dir

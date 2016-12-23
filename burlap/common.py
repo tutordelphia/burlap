@@ -299,7 +299,8 @@ def assert_valid_satchel(name):
     assert name in all_satchels
     return name
 
-CMD_VAR_REGEX = re.compile(r'(?:^|[^{]+){([^{}]+)}')
+# CMD_VAR_REGEX = re.compile(r'(?:^|[^{]+)(?<!\\){([^{}]+)}')
+CMD_VAR_REGEX = re.compile(r'(?:^|[^{\\]+){([^{}]+)}')
 CMD_ESCAPED_VAR_REGEX = re.compile(r'\{{2}[^\{\}]+\}{2}')
 
 def format(s, lenv, genv):
@@ -312,6 +313,8 @@ def format(s, lenv, genv):
             raise Exception, 'Too many variables containing variables.'
         
         var_names = CMD_VAR_REGEX.findall(s)
+#         print('s:', s)
+#         print('var_names:', var_names)
         if not var_names:
             break
         
@@ -338,7 +341,10 @@ def format(s, lenv, genv):
         
         for k, v in escaped_var_names.iteritems():
             s = s.replace(v, k)
-        
+    
+    s = s.replace('\{', '{')
+    s = s.replace('\}', '}')
+    
     return s
 
 class Renderer(object):
@@ -725,6 +731,12 @@ class Satchel(object):
         Reboots the server and waits for it to come back.
         """
         reboot_or_dryrun(*args, **kwargs)
+    
+    def enable_attr(self, *args, **kwargs):
+        return enable_attribute_or_dryrun(*args, **kwargs)
+    
+    def disable_attr(self, *args, **kwargs):
+        return disable_attribute_or_dryrun(*args, **kwargs)
     
     def write_to_file(self, *args, **kwargs):
         return write_to_file(*args, **kwargs)
@@ -1179,6 +1191,120 @@ def append_or_dryrun(*args, **kwargs):
             print(cmd)
     else:
         append(filename=filename, text=text.replace(r'\n', '\n'), use_sudo=use_sudo, **kwargs)
+
+def enable_attribute_or_dryrun(*args, **kwargs):
+    """
+    Similar to append() but ensures a line containing a key-value pair exists and is enabled.
+    """
+    dryrun = get_dryrun(kwargs.get('dryrun'))
+    
+    if 'dryrun' in kwargs:
+        del kwargs['dryrun']
+        
+    use_sudo = kwargs.pop('use_sudo', False)
+    run_cmd = sudo_or_dryrun if use_sudo else run_or_dryrun
+    run_cmd_str = 'sudo' if use_sudo else 'run'
+        
+    key = args[0] if len(args) >= 1 else kwargs.pop('key')
+    
+    value = str(args[1] if len(args) >= 2 else kwargs.pop('value'))
+    
+    filename = args[2] if len(args) >= 3 else kwargs.pop('filename')
+    
+    comment_pattern = args[3] if len(args) >= 4 else kwargs.pop('comment_pattern', r'#\s*')
+    
+    equals_pattern = args[4] if len(args) >= 5 else kwargs.pop('equals_pattern', r'\s*=\s*')
+    
+    equals_literal = args[5] if len(args) >= 6 else kwargs.pop('equals_pattern', '=')
+    
+    context = dict(
+        key=key,
+        value=value,
+        uncommented_literal='%s%s%s' % (key, equals_literal, value), # key=value
+        uncommented_pattern='%s%s%s' % (key, equals_pattern, value), # key = value
+        uncommented_pattern_partial='^%s%s[^\\n]*' % (key, equals_pattern), # key=
+        commented_pattern='%s%s%s%s' % (comment_pattern, key, equals_pattern, value), # #key=value
+        commented_pattern_partial='^%s%s%s[^\\n]*' % (comment_pattern, key, equals_pattern), # #key=
+        filename=filename,
+        backup=filename+'.bak',
+        comment_pattern=comment_pattern,
+        equals_pattern=equals_pattern,
+    )
+    
+    cmds = [
+        # Replace partial commented text with full un-commented text.
+        'sed -i -r -e "s/{commented_pattern_partial}/{uncommented_literal}/g" {filename}'.format(**context),
+        # Replace partial un-commented text with full un-commented text.
+        'sed -i -r -e "s/{uncommented_pattern_partial}/{uncommented_literal}/g" {filename}'.format(**context),
+        # Replace commented text with un-commented text.
+        'sed -i -r -e "s/{commented_pattern}/{uncommented_literal}/g" {filename}'.format(**context),
+        # If uncommented text still does not exist, append it.
+        'grep -qE "{uncommented_pattern}" {filename} || echo "{uncommented_literal}" >> {filename}'.format(**context),
+    ]
+    
+    if dryrun:
+        for cmd in cmds:
+            if BURLAP_COMMAND_PREFIX:
+                print('%s %s: %s' % (render_command_prefix(), run_cmd_str, cmd))
+            else:
+                print(cmd)
+    else:
+        for cmd in cmds:
+#             print('enable attr:', cmd)
+            run_cmd(cmd)
+
+def disable_attribute_or_dryrun(*args, **kwargs):
+    """
+    Comments-out a line containing an attribute.
+    The inverse of enable_attribute_or_dryrun().
+    """
+    dryrun = get_dryrun(kwargs.get('dryrun'))
+    
+    if 'dryrun' in kwargs:
+        del kwargs['dryrun']
+        
+    use_sudo = kwargs.pop('use_sudo', False)
+    run_cmd = sudo_or_dryrun if use_sudo else run_or_dryrun
+    run_cmd_str = 'sudo' if use_sudo else 'run'
+        
+    key = args[0] if len(args) >= 1 else kwargs.pop('key')
+    
+    filename = args[1] if len(args) >= 2 else kwargs.pop('filename')
+    
+    comment_pattern = args[2] if len(args) >= 3 else kwargs.pop('comment_pattern', r'#\s*')
+    
+    equals_pattern = args[3] if len(args) >= 4 else kwargs.pop('equals_pattern', r'\s*=\s*')
+    
+    equals_literal = args[4] if len(args) >= 5 else kwargs.pop('equals_pattern', '=')
+    
+    context = dict(
+        key=key,
+        uncommented_literal='%s%s' % (key, equals_literal), # key=value
+        uncommented_pattern='%s%s' % (key, equals_pattern), # key = value
+        uncommented_pattern_partial='^%s%s[^\\n]*' % (key, equals_pattern), # key=
+        commented_pattern='%s%s%s' % (comment_pattern, key, equals_pattern), # #key=value
+        commented_pattern_partial='^%s%s%s[^\\n]*' % (comment_pattern, key, equals_pattern), # #key=
+        filename=filename,
+        backup=filename+'.bak',
+        comment_pattern=comment_pattern,
+        equals_pattern=equals_pattern,
+    )
+    
+    cmds = [
+        # Replace partial un-commented text with full commented text.
+        'sed -i -r -e "s/{uncommented_pattern_partial}//g" {filename}'.format(**context),
+    ]
+    
+    if dryrun:
+        for cmd in cmds:
+            if BURLAP_COMMAND_PREFIX:
+                print('%s %s: %s' % (render_command_prefix(), run_cmd_str, cmd))
+            else:
+                print(cmd)
+    else:
+        for cmd in cmds:
+#             print('enable attr:', cmd)
+            run_cmd(cmd)
 
 def files_exists_or_dryrun(path, *args, **kwargs):
 #     dryrun = get_dryrun(kwargs.get('dryrun'))
@@ -1867,20 +1993,28 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
     Iterates over sites, safely setting environment variables for each site.
     """
     from dj import render_remote_paths
+#     print('site0:', site, file=sys.stderr)
     if sites is None:
-        site = site or env.SITE
+        site = site or env.SITE or ALL
+#         print('site00:', site, file=sys.stderr)
         if site == ALL:
             sites = six.iteritems(env.sites)
         else:
-            sites = [(site, env.sites[site])]
-        
+#             print('site1:', site, file=sys.stderr)
+#             print('sites1:', env.sites, file=sys.stderr)
+            sys.stderr.flush()
+            sites = [(site, env.sites.get(site))]
+#             print('sites2:', sites, file=sys.stderr)
+    
     renderer = renderer or render_remote_paths
     env_default = save_env()
+#     print('sites3:', sites, file=sys.stderr)
     for site, site_data in sites:
+#         print('site4:', site, file=sys.stderr)
         if no_secure and site.endswith('_secure'):
             continue
         env.update(env_default)
-        env.update(env.sites[site])
+        env.update(env.sites.get(site, {}))
         env.SITE = site
         renderer()
         if setter:

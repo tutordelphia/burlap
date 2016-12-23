@@ -58,6 +58,7 @@ def sync():
         cmd = 'chown %(file_user)s:%(file_group)s %(file_dst)s' % env
         sudo_or_dryrun(cmd)
 
+#DEPRECATED, use files.append instead
 @task_or_dryrun
 def appendline(fqfn, line, use_sudo=0, verbose=1, commands_only=0):
     """

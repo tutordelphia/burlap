@@ -204,10 +204,10 @@ class HostSatchel(Satchel):
                 if self.verbose:
                     print('Target host missing but default host also missing, '
                         'so no host init required.')
-                if stop_on_error:
-                    raise Exception, (
-                        'Both target and default hosts missing! '
-                        'Is the machine turned on and plugged into the network?')
+#                 if stop_on_error:
+#                     raise Exception, (
+#                         'Both target and default hosts missing! '
+#                         'Is the machine turned on and plugged into the network?')
         else:
             if self.verbose:
                 print('Target host is present so no host init required.')
@@ -240,9 +240,10 @@ class HostSatchel(Satchel):
                 print('host.initrole.user:', user)
                 print('host.initrole.password:', password)
         
-        needs = True
-        if check:
-            needs = self.needs_initrole(stop_on_error=True)
+#         needs = True
+#         if check:
+#             needs = self.needs_initrole(stop_on_error=True)
+        needs=False
         
         if host_string is not None:
             self.genv.host_string = host_string
@@ -351,10 +352,10 @@ class HostnameSatchel(Satchel):
     def hostname_to_ip(self, hostname):
         r = self.local_renderer
         r.env.hostname = hostname
-        print('self.genv.hosts:',self.genv.hosts)
-        print('self.genv.host_string:',self.genv.host_string)
+#         print('self.genv.hosts:',self.genv.hosts)
+#         print('self.genv.host_string:',self.genv.host_string)
         ret = r._local("getent hosts {hostname} | awk '{{ print $1 }}'", capture=True) or ''
-        print('ret:', ret)
+#         print('ret:', ret)
         return ret
 
     def iter_hostnames(self):
@@ -363,8 +364,8 @@ class HostnameSatchel(Satchel):
         """
         from burlap.common import get_hosts_retriever
         if self.env.use_retriever:
-            print('using retriever')
-            print('hosts:', self.genv.hosts)
+            self.vprint('using retriever')
+            self.vprint('hosts:', self.genv.hosts)
             retriever = get_hosts_retriever()
             hosts = list(retriever(extended=1))
             for _hostname, _data in hosts:
@@ -379,16 +380,14 @@ class HostnameSatchel(Satchel):
                 assert _data.ip, 'Missing IP.'
                 yield _data.ip, _hostname#_data.public_dns_name
         else:
-            print('using default')
+            self.vprint('using default')
             for ip, hostname in self.env.hostnames.iteritems():
-                print('ip lookup:', ip, hostname)
+                self.vprint('ip lookup:', ip, hostname)
                 if ip == UNKNOWN:
-                    print('a1')
                     ip = self.hostname_to_ip(hostname)
                     if not ip and hostname in self.env.default_hostnames:
                         ip = self.hostname_to_ip(self.env.default_hostnames[hostname])
                 elif not ip[0].isdigit():
-                    print('a2')
                     ip = self.hostname_to_ip(ip)
                 assert ip, 'Invalid IP.'
                 yield ip, hostname
@@ -413,9 +412,8 @@ class HostnameSatchel(Satchel):
         /etc/hostname to reliably identify the server hostname.
         """
         r = self.local_renderer
-        print('a0')
         for ip, hostname in self.iter_hostnames():
-            print('ip/hostname:', ip, hostname)
+            self.vprint('ip/hostname:', ip, hostname)
             r.genv.host_string = ip
             r.env.hostname = hostname
             with settings(warn_only=True):
@@ -427,42 +425,6 @@ class HostnameSatchel(Satchel):
                 r.reboot(new_hostname=hostname)
     
     configure.deploy_before = []
-
-class SSHNiceSatchel(Satchel):
-
-    name = 'sshnice'
-    
-    @property
-    def packager_system_packages(self):
-        return {
-            FEDORA: ['cron'],
-            UBUNTU: ['cron'],
-            DEBIAN: ['cron'],
-        }
-    
-    def set_defaults(self):
-        self.env.enabled = False
-        self.env.cron_script_path = '/etc/cron.d/sshnice'
-        self.env.cron_perms = '600'
-    
-    @task
-    def configure(self):
-        r = self.local_renderer
-        if self.env.enabled:
-            self.install_packages()
-            remote_path = r.env.remote_path = self.env.cron_script_path
-            r.put(
-                local_path=self.find_template('host/etc_crond_sshnice'),
-                remote_path=remote_path, use_sudo=True)
-            r.sudo('chown root:root %s' % remote_path)
-            # Must be 600, otherwise gives INSECURE MODE error.
-            # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
-            r.sudo('chmod {cron_perms} {remote_path}')
-            r.sudo('service cron restart')
-        else:
-            r.sudo('rm -f {cron_script_path}')
-            r.sudo('service cron restart')
-    configure.deploy_before = ['packager']
 
 class TimezoneSatchel(Satchel):
     """
@@ -481,11 +443,15 @@ class TimezoneSatchel(Satchel):
     @task
     def configure(self):
         r = self.local_renderer
-        r.sudo("sudo sh -c 'echo \"{timezone}\" > /etc/timezone'")
-        r.sudo('dpkg-reconfigure -f noninteractive tzdata')
+        os_ver = self.os_version
+        if os_ver.distro == UBUNTU and os_ver.release >= '16.04':
+            r.sudo('timedatectl set-timezone {timezone}')
+        else: 
+            # Old way in Ubuntu <= 14.04.
+            r.sudo("sudo sh -c 'echo \"{timezone}\" > /etc/timezone'")
+            r.sudo('dpkg-reconfigure -f noninteractive tzdata')
     configure.deploy_before = ['packager']
 
 host = HostSatchel()
 hostname = HostnameSatchel()
-sshnice = SSHNiceSatchel()
 timezone = TimezoneSatchel()

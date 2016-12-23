@@ -355,6 +355,9 @@ def compare_manifest(old):
     
     return methods
 
+CAT_KEY = 'cat-key'
+UPLOAD_KEY = 'upload-key'
+
 class UserSatchel(Satchel):
     
     name = 'user'
@@ -376,6 +379,8 @@ class UserSatchel(Satchel):
         self.env.reset_passwords_on_first_login = {} # {username: true/false}
         
         self.env.default_passwords = {} # {username:password}
+        
+        self.env.passwordless_method = CAT_KEY
 
     @task
     def enter_password_change(self, username=None, old_password=None):
@@ -385,13 +390,13 @@ class UserSatchel(Satchel):
         from fabric.state import connections
         from fabric.network import disconnect_all
         r = self.local_renderer
-        print('self.genv.user:', self.genv.user)
-        print('self.env.passwords:', self.env.passwords)
+#         print('self.genv.user:', self.genv.user)
+#         print('self.env.passwords:', self.env.passwords)
         r.genv.user = r.genv.user or username
         r.pc('Changing password for user {user} via interactive prompts.')
         r.env.old_password = r.env.default_passwords[self.genv.user]
-        print('self.genv.user:', self.genv.user)
-        print('self.env.passwords:', self.env.passwords)
+#         print('self.genv.user:', self.genv.user)
+#         print('self.env.passwords:', self.env.passwords)
         r.env.new_password = self.env.passwords[self.genv.user]
         if old_password:
             r.env.old_password = old_password 
@@ -437,7 +442,6 @@ class UserSatchel(Satchel):
                 # Further logins should require the new password.
                 self.genv.password = r.env.new_password
                 
-
     @task
     def configure_keyless(self):
         generate_keys()
@@ -480,17 +484,22 @@ class UserSatchel(Satchel):
         r.env.home = r.env.home_template.format(username=username)
         
         # Upload the SSH key.
-        put_remote_paths = self.put(local_path=r.env.pubkey)
-        r.env.put_remote_path = put_remote_paths[0]
         r.sudo('mkdir -p {home}/.ssh')
         r.sudo('chown -R {user}:{user} {home}/.ssh')
-        #r.sudo('cat {put_remote_path} >> {home}/.ssh/authorized_keys')
-        #r.sudo('rm -f {put_remote_path}')
         
-        if r.genv.password:
-            r.local("cat {pubkey} | sshpass -p '{password}' ssh {user}@{host_string} 'cat >> .ssh/authorized_keys'")
+        if r.env.passwordless_method == UPLOAD_KEY:
+            put_remote_paths = self.put(local_path=r.env.pubkey)
+            r.env.put_remote_path = put_remote_paths[0]
+            r.sudo('cat {put_remote_path} >> {home}/.ssh/authorized_keys')
+            r.sudo('rm -f {put_remote_path}')
+        elif r.env.passwordless_method == CAT_KEY:
+            r.env.password = r.env.default_passwords.get(r.env.username, r.genv.password)
+            if r.env.password:
+                r.local("cat {pubkey} | sshpass -p '{password}' ssh {user}@{host_string} 'cat >> {home}/.ssh/authorized_keys'")
+            else:
+                r.local("cat {pubkey} | ssh {user}@{host_string} 'cat >> {home}/.ssh/authorized_keys'")
         else:
-            r.local("cat {pubkey} | ssh {user}@{host_string} 'cat >> .ssh/authorized_keys'")
+            raise NotImplementedError
         
         # Disable password.
         r.sudo('cp /etc/sudoers {tmp_sudoers_fn}')
@@ -500,11 +509,11 @@ class UserSatchel(Satchel):
         r.sudo('service ssh reload')
         
         print('You should now be able to login with:')
-        r.env.host_string = self.genv.hostname_hostname
+        r.env.host_string = self.genv.host_string or (self.genv.hosts and self.genv.hosts[0])#self.genv.hostname_hostname
         r.comment('\tssh -i {pemkey} {username}@{host_string}')
 
     @task
-    def generate_keys(self, username, host):
+    def generate_keys(self, username, hostname):
         """
         Generates *.pem and *.pub key files suitable for setting up passwordless SSH.
         """
@@ -515,7 +524,7 @@ class UserSatchel(Satchel):
         #assert r.env.key_filename, 'r.env.key_filename or env.key_filename must be set. e.g. roles/role/app_name-role.pem'
         r.env.key_filename = self.env.key_filename_template.format(
             ROLE=self.genv.ROLE,
-            host=host,
+            host=hostname,
             username=username,
         )
         if os.path.isfile(r.env.key_filename):

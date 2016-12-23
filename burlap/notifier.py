@@ -40,8 +40,9 @@ class DeploymentNotifierSatchel(Satchel):
         
         # Send the message via our own SMTP server, but don't include the
         # envelope header.
-        if self.verbose:
-            print('Attempting to send mail using %s...' % self.env.email_host)
+        #if self.verbose:
+        print('Attempting to send mail using %s@%s...' \
+            % (self.env.email_host_user, self.env.email_host))
         s = smtplib.SMTP(self.env.email_host, self.env.email_port)
         s.ehlo()
         s.starttls()

@@ -38,7 +38,7 @@ from burlap.common import (
     get_verbose,
 )
 from burlap.decorators import task_or_dryrun
-from burlap import versioner
+#from burlap import versioner
 from burlap.constants import *
 from burlap.decorators import task
 
@@ -135,6 +135,9 @@ def bootstrap(force=0):
     with settings(warn_only=True):
         sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**_env))
     sudo_or_dryrun('easy_install -U pip')
+    # Hacky fix for bug https://github.com/pypa/pip/issues/3045
+    sudo_or_dryrun('pip uninstall distribute -y || true')
+    sudo_or_dryrun('pip uninstall setuptools -y || true')
     if env.pip_bootstrap_packages:
         for package in _env.pip_bootstrap_packages:
             _env.package = package
@@ -812,6 +815,12 @@ def update_install(clean=0, pip_requirements_fn=None, virtualenv_dir=None, user=
         _env.virtualenv_dir = virtualenv_dir
     elif _env.pip_virtual_env_dir_template:
         _env.virtualenv_dir = _env.pip_virtual_env_dir_template % _env
+    
+    # Ensure we're always using the latest pip.
+    if _env.is_local:
+        run_or_dryrun('%(virtualenv_dir)s/bin/pip install -U pip' % _env)
+    else:
+        sudo_or_dryrun('%(virtualenv_dir)s/bin/pip install -U pip' % _env)
     
     _env.pip_update_install_command = "%(virtualenv_dir)s/bin/pip install -r %(pip_remote_requirements_fn)s"
     if _env.is_local:

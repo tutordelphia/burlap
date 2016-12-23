@@ -195,6 +195,7 @@ def set_apache_site_specifics(site):
     
     warnings.warn("Use ApacheSatchel instead.", DeprecationWarning)
     
+    print('site.apache:', site, file=sys.stderr)
     site_data = env.sites[site]
     
     get_settings(site=site)

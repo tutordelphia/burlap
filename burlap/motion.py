@@ -51,8 +51,7 @@ class MotionSatchel(ServiceSatchel):
     
     @task
     def configure(self):
-        todo
-    
+        pass
     configure.deploy_before = ['packager', 'user']
     
-motion_satchel = MotionSatchel()
+motion = MotionSatchel()

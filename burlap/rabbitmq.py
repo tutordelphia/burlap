@@ -29,7 +29,11 @@ class RabbitMQBleedingSatchel(Satchel):
         r = self.local_renderer
         
 #         r.sudo("echo 'deb http://www.rabbitmq.com/debian/ testing main' >> /etc/apt/sources.list")
-        r.sudo("echo 'deb http://www.rabbitmq.com/debian/ testing main' >> /etc/apt/sources.list.d/rabbitmq.list")
+        r.append(
+            text='deb http://www.rabbitmq.com/debian/ testing main',
+            filename='/etc/apt/sources.list.d/rabbitmq.list',
+            use_sudo=True)
+        #r.sudo("echo 'deb http://www.rabbitmq.com/debian/ testing main' >> /etc/apt/sources.list.d/rabbitmq.list")
 #         r.sudo('cd /tmp; '
 #             'wget https://www.rabbitmq.com/rabbitmq-signing-key-public.asc; '
 #             'apt-key add rabbitmq-signing-key-public.asc')
@@ -135,6 +139,22 @@ class RabbitMQSatchel(ServiceSatchel):
         self.genv._rabbitmq_user = username
         self.genv._rabbitmq_password = password
         self.sudo_or_dryrun('rabbitmqctl add_user %(_rabbitmq_user)s %(_rabbitmq_password)s' % self.genv)
+
+    @task
+    def force_stop_and_purge(self):
+        """
+        Forcibly kills Rabbit and purges all its queues.
+        
+        For emergency use when the server becomes unresponsive, even to service stop calls.
+        
+        If this also fails to correct the performance issues, the server may have to be completely
+        reinstalled.
+        """
+        r = self.local_renderer
+        #self.stop()
+        r.sudo('killall rabbitmq-server')
+        r.sudo('killall beam.smp')
+        r.sudo('rm -Rf /var/lib/rabbitmq/mnesia/*')
 
     @task
     def enable_management_interface(self):

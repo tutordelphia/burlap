@@ -185,3 +185,84 @@ def test_remove_recursive(mock_run):
     from burlap.files import remove
     remove('/tmp/src', recursive=True)
     mock_run.assert_called_with('/bin/rm -r /tmp/src')
+
+def test_enable_attribute():
+    #from burlap.file import appendline
+    from burlap.common import enable_attribute_or_dryrun, env
+    
+    env.hosts = ['localhost']
+    env.host_string = 'localhost'
+    
+    fn = '/tmp/test.txt'
+    
+    # Add key/value when old exists commented
+    open(fn, 'w').write('''# Test
+#start_x=0
+more_stuff=1
+''')
+    enable_attribute_or_dryrun(
+        filename=fn,
+        key='start_x',
+        value='1',
+    )
+    content = open(fn).read()
+    print('content:')
+    print(content)
+    assert '#start_x=0' not in content
+    assert '#start_x=1' not in content
+    assert 'start_x=0' not in content
+    assert 'start_x=1' in content
+    
+    # Add key/value when none exists
+    open(fn, 'w').write('''# Test
+more_stuff=1
+''')
+    enable_attribute_or_dryrun(
+        filename=fn,
+        key='start_x',
+        value='0',
+    )
+    content = open(fn).read()
+    print('content:')
+    print(content)
+    assert '#start_x=0' not in content
+    assert '#start_x=1' not in content
+    assert 'start_x=1' not in content
+    assert 'start_x=0' in content
+    
+    # Add key/value when uncommented exists
+    open(fn, 'w').write('''# Test
+start_x=1
+more_stuff=1
+''')
+    enable_attribute_or_dryrun(
+        filename=fn,
+        key='start_x',
+        value='0',
+    )
+    content = open(fn).read()
+    print('content:')
+    print(content)
+    assert '#start_x=0' not in content
+    assert '#start_x=1' not in content
+    assert 'start_x=1' not in content
+    assert 'start_x=0' in content
+    
+    # Add key/value when commented exists with spaces
+    open(fn, 'w').write('''# Test
+# start_x = 1
+more_stuff=1
+''')
+    enable_attribute_or_dryrun(
+        filename=fn,
+        key='start_x',
+        value='0',
+    )
+    content = open(fn).read()
+    print('content:')
+    print(content)
+    assert '#start_x=0' not in content
+    assert '#start_x=1' not in content
+    assert 'start_x=1' not in content
+    assert 'start_x=0' in content
+    

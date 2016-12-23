@@ -255,7 +255,7 @@ class MySQLSatchel(DatabaseSatchel):
                     assert os.path.isfile(r.env.dump_fn), \
                         missing_local_dump_error
                 if self.verbose:
-                    print('Uploading database snapshot...')
+                    print('Uploading MySQL database snapshot...')
                 r.put(
                     local_path=r.env.dump_fn,
                     remote_path=r.env.remote_dump_fn)
@@ -297,6 +297,15 @@ class MySQLSatchel(DatabaseSatchel):
                     '-D {db_name}')
         
         self.set_collation(name=name, site=site)
+
+    @task
+    def shell(self, name='default', site=None, **kwargs):
+        """
+        Opens a SQL shell to the given database, assuming the configured database
+        and user supports this feature.
+        """
+        r = self.database_renderer(name=name, site=site)
+        r.run('/bin/bash -i -c "mysql -u {db_user} -p\'{db_password}\' -h {db_host} {db_name}"')
 
     @task
     def configure(self, do_packages=0, name='default', site=None):

@@ -33,10 +33,10 @@ import sys
 from six.moves import xmlrpc_client as xmlrpclib
 from six.moves.urllib.request import urlopen
 
-try:
-    import feedparser
-except ImportError:
-    feedparser = None
+# try:
+#     import feedparser
+# except ImportError:
+#     feedparser = None
 import json
 
 VERSION = (0, 1, 0)

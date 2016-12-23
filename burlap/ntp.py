@@ -29,6 +29,7 @@ class NTPClientSatchel(ServiceSatchel):
     
     def set_defaults(self):
         self.env.enabled = True
+        self.env.default_server = 'time.nist.gov'
         self.env.service_commands = {
             START:{
                 UBUNTU: 'service ntp start',
@@ -55,6 +56,13 @@ class NTPClientSatchel(ServiceSatchel):
                 DEBIAN: 'service ntp status',
             },
         }
+
+    @task
+    def force_update(self):
+        r = self.local_renderer
+        r.sudo('service ntp stop')
+        r.sudo('ntpdate {default_server}')
+        r.sudo('service ntp start')
 
     @task
     def configure(self):

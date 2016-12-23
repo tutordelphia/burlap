@@ -65,6 +65,8 @@ if 'dj_settings_loaded' not in env:
     env.django_migrate_fakeouts = [] # [{database:<database>, app:<app>}]
     
     env.django_install_sql_path_template = '%(src_dir)s/%(app_name)s/*/sql/*'
+    
+    env.django_version = (1, 6, 0)
 
 DJANGO = 'DJANGO'
 DJANGOMEDIA = 'DJANGOMEDIA'
@@ -133,8 +135,8 @@ def load_django_settings():
     try:
         from django.core.wsgi import get_wsgi_application
         application = get_wsgi_application()
-    except ImportError:
-        pass
+    except (ImportError, RuntimeError):
+        traceback.print_exc()
 
     # Load Django settings.
     settings = get_settings()
@@ -143,8 +145,8 @@ def load_django_settings():
         from django.conf import settings as _settings
         for k,v in settings.__dict__.iteritems():
             setattr(_settings, k, v)
-    except ImportError:
-        pass
+    except (ImportError, RuntimeError):
+        traceback.print_exc()
         
     return settings
 
@@ -306,6 +308,8 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
     
     delete_ghosts = int(delete_ghosts)
     
+    post_south = env.django_version >= (1, 7, 0)
+    
     skip_databases = (skip_databases or '')
     if isinstance(skip_databases, basestring):
         skip_databases = [_.strip() for _ in skip_databases.split(',') if _.strip()]
@@ -321,14 +325,15 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
 
     render_remote_paths()
     
-    print('ignore_errors:', ignore_errors)
+    #print('ignore_errors:', ignore_errors)
     
     _env = type(env)(env)
     _env.django_migrate_migration = migration or ''
 #     print('_env.django_migrate_migration:', _env.django_migrate_migration)
     _env.django_migrate_fake_str = '--fake' if int(fake) else ''
     _env.django_migrate_database = '--database=%s' % database if database else ''
-    _env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts else ''
+    _env.django_migrate_merge = '--merge' if not post_south else ''
+    _env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts and not post_south else ''
     for site, site_data in iter_unique_databases(site=site):
 #         print('-'*80, file=sys.stderr)
 #         print('site:', site, file=sys.stderr)
@@ -351,7 +356,7 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
             _env.SITE = site
             cmd = (
                 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
-                '%(django_manage)s migrate --noinput --merge --traceback %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
+                '%(django_manage)s migrate --noinput %(django_migrate_merge)s --traceback %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
                 '%(django_migrate_fake_str)s'
             ) % _env
 #             print('cmd:', cmd)
@@ -383,19 +388,19 @@ def set_db(name=None, site=None, role=None, verbose=0, e=None):
     name = name or 'default'
     site = site or env.SITE
     role = role or env.ROLE
-    verbose = int(verbose)
-    if verbose:
-        print('set_db.site:',site)
-        print('set_db.role:',role)
+    verbose = 1#int(verbose)
+#     if verbose:
+#         print('set_db.site:',site)
+#         print('set_db.role:',role)
     settings = get_settings(site=site, role=role, verbose=verbose)
     assert settings, 'Unable to load Django settings for site %s.' % (site,)
     e.django_settings = settings
-    if verbose:
-        print('settings:',settings)
-        print('databases:',settings.DATABASES)
+#     if verbose:
+#         print('settings:',settings)
+#         print('databases:',settings.DATABASES)
     default_db = settings.DATABASES[name]
-    if verbose:
-        print('default_db:',default_db)
+#     if verbose:
+#         print('default_db:',default_db)
     e.db_name = default_db['NAME']
     e.db_user = default_db['USER']
     e.db_host = default_db['HOST']
@@ -434,22 +439,29 @@ def get_settings(site=None, role=None):
         if site and site.endswith('_secure'):
             site = site[:-7]
         site = site or env.SITE or env.default_site
-        if verbose:
-            print('get_settings.site:',env.SITE)
-            print('get_settings.role:',env.ROLE)
+#         if verbose:
+#             print('get_settings.site:',env.SITE)
+#             print('get_settings.role:',env.ROLE)
         common.set_site(site)
         tmp_role = env.ROLE
         if role:
             env.ROLE = os.environ[ROLE] = role
         check_remote_paths(verbose=verbose)
-        if verbose:
-            print('get_settings.django_settings_module_template:',env.django_settings_module_template)
-            print('get_settings.django_settings_module:',env.django_settings_module)
         env.django_settings_module = env.django_settings_module_template % env
         try:
             os.environ['SITE'] = env.SITE
             os.environ['ROLE'] = env.ROLE
+            
+            # We need to explicitly delete sub-modules from sys.modules. Otherwise, reload() skips
+            # them and they'll continue to contain obsolete settings.
+            for name in sorted(sys.modules.keys()):
+                if name.startswith('alphabuyer.settings.role_') \
+                or name.startswith('alphabuyer.settings.site_'):
+                    del sys.modules[name]
+            if env.django_settings_module in sys.modules:
+                del sys.modules[env.django_settings_module]
             module = importlib.import_module(env.django_settings_module)
+#             print('module:', module)
     
             # Works as long as settings.py doesn't also reload anything.
             import imp

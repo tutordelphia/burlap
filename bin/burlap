@@ -257,7 +257,7 @@ if __name__ == "__main__":
             print('cmd:', cmd)
             assert not os.system(cmd)
 
-        open('shell', 'w').write(common.render_to_string('burlap/shell.template'))
+        open('setup.bash', 'w').write(common.render_to_string('burlap/setup.bash.template'))
         
         os.system('chmod +x shell')
         

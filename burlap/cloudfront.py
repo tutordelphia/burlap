@@ -2,14 +2,16 @@ from __future__ import print_function
 
 import time
 
-try:
-    import boto
-except ImportError:
-    boto = None
-
 from burlap.constants import *
 from burlap import Satchel
 from burlap.decorators import task
+
+def get_boto():
+    try:
+        import boto
+    except ImportError:
+        boto = None
+    return boto
 
 class CloudfrontSatchel(Satchel):
     
@@ -21,6 +23,7 @@ class CloudfrontSatchel(Satchel):
     @task
     def get_or_create_distribution(self, s3_bucket_name):
         assert isinstance(s3_bucket_name, basestring)
+        boto = get_boto()
         if not self.dryrun:
             conn = boto.connect_cloudfront(
                 self.genv.aws_access_key_id,
