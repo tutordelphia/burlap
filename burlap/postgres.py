@@ -288,6 +288,12 @@ class PostgreSQLSatchel(DatabaseSatchel):
             return ret
 
     @task
+    def execute(self, sql, name='default', site=None, **kwargs):
+        r = self.database_renderer(name=name, site=site)
+        r.env.sql = sql
+        r.run('psql --user={postgres_user} --no-password --command="{sql}"')
+        
+    @task
     def create(self, name='default', site=None, **kargs):
         
         r = self.database_renderer(name=name, site=site)

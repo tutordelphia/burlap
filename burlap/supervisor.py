@@ -287,4 +287,4 @@ class SupervisorSatchel(ServiceSatchel):
     
     configure.deploy_before = ['packager', 'user', 'rabbitmq']
         
-supervisor_satchel = SupervisorSatchel()
+supervisor = SupervisorSatchel()

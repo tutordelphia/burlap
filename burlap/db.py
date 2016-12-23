@@ -154,6 +154,10 @@ class DatabaseSatchel(ServiceSatchel):
             # {name: None=burlap settings, Django=Django Python settings}
             connection_handler=None,
         )
+        
+    @task
+    def execute(self, sql, name='default', site=None, **kwargs):
+        raise NotImplementedError
 
     @task
     def set_root_login(self, r):
