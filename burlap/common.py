@@ -310,7 +310,7 @@ def format(s, lenv, genv):
     while 1:
         cnt += 1
         if cnt > 10:
-            raise Exception, 'Too many variables containing variables.'
+            raise Exception('Too many variables containing variables.')
         
         var_names = CMD_VAR_REGEX.findall(s)
 #         print('s:', s)
@@ -326,9 +326,9 @@ def format(s, lenv, genv):
             elif var_name in genv:
                 var_values[var_name] = genv[var_name]
             else:
-                raise Exception, (
+                raise Exception((
                     'Command references variable "%s" which is not found '
-                    'in either the local or global namespace.') % var_name
+                    'in either the local or global namespace.') % var_name)
         
         escaped_var_names = dict(
             (k, str(uuid.uuid4()))
@@ -1482,7 +1482,7 @@ def reboot_or_dryrun(*args, **kwargs):
                 print('Exception:', e)
             
         if not success:
-            raise Exception, 'Reboot failed or took longer than %s seconds.' % wait
+            raise Exception('Reboot failed or took longer than %s seconds.' % wait)
             
 
 def put_or_dryrun(*args, **kwargs):

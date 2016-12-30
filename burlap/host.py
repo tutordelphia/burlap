@@ -180,7 +180,7 @@ class HostSatchel(Satchel):
                         # Login succeeded, so we haven't yet changed the password, so use the default password.
                         return host_string, username, password
                         
-        raise Exception, 'No working login found.'
+        raise Exception('No working login found.')
     
     @task
     def needs_initrole(self, stop_on_error=False):
@@ -205,7 +205,7 @@ class HostSatchel(Satchel):
                     print('Target host missing but default host also missing, '
                         'so no host init required.')
 #                 if stop_on_error:
-#                     raise Exception, (
+#                     raise Exception(
 #                         'Both target and default hosts missing! '
 #                         'Is the machine turned on and plugged into the network?')
         else:

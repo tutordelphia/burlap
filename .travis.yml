@@ -18,8 +18,8 @@ install:
   # Build/test dependencies
   - pip install -r requirements.txt
   
-  # Get fab to test fab
-  - pip install -e .
+  #TODO: Get fab to test fab
+  #- pip install -e .
   
   # Deal with issue on Travis builders re: multiprocessing.Queue :(
   #- "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
