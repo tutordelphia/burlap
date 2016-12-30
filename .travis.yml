@@ -3,12 +3,9 @@ language: python
 
 # https://docs.travis-ci.com/user/languages/python/
 python:
-  - "2.6"
-  - "2.7"
-  - "3.2"
-  - "3.3"
-  - "3.4"
-  - "3.5"
+-   "2.7"
+-   "3.3"
+-   "3.4"
 
 # https://docs.travis-ci.com/user/multi-os/
 # https://docs.travis-ci.com/user/ci-environment/#Virtualization-environments
