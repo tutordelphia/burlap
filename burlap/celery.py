@@ -128,8 +128,8 @@ def create_supervisor_services():
     return conf_name, ret
 
 def register_callbacks():
-    from burlap.supervisor import supervisor_satchel
-    supervisor_satchel.register_callback(create_supervisor_services)
+    from burlap.supervisor import supervisor
+    supervisor.register_callback(create_supervisor_services)
 
 env.post_callbacks.append(register_callbacks)
 

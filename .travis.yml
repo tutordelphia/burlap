@@ -1,55 +1,52 @@
 # https://docs.travis-ci.com/user/ci-environment/
 # Ubuntu 12.04 LTS Server Edition 64 bit
+
 language: python
+
 python:
 -   "3.5"
+
+# https://docs.travis-ci.com/user/ci-environment/#Virtualization-environments
+matrix:
+    include:
+        -   os: linux
+            dist: trusty # Ubuntu 14.04
+            sudo: required
+
 install:
--   sudo apt-key update
--   sudo apt-get update -q
--   sudo apt-get purge postgr*
--   sudo apt-get purge virtualbox*
--   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
--   sudo apt-get -y install build-essential
--   sudo apt-get -y --force-yes install linux-headers-`uname -r`
-#-   sudo apt-get -y --force-yes install linux-headers-3.13.0-63-generic linux-headers-3.13.0-86-generic
+  
+  # Build/test dependencies
+  - pip install -r requirements.txt
+  
+  # Get fab to test fab
+  - pip install -e .
+  
+  # Deal with issue on Travis builders re: multiprocessing.Queue :(
+  #- "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
+  #- "pip install jinja2"
+  
+  - sudo pip install tox pylint
+  
+before_script:
 
-# Install Virtualbox.
-# https://www.virtualbox.org/wiki/Linux_Downloads
-#-   wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
-#-   sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian $(lsb_release -s -c) contrib"
-#-   echo "deb http://download.virtualbox.org/virtualbox/debian $(lsb_release -s -c) contrib" | sudo tee -a /etc/apt/sources.list
-#-   sudo rm -rf /var/lib/apt/lists/*
-#-   sudo apt-get clean
-#-   sudo apt-get update
-#-   sudo apt-get update -o Acquire::CompressionTypes::Order::=gz
-#-   sudo apt-cache search virtualbox
-#-   sudo apt-get -y install virtualbox-5.0
-#-   sudo apt-get -y install dkms virtualbox-dkms virtualbox-ose-dkms virtualbox-ose-guest-dkms virtualbox-source virtualbox-ose-guest-source virtualbox-dkms 
-#-   sudo dpkg-reconfigure virtualbox-dkms
-#-   sudo dpkg-reconfigure virtualbox-ose-dkms
-#-   sudo dpkg-reconfigure virtualbox-ose-guest-dkms
-#-   sudo dpkg-reconfigure virtualbox
-#-   sudo modprobe vboxdrv
-#-   sudo modprobe vboxnetflt
-#-   VBoxManage --version
+  # Allow us to SSH passwordless to localhost
+  - ssh-keygen -f ~/.ssh/id_rsa -N ""
+  - cp ~/.ssh/{id_rsa.pub,authorized_keys}
+  
+  # Creation of an SSH agent for testing forwarding
+  - eval $(ssh-agent)
+  - ssh-add
 
-#TODO
-# Install Vagrant 1.7.
-# Find other releases at https://www.vagrantup.com/downloads.html
-#-   sudo wget -nv https://releases.hashicorp.com/vagrant/1.7.2/vagrant_1.7.2_x86_64.deb
-#-   sudo dpkg -i vagrant_1.7.2_x86_64.deb
-#-   vagrant -v
-#-   sudo vagrant plugin install vagrant-cachier
+# This works, but takes forever to run and usually times out.
+#-   sudo apt-key update
+#-   sudo apt-get update -q
+#-   sudo apt-get purge postgr*
+#-   sudo apt-get purge virtualbox*
+#-   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
+#-   sudo apt-get -y install build-essential
+#-   sudo apt-get -y --force-yes install linux-headers-`uname -r`
 
-#TODO
-# Install Vagrant 1.8.
-# Find other releases at https://www.vagrantup.com/downloads.html
-#-   sudo wget -nv https://releases.hashicorp.com/vagrant/1.8.1/vagrant_1.8.1_x86_64.deb
-#-   sudo dpkg -i vagrant_1.8.1_x86_64.deb
-#-   vagrant -v
-#-   sudo vagrant plugin install vagrant-cachier
-
--   sudo pip install tox pylint
 script:
--   ./pep8.sh
--   tox
+#-   ./pep8.sh
+#-   tox
+-   "tox -e py27 -- -s burlap/tests/test_project.py::test_project"
