@@ -1,19 +1,35 @@
-# https://docs.travis-ci.com/user/ci-environment/
-# Ubuntu 12.04 LTS Server Edition 64 bit
 
 language: python
 
+# https://docs.travis-ci.com/user/languages/python/
 python:
--   "3.5"
+  - "2.6"
+  - "2.7"
+  - "3.2"
+  - "3.3"
+  - "3.4"
+  - "3.5"
 
+# https://docs.travis-ci.com/user/multi-os/
 # https://docs.travis-ci.com/user/ci-environment/#Virtualization-environments
 matrix:
     include:
+        # Ubuntu 14.04
         -   os: linux
-            dist: trusty # Ubuntu 14.04
+            dist: trusty
             sudo: required
+            #python: 3.5
+            #env: TOXENV=py35
 
 install:
+
+  - sudo apt-key update
+  - sudo apt-get update -q
+  - sudo apt-get purge postgr*
+  - sudo apt-get purge virtualbox*
+  - sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
+  - sudo apt-get -y install build-essential
+  - sudo apt-get -y --force-yes install linux-headers-`uname -r`
   
   # Build/test dependencies
   - pip install -r requirements.txt
@@ -22,7 +38,7 @@ install:
   #- pip install -e .
   
   # Deal with issue on Travis builders re: multiprocessing.Queue :(
-  #- "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
+  - "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
   #- "pip install jinja2"
   
   - sudo pip install tox pylint
@@ -37,16 +53,8 @@ before_script:
   - eval $(ssh-agent)
   - ssh-add
 
-# This works, but takes forever to run and usually times out.
-#-   sudo apt-key update
-#-   sudo apt-get update -q
-#-   sudo apt-get purge postgr*
-#-   sudo apt-get purge virtualbox*
-#-   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
-#-   sudo apt-get -y install build-essential
-#-   sudo apt-get -y --force-yes install linux-headers-`uname -r`
-
 script:
-#-   ./pep8.sh
-#-   tox
--   "tox -e py27 -- -s burlap/tests/test_project.py::test_project"
+
+  #- ./pep8.sh
+  #- tox
+  - "tox -e py27 -- -s burlap/tests/test_project.py::test_project"
