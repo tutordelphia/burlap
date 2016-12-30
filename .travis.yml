@@ -2,10 +2,10 @@
 language: python
 
 # https://docs.travis-ci.com/user/languages/python/
-python:
--   "2.7"
--   "3.3"
--   "3.4"
+#python:
+#-   "2.7"
+#-   "3.3"
+#-   "3.4"
 
 # https://docs.travis-ci.com/user/multi-os/
 # https://docs.travis-ci.com/user/ci-environment/#Virtualization-environments
@@ -15,43 +15,36 @@ matrix:
         -   os: linux
             dist: trusty
             sudo: required
-            #python: 3.5
-            #env: TOXENV=py35
+            python: 2.7
+            #env: TOXENV=py27
 
 install:
-
-  - sudo apt-key update
-  - sudo apt-get update -q
-  - sudo apt-get purge postgr*
-  - sudo apt-get purge virtualbox*
-  - sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
-  - sudo apt-get -y install build-essential
-  - sudo apt-get -y --force-yes install linux-headers-`uname -r`
-  
-  # Build/test dependencies
-  - pip install -r requirements.txt
-  
-  #TODO: Get fab to test fab
-  #- pip install -e .
-  
-  # Deal with issue on Travis builders re: multiprocessing.Queue :(
-  - "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
-  #- "pip install jinja2"
-  
-  - sudo pip install tox pylint
+-   sudo apt-key update
+-   sudo apt-get update -q
+-   sudo apt-get purge postgr*
+-   sudo apt-get purge virtualbox*
+-   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
+-   sudo apt-get -y install build-essential
+-   sudo apt-get -y --force-yes install linux-headers-`uname -r`
+# Build/test dependencies
+-   pip install -r requirements.txt
+#TODO: Get fab to test fab
+#-  pip install -e .
+# Deal with issue on Travis builders re: multiprocessing.Queue :(
+-   "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
+#-  "pip install jinja2"
+-   sudo pip install tox pylint
   
 before_script:
+# Allow us to SSH passwordless to localhost
+-   ssh-keygen -f ~/.ssh/id_rsa -N ""
+-   cp ~/.ssh/{id_rsa.pub,authorized_keys}
+# Creation of an SSH agent for testing forwarding
+-   eval $(ssh-agent)
+-   ssh-add
 
-  # Allow us to SSH passwordless to localhost
-  - ssh-keygen -f ~/.ssh/id_rsa -N ""
-  - cp ~/.ssh/{id_rsa.pub,authorized_keys}
-  
-  # Creation of an SSH agent for testing forwarding
-  - eval $(ssh-agent)
-  - ssh-add
 
 script:
-
-  #- ./pep8.sh
-  #- tox
-  - "tox -e py27 -- -s burlap/tests/test_project.py::test_project"
+#-  ./pep8.sh
+#-  tox
+-   "tox -e py27 -- -s burlap/tests/test_project.py::test_project"
