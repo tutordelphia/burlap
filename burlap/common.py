@@ -3,6 +3,7 @@ from __future__ import with_statement, print_function
 import os
 import re
 import sys
+import imp
 import types
 import copy
 import tempfile
@@ -10,17 +11,17 @@ import time
 import importlib
 import warnings
 import glob
-import yaml
 import pipes
 import json
 import getpass
 import inspect
 import subprocess
 import uuid
-import warnings
 from collections import namedtuple, OrderedDict
 from pprint import pprint
 from datetime import date
+
+import yaml
 import six
 
 from fabric.api import (
@@ -120,17 +121,16 @@ def start_error():
 def end_error():
     print(Colors.ENDC)
 
-def print_fail(s, file=None):
+def print_fail(s, file=None): # pylint: disable=redefined-builtin
     print(Colors.FAIL + str(s) + Colors.ENDC, file=file or sys.stderr)
 
-def print_success(s, file=None):
+def print_success(s, file=None): # pylint: disable=redefined-builtin
     print(Colors.OKGREEN + str(s) + Colors.ENDC, file=file or sys.stdout)
 
 def create_module(name, code=None):
     """
     Dynamically creates a module with the given name.
     """
-    import sys, imp
 
     if name not in sys.modules:
         sys.modules[name] = imp.new_module(name)
@@ -139,8 +139,8 @@ def create_module(name, code=None):
     
     if code:
         print('executing code for %s: %s' % (name, code))
-        exec(code in module.__dict__)
-        exec("from %s import %s" % (name, '*'))
+        exec(code in module.__dict__) # pylint: disable=exec-used
+        exec("from %s import %s" % (name, '*')) # pylint: disable=exec-used
 
     return module
 
@@ -204,7 +204,12 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
         
         return func
 
-def add_deployer(event, func, before=[], after=[], takes_diff=False):
+def add_deployer(event, func, before=None, after=None, takes_diff=False):
+    
+    before = before or []
+    
+    after = after or []
+    
     event = event.strip().upper()
     
     manifest_deployers.setdefault(event, [])
@@ -303,7 +308,7 @@ def assert_valid_satchel(name):
 CMD_VAR_REGEX = re.compile(r'(?:^|[^{\\]+){([^{}]+)}')
 CMD_ESCAPED_VAR_REGEX = re.compile(r'\{{2}[^\{\}]+\}{2}')
 
-def format(s, lenv, genv):
+def format(s, lenv, genv): # pylint: disable=redefined-builtin
 
     # Resolve all variable names.
     cnt = 0
@@ -342,8 +347,8 @@ def format(s, lenv, genv):
         for k, v in escaped_var_names.iteritems():
             s = s.replace(v, k)
     
-    s = s.replace('\{', '{')
-    s = s.replace('\}', '}')
+    s = s.replace(r'\{', '{')
+    s = s.replace(r'\}', '}')
     
     return s
 
@@ -582,9 +587,7 @@ class Satchel(object):
             return _genv
     
     def add_post_role_load_callback(self, cb):
-        global post_role_load_callbacks
         post_role_load_callbacks.append(cb)
-#         print('post_role_load_callbacksZ:', id(post_role_load_callbacks), post_role_load_callbacks)
     
     @task
     def list_tasks(self):
@@ -669,7 +672,7 @@ class Satchel(object):
         lst = []
         lst.extend(self.genv.get('services') or [])
         lst.extend(self.genv.get('satchels') or [])
-        lst = [_.lower() in lst]
+        lst = [_.lower() for _ in lst]
         for req in self._requires_satchels:
             req = req.lower()
             assert req in lst
@@ -1540,6 +1543,7 @@ def put_or_dryrun(*args, **kwargs):
     else:
         return _put(**kwargs)
 
+
 def get_or_dryrun(**kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
     use_sudo = kwargs.get('use_sudo', False)
@@ -1559,12 +1563,14 @@ def get_or_dryrun(**kwargs):
     else:
         return _get(**kwargs)
 
+
 def _get(*args, **kwargs):
     ret = __get(*args, **kwargs)
     env.get_local_path = ret
     return ret
 
-def pretty_bytes(bytes):
+
+def pretty_bytes(bytes): # pylint: disable=redefined-builtin
     """
     Scales a byte count to the largest scale with a small whole number
     that's easier to read.
@@ -1574,17 +1580,19 @@ def pretty_bytes(bytes):
         return bytes, 'bytes'
     sign = bytes/float(bytes)
     bytes = abs(bytes)
-    for x in ['bytes','KB','MB','GB','TB']:
+    for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
         if bytes < 1024.0:
             #return "%3.1f %s" % (bytes, x)
             return sign*bytes, x
         bytes /= 1024.0
 
-def get_component_settings(prefixes=[]):
+
+def get_component_settings(prefixes=None):
     """
     Returns a subset of the env dictionary containing
     only those keys with the name prefix.
     """
+    prefixes = prefixes or []
     data = {}
     for name in prefixes:
         name = name.lower().strip()
@@ -1592,6 +1600,7 @@ def get_component_settings(prefixes=[]):
             if k.startswith('%s_' % name):
                 data[k] = env[k]
     return data
+
 
 def get_last_modified_timestamp(path):
     """
@@ -1607,6 +1616,7 @@ def get_last_modified_timestamp(path):
     except ValueError:
         return
     return ret
+
 
 def check_settings_for_differences(old, new, as_bool=False, as_tri=False):
     """
@@ -1642,19 +1652,22 @@ def check_settings_for_differences(old, new, as_bool=False, as_tri=False):
     
     return changes
 
+
 def get_subpackages(module):
-    dir = os.path.dirname(module.__file__)
+    dr = os.path.dirname(module.__file__)
     def is_package(d):
-        d = os.path.join(dir, d)
+        d = os.path.join(dr, d)
         return os.path.isdir(d) and glob.glob(os.path.join(d, '__init__.py*'))
-    return filter(is_package, os.listdir(dir))
+    return filter(is_package, os.listdir(dr))
+
 
 def get_submodules(module):
-    dir = os.path.dirname(module.__file__)
+    dr = os.path.dirname(module.__file__)
     def is_module(d):
-        d = os.path.join(dir, d)
+        d = os.path.join(dr, d)
         return os.path.isfile(d) and glob.glob(os.path.join(d, '*.py*'))
-    return filter(is_module, os.listdir(dir))
+    return filter(is_module, os.listdir(dr))
+
 
 def iter_apps():
     sys.path.insert(0, os.getcwd())
@@ -1665,6 +1678,7 @@ def iter_apps():
         if sub_name in INSTALLED_APPS:
             yield sub_name
 
+
 def get_app_package(name):
     sys.path.insert(0, os.getcwd())
     arch = importlib.import_module('arch')
@@ -1673,11 +1687,12 @@ def get_app_package(name):
     assert name in INSTALLED_APPS, 'Unknown or uninstalled app: %s' % (name,)
     return importlib.import_module('arch.%s' % name)
 
+
 def to_dict(obj):
     if isinstance(obj, (tuple, list)):
         return [to_dict(_) for _ in obj]
     elif isinstance(obj, dict):
-        return dict((to_dict(k), to_dict(v)) for k,v in six.iteritems(obj))
+        return dict((to_dict(k), to_dict(v)) for k, v in six.iteritems(obj))
     elif isinstance(obj, (int, bool, float, basestring)):
         return obj
     elif hasattr(obj, 'to_dict'):
@@ -1690,10 +1705,13 @@ class QueuedCommand(object):
     Represents a fabric command that is pending execution.
     """
     
-    def __init__(self, name, args=None, kwargs=None, pre=[], post=[]):
+    def __init__(self, name, args=None, kwargs=None, pre=None, post=None):
         self.name = name
         self.args = args or []
         self.kwargs = kwargs or {}
+        
+        pre = pre or []
+        post = post or []
         
         # Used for ordering commands.
         self.pre = pre # commands that should come before this command
@@ -1713,12 +1731,12 @@ class QueuedCommand(object):
     
     def __repr__(self):
         kwargs = list(map(str, self.args))
-        for k,v in six.iteritems(self.kwargs):
+        for k, v in six.iteritems(self.kwargs):
             if isinstance(v, bool):
-                kwargs.append('%s=%i' % (k,int(v)))
+                kwargs.append('%s=%i' % (k, int(v)))
             elif isinstance(v, basestring) and '=' in v:
                 # Escape equals sign character in parameter values.
-                kwargs.append('%s="%s"' % (k, v.replace('=', '\=')))
+                kwargs.append('%s="%s"' % (k, v.replace('=', r'\=')))
             else:
                 kwargs.append('%s=%s' % (k, v))
         params = (self.name, ','.join(kwargs))
@@ -1764,6 +1782,7 @@ class QueuedCommand(object):
     
     def __call__(self):
         raise NotImplementedError
+
 
 def get_template_dirs():
     
@@ -1859,23 +1878,23 @@ def get_os_version():
         ret = _run('cat /etc/lsb-release')
         if ret.succeeded:
             return OS(
-                type = LINUX,
-                distro = UBUNTU,
-                release = re.findall('DISTRIB_RELEASE=([0-9\.]+)', ret)[0])
+                type=LINUX,
+                distro=UBUNTU,
+                release=re.findall(r'DISTRIB_RELEASE=([0-9\.]+)', ret)[0])
                 
         ret = _run('cat /etc/debian_version')
         if ret.succeeded:
             return OS(
-                type = LINUX,
-                distro = DEBIAN,
-                release = re.findall('([0-9\.]+)', ret)[0])
+                type=LINUX,
+                distro=DEBIAN,
+                release=re.findall(r'([0-9\.]+)', ret)[0])
     
         ret = _run('cat /etc/fedora-release')
         if ret.succeeded:
             return OS(
-                type = LINUX,
-                distro = FEDORA,
-                release = re.findall('release ([0-9]+)', ret)[0])
+                type=LINUX,
+                distro=FEDORA,
+                release=re.findall(r'release ([0-9]+)', ret)[0])
 
         raise Exception('Unable to determine OS version.')
 
@@ -2007,25 +2026,18 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
     """
     Iterates over sites, safely setting environment variables for each site.
     """
-    from dj import render_remote_paths
-#     print('site0:', site, file=sys.stderr)
+    from burlap.dj import render_remote_paths
     if sites is None:
         site = site or env.SITE or ALL
-#         print('site00:', site, file=sys.stderr)
         if site == ALL:
             sites = six.iteritems(env.sites)
         else:
-#             print('site1:', site, file=sys.stderr)
-#             print('sites1:', env.sites, file=sys.stderr)
             sys.stderr.flush()
             sites = [(site, env.sites.get(site))]
-#             print('sites2:', sites, file=sys.stderr)
     
     renderer = renderer or render_remote_paths
     env_default = save_env()
-#     print('sites3:', sites, file=sys.stderr)
     for site, site_data in sites:
-#         print('site4:', site, file=sys.stderr)
         if no_secure and site.endswith('_secure'):
             continue
         env.update(env_default)

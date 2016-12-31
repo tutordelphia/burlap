@@ -24,12 +24,12 @@ class CloudfrontSatchel(Satchel):
     def get_or_create_distribution(self, s3_bucket_name):
         assert isinstance(s3_bucket_name, basestring)
         boto = get_boto()
+        origin_dns = '%s.s3.amazonaws.com' % s3_bucket_name
         if not self.dryrun:
             conn = boto.connect_cloudfront(
                 self.genv.aws_access_key_id,
                 self.genv.aws_secret_access_key
             )
-            origin_dns = '%s.s3.amazonaws.com' % s3_bucket_name
             origin = boto.cloudfront.origin.S3Origin(origin_dns)
             
             distro = None
@@ -51,6 +51,6 @@ class CloudfrontSatchel(Satchel):
                 
             return distro
         else:
-            print('boto.connect_cloudfront().create_distribution(%s)' % repr(name))
+            print('boto.connect_cloudfront().create_distribution(%s)' % repr(origin_dns))
 
 cloudfront = CloudfrontSatchel()

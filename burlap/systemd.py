@@ -99,7 +99,7 @@ def restart(service):
     action('restart', service)
 
 
-def reload(service):
+def reload(service): # pylint: disable=redefined-builtin
     """
     Reload a service.
 

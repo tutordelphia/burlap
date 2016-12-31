@@ -257,7 +257,7 @@ class watch(object):
                 self.digest[filename] = md5sum(filename, self.use_sudo)
         return self
 
-    def __exit__(self, type, value, tb):
+    def __exit__(self, type, value, tb): # pylint: disable=redefined-builtin
         for filename in self.filenames:
             if md5sum(filename, self.use_sudo) != self.digest[filename]:
                 self.changed = True

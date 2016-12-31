@@ -223,7 +223,29 @@ class PostgreSQLSatchel(DatabaseSatchel):
             '{db_host}:{port}:*:{shell_username}:{shell_password}',
             r.env.pgpass_path,
             use_sudo=use_sudo)
-
+            
+    @task
+    def dumpload(self, site=None, role=None):
+        """
+        Dumps and loads a database snapshot simultaneously.
+        Requires that the destination server has direct database access
+        to the source server.
+        
+        This is better than a serial dump+load when:
+        1. The network connection is reliable.
+        2. You don't need to save the dump file.
+        
+        The benefits of this over a dump+load are:
+        1. Usually runs faster, since the load and dump happen in parallel.
+        2. Usually takes up less disk space since no separate dump file is
+            downloaded.
+        """
+        r = self.database_renderer(site=site, role=role)
+        r.run('pg_dump -c --host={host_string} --username={db_user} '
+            '--blobs --format=c {db_name} -n public | '
+            'pg_restore -U {db_postgresql_postgres_user} --create '
+            '--dbname={db_name}')
+        
     @task
     def drop_views(self, name=None, site=None):
         """
@@ -284,7 +306,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
                     ret = int(ret) >= 1
               
         if ret is not None:
-            print('%s database on site %s %s exist' % (name, env.SITE, 'DOES' if ret else 'DOES NOT'))
+            print('%s database on site %s %s exist' % (name, self.genv.SITE, 'DOES' if ret else 'DOES NOT'))
             return ret
 
     @task
@@ -348,7 +370,9 @@ class PostgreSQLSatchel(DatabaseSatchel):
 #                 r.put(
 #                     local_path=r.env.dump_fn,
 #                     remote_path=r.env.remote_dump_fn)
-            r.local('rsync -rvz --progress --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {dump_fn} {user}@{host_string}:{remote_dump_fn}')
+            r.local('rsync -rvz --progress --no-p --no-g '
+                '--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" '
+                '{dump_fn} {user}@{host_string}:{remote_dump_fn}')
         
         if r.genv.is_local and not prep_only and not self.dryrun:
             assert os.path.isfile(r.env.dump_fn), \
@@ -437,12 +461,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
             use_sudo=True,
         )
         
-        # Don't do this. Keep it locked down and use an SSH tunnel instead.
-        # See common.tunnel()
-        #sudo_or_dryrun('sed -i "s/#listen_addresses = \'localhost\'/listen_addresses = \'*\'/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf' % env)
-        
         r.pc('Enabling auto-vacuuming...')
-        #r.sudo('sed -i "s/#autovacuum = on/autovacuum = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf')
         r.sed(  
             filename='/etc/postgresql/{pg_version}/main/postgresql.conf',
             before='#autovacuum = on',
@@ -450,7 +469,6 @@ class PostgreSQLSatchel(DatabaseSatchel):
             backup='',
             use_sudo=True,
         )
-        #r.sudo('sed -i "s/#track_counts = on/track_counts = on/g" /etc/postgresql/%(db_postgresql_version_command)s/main/postgresql.conf')
         r.sed(
             filename='/etc/postgresql/{pg_version}/main/postgresql.conf',
             before='#track_counts = on',

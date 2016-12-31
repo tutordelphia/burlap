@@ -30,17 +30,16 @@ import csv
 import os
 import re
 import sys
+import json
+
 from six.moves import xmlrpc_client as xmlrpclib
 from six.moves.urllib.request import urlopen
 
-# try:
-#     import feedparser
-# except ImportError:
-#     feedparser = None
-import json
-
-VERSION = (0, 1, 0)
-__version__ = '.'.join(map(str, VERSION))
+try:
+    import feedparser
+except ImportError:
+    print('Warning: feedparser not installed', file=sys.stderr)
+    feedparser = None
 
 PIP = 'pip'
 GITHUB = 'github' # Most recent commit.
@@ -56,7 +55,7 @@ TYPES = (
 )
 
 GITHUB_PATTERN = re.compile(
-    'https://github.com/(?P<user>[^/]+)/(?P<repo>[^/$]+)')
+    r'https://github.com/(?P<user>[^/]+)/(?P<repo>[^/$]+)')
 
 DEP_SCHEMA = (
     'type',
@@ -83,7 +82,7 @@ def get_pip_oath():
 
 class Dependency(object):
     
-    def __init__(self, type, name, uri, version, rss_field, rss_regex):
+    def __init__(self, type, name, uri, version, rss_field, rss_regex): # pylint: disable=redefined-builtin
         self.type = type # source location, e.g. pip|github|rss|apt|etc
         assert type in TYPES, 'Unknown type: %s' % (self.type,)
         self.name = name
@@ -126,7 +125,7 @@ class Dependency(object):
         resp = json.loads(resp)
         resp = sorted(
             resp,
-            key=lambda o:tuple(int(_) if _.isdigit() else _ \
+            key=lambda o: tuple(int(_) if _.isdigit() else _ \
                 for _ in o['name'].split('.')),
             reverse=True)
         for tag in resp:
@@ -212,7 +211,7 @@ if __name__ == '__main__':
         total_stale = 0
         total = 0
         for line in csv.DictReader(open(fn), delimiter=','):
-            dep = Dependency(**dict((k,v) for k,v in line.iteritems() if k))
+            dep = Dependency(**dict((k, v) for k, v in line.iteritems() if k))
             total += 1
             is_stale = dep.is_stale()
             total_stale += is_stale if is_stale is not None else 0
@@ -252,9 +251,9 @@ if __name__ == '__main__':
                 version=parts[1] if len(parts) >= 2 else '',
                 rss_field='',
                 rss_regex='')
-            format = '%(type)s,%(name)s,%(uri)s,%(version)s,%(rss_field)s,' + \
+            fmt = '%(type)s,%(name)s,%(uri)s,%(version)s,%(rss_field)s,' + \
                 '%(rss_regex)s'
-            print(format % args)
+            print(fmt % args)
     
     if not done:
         parser.print_help()

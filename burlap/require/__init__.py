@@ -26,9 +26,9 @@
 # import burlap.require.tomcat
 # import burlap.require.users
 
-from burlap.require.files import (
+from burlap.require.files import ( # pylint: disable=redefined-builtin
     directory,
-    file,
+    file, 
 )
 from burlap.require.users import (
     user,

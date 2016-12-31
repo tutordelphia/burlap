@@ -4,13 +4,15 @@ Utilities
 """
 from __future__ import print_function
 
-import six
 from pipes import quote
 import os
 import posixpath
 import hashlib
 
+import six
+
 from fabric.api import env, hide, run, sudo
+
 
 #TODO: replace with sudo_or_dryrun?
 def run_as_root(command, *args, **kwargs):
@@ -63,8 +65,9 @@ def read_file(path):
 def read_lines(path):
     return read_file(path).splitlines()
 
+
 _oct = oct
-def oct(v, **kwargs):
+def oct(v, **kwargs): # pylint: disable=redefined-builtin
     """
     A backwards compatible version of oct() that works with Python2.7 and Python3.
     """
@@ -76,7 +79,8 @@ def oct(v, **kwargs):
         if not v.starswith('0o'):
             assert v[0] == '0'
             v = '0o' + v[1:]
-    return eval('_oct(%s, **kwargs)' % v)
+    return eval('_oct(%s, **kwargs)' % v) # pylint: disable=eval-used
+
 
 def get_file_hash(fin, block_size=2**20):
     """
@@ -92,4 +96,3 @@ def get_file_hash(fin, block_size=2**20):
             break
         h.update(data)
     return h.hexdigest()
-    

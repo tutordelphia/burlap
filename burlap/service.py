@@ -176,7 +176,8 @@ def restart(service=''):
     if not get_dryrun() and not _ran and service:
         _run_service(service, 'restart')
 
-def reload(service):
+
+def reload(service): # pylint: disable=redefined-builtin
     """
     Reload a service.
 

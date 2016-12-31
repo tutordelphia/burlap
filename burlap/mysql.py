@@ -8,6 +8,7 @@ This module provides tools for creating MySQL users and databases.
 from __future__ import print_function
 
 import os
+import re
 from pipes import quote
 
 from fabric.api import env, hide, puts, run, settings, runs_once
@@ -42,7 +43,9 @@ class MySQLSatchel(DatabaseSatchel):
         
         self.env.net_buffer_length = 1000000
         self.env.conf = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
-        self.env.dump_command = 'mysqldump --opt --compress --max_allowed_packet={max_allowed_packet} --force --single-transaction --quick --user {db_user} --password={db_password} -h {db_host} {db_name} | gzip > {dump_fn}'
+        self.env.dump_command = 'mysqldump --opt --compress --max_allowed_packet={max_allowed_packet} ' \
+            '--force --single-transaction --quick --user {db_user} ' \
+            '--password={db_password} -h {db_host} {db_name} | gzip > {dump_fn}'
         self.env.preload_commands = []
         self.env.character_set = 'utf8'
         self.env.collate = 'utf8_general_ci'
@@ -71,6 +74,10 @@ class MySQLSatchel(DatabaseSatchel):
                 UBUNTU: 'service mysql status',
             },
         }
+        
+    @task
+    def execute(self, sql, name='default', site=None, **kwargs):
+        raise NotImplementedError
         
     @task
     def set_collation(self, name=None, site=None):
@@ -118,7 +125,25 @@ class MySQLSatchel(DatabaseSatchel):
         self.prep_root_password(**kwargs)
         r = self.database_renderer(**kwargs)
         r.sudo("dpkg-reconfigure -fnoninteractive `dpkg --list | egrep -o 'mysql-server-([0-9.]+)'`")
-
+        
+    @task
+    def dumpload(self, site=None, role=None):
+        """
+        Dumps and loads a database snapshot simultaneously.
+        Requires that the destination server has direct database access
+        to the source server.
+        
+        This is better than a serial dump+load when:
+        1. The network connection is reliable.
+        2. You don't need to save the dump file.
+        
+        The benefits of this over a dump+load are:
+        1. Usually runs faster, since the load and dump happen in parallel.
+        2. Usually takes up less disk space since no separate dump file is
+            downloaded.
+        """
+        raise NotImplementedError
+        
     @task
     def drop_views(self, name=None, site=None):
         """
@@ -127,12 +152,13 @@ class MySQLSatchel(DatabaseSatchel):
         
         r = self.database_renderer
             
-        result = r.sudo("mysql --batch -v -h {db_host} " \
-            #"-u {db_root_username} -p'{db_root_password}' " \
-            "-u {db_user} -p'{db_password}' " \
-            "--execute=\"SELECT GROUP_CONCAT(CONCAT(TABLE_SCHEMA,'.',table_name) SEPARATOR ', ') AS views FROM INFORMATION_SCHEMA.views WHERE TABLE_SCHEMA = '{db_name}' ORDER BY table_name DESC;\"")
+        result = r.sudo("mysql --batch -v -h {db_host} "
+            #"-u {db_root_username} -p'{db_root_password}' "
+            "-u {db_user} -p'{db_password}' "
+            "--execute=\"SELECT GROUP_CONCAT(CONCAT(TABLE_SCHEMA,'.',table_name) SEPARATOR ', ') AS views "
+            "FROM INFORMATION_SCHEMA.views WHERE TABLE_SCHEMA = '{db_name}' ORDER BY table_name DESC;\"")
         result = re.findall(
-            '^views[\s\t\r\n]+(.*)',
+            r'^views[\s\t\r\n]+(.*)',
             result,
             flags=re.IGNORECASE|re.DOTALL|re.MULTILINE)
         if not result:
@@ -214,10 +240,6 @@ class MySQLSatchel(DatabaseSatchel):
             "-p'{db_root_password}' --execute=\"GRANT ALL PRIVILEGES "\
             "ON {db_name}.* TO {db_user}@{db_host} IDENTIFIED BY "\
             "'{db_password}'; FLUSH PRIVILEGES;\"")
-    
-        # Let the primary login do so from everywhere.
-#        cmd = 'mysql -h {db_host} -u {} -p'{db_root_password}' --execute="USE mysql; GRANT ALL ON {db_name}.* to {db_user}@\'%\' IDENTIFIED BY \'{db_password}\'; FLUSH PRIVILEGES;"'
-#        sudo_or_dryrun(cmd)
         
     @task
     @runs_once

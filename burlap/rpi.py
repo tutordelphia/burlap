@@ -109,11 +109,11 @@ class RaspberryPiSatchel(Satchel):
         r.env.hardware_addr = hardware_addr
         r.sudo('ln -s /dev/null /etc/udev/rules.d/80-net-name-slot.rules')
         r.append(
-            text='SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", '
-                'ATTR\{address\}=="{hardware_addr}", '
-                'ATTR\{dev_id\}=="0x0", '
-                'ATTR\{type\}=="1", '
-                'KERNEL=="eth*", NAME="eth0"',
+            text=r'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", '\
+                r'ATTR\{address\}=="{hardware_addr}", '\
+                r'ATTR\{dev_id\}=="0x0", '\
+                r'ATTR\{type\}=="1", '\
+                r'KERNEL=="eth*", NAME="eth0"',
             filename='/etc/udev/rules.d/70-persistent-net.rules',
             use_sudo=True,
         )
@@ -192,7 +192,7 @@ class RaspberryPiSatchel(Satchel):
         if not self.dryrun:
             device_question = 'SD card present at %s? ' % self.env.sd_device
             inp = raw_input(device_question).strip()
-            print('inp:',inp)
+            print('inp:', inp)
             if not yes and inp and not inp.lower().startswith('y'):
                 return
         
@@ -242,7 +242,9 @@ class RaspberryPiSatchel(Satchel):
         #TODO:resize image?
         
         r.comment('Find start of the Linux ext4 partition.')
-        r.local("parted -s 2016-03-18-raspbian-jessie-lite.img unit B print | awk '/^Number/{{p=1;next}}; p{{gsub(/[^[:digit:]]/, "", $2); print $2}}' | sed -n 2p", assign_to='START')
+        r.local(
+            "parted -s 2016-03-18-raspbian-jessie-lite.img unit B print | "
+            "awk '/^Number/{{p=1;next}}; p{{gsub(/[^[:digit:]]/, "", $2); print $2}}' | sed -n 2p", assign_to='START')
         
         r.local('mkdir -p {raspbian_mount_point}')
         r.sudo('mount -v -o offset=$START -t ext4 {raspbian_image} $MNT')
@@ -264,7 +266,9 @@ class RaspberryPiSatchel(Satchel):
         
         r.comment('You should now be able to boot the VM by running:')
         r.comment('')
-        r.comment('    qemu-system-arm -kernel {libvirt_boot_dir}/{raspbian_kernel} -cpu arm1176 -m 256 -M versatilepb -serial stdio -append "root=/dev/sda2 rootfstype=ext4 rw" -hda {libvirt_images_dir}/{raspbian_image}')
+        r.comment('    qemu-system-arm -kernel {libvirt_boot_dir}/{raspbian_kernel} '
+            '-cpu arm1176 -m 256 -M versatilepb -serial stdio -append "root=/dev/sda2 rootfstype=ext4 rw" '
+            '-hda {libvirt_images_dir}/{raspbian_image}')
         r.comment('')
         r.comment('Or by running virt-manager.')
     
@@ -316,7 +320,8 @@ class RaspberryPiSatchel(Satchel):
         #TODO:fix? throws dpkg: error: fgets gave an empty string from `/var/lib/dpkg/triggers/File'
         #r.sudo('apt-get install -y linux-headers-rpi')
         
-        #do any change that you want and shutdown the VM . now , come to host machine on which guest VM is running and goto the /var/lib/libvirt/images/ and choose raw image in which you did the change and copy somewhere for example /test
+        #do any change that you want and shutdown the VM . now , come to host machine on which guest VM is running and goto
+        #the /var/lib/libvirt/images/ and choose raw image in which you did the change and copy somewhere for example /test
         
         r.sudo('mkdir /tmp/test')
         r.sudo('cp {libvirt_images_dir}/{raspbian_image} /tmp/test')
@@ -332,7 +337,8 @@ class RaspberryPiSatchel(Satchel):
         #rename ubuntu.qcow2 to box.img
         r.sudo('mv {libvirt_images_dir}/{raspbian_image}.qcow2 {libvirt_images_dir}/box.img')
         
-        #Note: currently,libvirt-vagrant support only qcow2 format. so , don't change the format just rename to box.img. because it takes input with name box.img by default.
+        #Note: currently,libvirt-vagrant support only qcow2 format. so , don't change the format just rename to box.img.
+        #because it takes input with name box.img by default.
         #create box
         
         r.sudo('cd /tmp/test; tar cvzf custom_box.box ./metadata.json ./Vagrantfile ./{raspbian_kernel} ./box.img') 
@@ -531,7 +537,10 @@ class RaspberryPiSatchel(Satchel):
             
             # Make GPIO accessible to non-root users.
             #Obsolete in Ubuntu 16?
-            #r.sudo("echo 'SUBSYSTEM==\"gpio*\", PROGRAM=\"/bin/sh -c 'chown -R root:gpio /sys/class/gpio && chmod -R 770 /sys/class/gpio; chown -R root:gpio /sys/devices/virtual/gpio && chmod -R 770 /sys/devices/virtual/gpio'\"' > /etc/udev/rules.d/99-com.rules")
+#             r.sudo("echo 'SUBSYSTEM==\"gpio*\", PROGRAM=\"/bin/sh -c '"
+#                 "chown -R root:gpio /sys/class/gpio && chmod -R 770 /sys/class/gpio; "
+#                 "chown -R root:gpio /sys/devices/virtual/gpio && "
+#                 "chmod -R 770 /sys/devices/virtual/gpio'\"' > /etc/udev/rules.d/99-com.rules")
         else:
             pass
 

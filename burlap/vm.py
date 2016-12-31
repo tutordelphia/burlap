@@ -6,6 +6,7 @@ import datetime
 import socket
 from pprint import pprint
 import time
+
 import yaml
 
 from fabric.api import (
@@ -37,6 +38,7 @@ except ImportError:
     boto = None
 
 EC2 = 'ec2'
+KVM = 'kvm'
 
 #env.vm_type = None
 #env.vm_group = None
@@ -126,10 +128,12 @@ def get_ec2_connection():
 
 def get_all_ec2_instances(instance_ids=None):
     conn = get_ec2_connection()
-    return sum(map(lambda r: r.instances, conn.get_all_instances(instance_ids=instance_ids)), [])
+    #return sum(map(lambda r: r.instances, conn.get_all_instances(instance_ids=instance_ids)), [])
+    return sum([r.instances for r in conn.get_all_instances(instance_ids=instance_ids)], [])
 
 def get_all_running_ec2_instances():
-    instances = filter(lambda i: i.state == 'running', get_all_ec2_instances())
+    #instances = filter(lambda i: i.state == 'running', get_all_ec2_instances())
+    instances = [i for i in get_all_ec2_instances() if i.state == 'running']
     instances.reverse()
     return instances
 
@@ -213,12 +217,14 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
 #def list(*args, **kwargs):
 #    #execute(list_instances, *args, **kwargs)
 #    list_instances(*args, **kwargs)
-    
-def set_ec2_security_group_id(name, id):
+
+
+def set_ec2_security_group_id(name, id): # pylint: disable=redefined-builtin
     from burlap.common import shelf, OrderedDict
     v = shelf.get('vm_ec2_security_group_ids', OrderedDict())
     v[name] = str(id)
     shelf.set('vm_ec2_security_group_ids', v)
+
 
 @task_or_dryrun
 def get_ec2_security_group_id(name=None, verbose=0):
@@ -231,7 +237,7 @@ def get_ec2_security_group_id(name=None, verbose=0):
     groups = conn.get_all_security_groups()
     for group in groups:
         if verbose:
-            print('group:',group.name,group.id)
+            print('group:', group.name, group.id)
         if group.name == name:
             group_id = group.id
     
@@ -243,6 +249,7 @@ def get_ec2_security_group_id(name=None, verbose=0):
     if verbose:
         print(group_id)
     return group_id
+
     
 @task_or_dryrun
 def get_or_create_ec2_security_groups(names=None, verbose=1):
@@ -260,14 +267,14 @@ def get_or_create_ec2_security_groups(names=None, verbose=1):
         names = names.split(',')
     names = names or env.vm_ec2_selected_security_groups
     if verbose:
-        print('Group names:',names)
+        print('Group names:', names)
     
     ret = []
     for name in names:
         try:
             group_id = get_ec2_security_group_id(name)
             if verbose:
-                print('group_id:',group_id)
+                print('group_id:', group_id)
             #group = conn.get_all_security_groups(groupnames=[name])[0]
             # Note, groups in a VPC can't be referred to by name?
             group = conn.get_all_security_groups(group_ids=[group_id])[0]
@@ -279,7 +286,7 @@ def get_or_create_ec2_security_groups(names=None, verbose=1):
                 name,
                 vpc_id=env.vm_ec2_vpc_id,
             )
-            print('group_id:',group.id)
+            print('group_id:', group.id)
             set_ec2_security_group_id(name, group.id)
         ret.append(group)
         
@@ -304,7 +311,7 @@ def get_or_create_ec2_security_groups(names=None, verbose=1):
         expected_sets = set()
         for authorization in env.vm_ec2_available_security_groups.get(name, []):
             if verbose:
-                print('authorization:',authorization)
+                print('authorization:', authorization)
             if len(authorization) == 4 or (len(authorization) == 5 and not (authorization[-1] or '').strip()):
                 src_group = None
                 ip_protocol, from_port, to_port, cidr_ip = authorization[:4]
@@ -334,12 +341,12 @@ def get_or_create_ec2_security_groups(names=None, verbose=1):
             # Revoke deleted.
             for auth in del_sets:
                 print(len(auth))
-                print('revoking:',auth)
+                print('revoking:', auth)
                 group.revoke(*auth)
             
             # Create fresh rules.
             for auth in add_sets:
-                print('authorizing:',auth)
+                print('authorizing:', auth)
                 group.authorize(*auth)
                 
     return ret
@@ -366,7 +373,7 @@ def get_or_create_ec2_key_pair(name=None, verbose=1):
     #return kp
     return pem_path
 
-def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, backend_opts={}):
+def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, backend_opts=None):
     """
     Creates a new EC2 instance.
     
@@ -377,6 +384,8 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
 
     assert name, "A name must be specified."
 
+    backend_opts = backend_opts or {}
+
     verbose = int(verbose)
 
     conn = get_ec2_connection()
@@ -384,7 +393,7 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
     security_groups = get_or_create_ec2_security_groups()
     security_group_ids = [_.id for _ in security_groups]
     if verbose:
-        print('security_groups:',security_group_ids)
+        print('security_groups:', security_group_ids)
     
     pem_path = get_or_create_ec2_key_pair()
 
@@ -447,7 +456,7 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
             if elastic_ip == eip.public_ip:
                 allocation_id = eip.allocation_id
                 break
-        print('allocation_id:',allocation_id)
+        print('allocation_id:', allocation_id)
             
         while 1:
             try:
@@ -473,10 +482,9 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
             if instance.public_dns_name:
                 break
         except Exception as e:
-            print('error:',e)
+            print('error:', e)
         except SystemExit as e:
-            print('systemexit:',e)
-            pass
+            print('systemexit:', e)
         print('Waiting for public DNS name to be assigned...')
         time.sleep(3)
 
@@ -492,10 +500,9 @@ def get_or_create_ec2_instance(name=None, group=None, release=None, verbose=0, b
                 if not ret.return_code:
                     break
         except Exception as e:
-            print('error:',e)
+            print('error:', e)
         except SystemExit as e:
-            print('systemexit:',e)
-            pass
+            print('systemexit:', e)
         print('Waiting for sshd to accept connections...')
         time.sleep(3)
 
@@ -531,11 +538,13 @@ def exists(name=None, group=None, release=None, except_release=None, verbose=1):
     return instances
 
 @task_or_dryrun
-def get_or_create(name=None, group=None, config=None, extra=0, verbose=0, backend_opts={}):
+def get_or_create(name=None, group=None, config=None, extra=0, verbose=0, backend_opts=None):
     """
     Creates a virtual machine instance.
     """
     require('vm_type', 'vm_group')
+    
+    backend_opts = backend_opts or {}
     
     verbose = int(verbose)
     extra = int(extra)
@@ -641,12 +650,12 @@ def respawn(name=None, group=None):
 def shutdown(force=False):
     #virsh shutdown <name>
     #virsh destroy <name> #to force
-    todo
+    raise NotImplementedError
 
 @task_or_dryrun
 def reboot():
     #virsh reboot <name>
-    todo
+    raise NotImplementedError
 
 @task_or_dryrun
 @runs_once

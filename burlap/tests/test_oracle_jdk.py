@@ -1,6 +1,6 @@
+import unittest
 
 import mock
-import unittest
 
 
 class OracleJdkTestCase(unittest.TestCase):

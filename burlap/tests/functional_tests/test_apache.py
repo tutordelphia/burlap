@@ -1,8 +1,8 @@
-import pytest
-
 from pipes import quote
 from textwrap import dedent
 import posixpath
+
+import pytest
 
 from fabric.api import quiet, run, shell_env, sudo
 

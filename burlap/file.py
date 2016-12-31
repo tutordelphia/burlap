@@ -5,19 +5,15 @@ from __future__ import print_function
 
 import os
 import re
-
-from fabric.api import (
-    env,
-    require,
-    settings,
-    cd,
-)
+import warnings
+from datetime import date
 
 try:
     import boto
 except ImportError:
     boto = None
     
+from fabric.api import env
 from fabric.contrib import files
 from fabric.tasks import Task
 
@@ -65,6 +61,7 @@ def appendline(fqfn, line, use_sudo=0, verbose=1, commands_only=0):
     Appends the given line to the given file only if the line does not already
     exist in the file.
     """
+    warnings.warn('Use Satchel.append() instead.', DeprecationWarning, stacklevel=2)
     verbose = int(verbose)
     commands_only = int(commands_only)
     

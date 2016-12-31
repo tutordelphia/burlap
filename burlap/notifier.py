@@ -21,10 +21,11 @@ class DeploymentNotifierSatchel(Satchel):
         self.env.email_use_tls = True
         self.env.email_recipient_list = []
 
-    def send_email(self, subject, message, from_email=None, recipient_list=[]):
+    def send_email(self, subject, message, from_email=None, recipient_list=None):
         import smtplib
         from email.mime.text import MIMEText
         
+        recipient_list = recipient_list or []
         if not recipient_list:
             return
         

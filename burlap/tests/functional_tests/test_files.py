@@ -137,7 +137,7 @@ def test_file_changes_ownership():
 @pytest.fixture()
 def watched_file():
     from burlap.require import file as require_file
-    filename= 'watched'
+    filename = 'watched'
     require_file('watched', contents='aaa')
     return filename
 

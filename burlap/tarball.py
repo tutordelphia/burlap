@@ -122,7 +122,7 @@ class TarballSatchel(Satchel):
         self.local(cmd)
     
     @task
-    def get_tarball_hash(fn=None, refresh=1, verbose=0):
+    def get_tarball_hash(self, fn=None, refresh=1, verbose=0):
         """
         Calculates the hash for the tarball.
         """

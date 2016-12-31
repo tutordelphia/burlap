@@ -10,19 +10,7 @@ import importlib
 import pkgutil
 import inspect
 import warnings
-
 from pprint import pprint
-
-VERSION = (0, 8, 7)
-__version__ = '.'.join(map(str, VERSION))
-
-burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
-no_load = int(os.environ.get('BURLAP_NO_LOAD', 0))
-
-env = None
-#common = None
-#debug = None
-env_default = {}
 
 try:
     from fabric.api import env
@@ -35,6 +23,7 @@ try:
     # Variables cached per-role. Must be after deepcopy.
     env._rc = type(env)()
 
+    # Force dictionaries to be serialized in multi-line format.
     def _represent_dictorder(self, data):
         return self.represent_mapping(u'tag:yaml.org,2002:map', data.items())
     
@@ -53,29 +42,36 @@ try:
     yaml.add_constructor(u'tag:yaml.org,2002:python/tuple', _construct_tuple)
     yaml.add_representer(types.FunctionType, _represent_function)
 
-    from . import common
-    from . import debug
-    
-    Satchel = common.Satchel
-    ServiceSatchel = common.ServiceSatchel
-    
-    env_default = common.save_env()
-
 except ImportError as e:
     print('Unable to initialize yaml: %s' % e, file=sys.stderr)
-    pass
 
 try:
-    common
+    env
+except NameError as e:
+    print('Unable to initialize env: %s' % e, file=sys.stderr)
+    env = None
+    env_default = {}
+
+try:
+    from . import common
+    Satchel = common.Satchel
+    ServiceSatchel = common.ServiceSatchel
+    env_default = common.save_env()
 except NameError as e:
     print('Unable to initialize common: %s' % e, file=sys.stderr)
     common = None
 
 try:
-    debug
+    from . import debug
 except NameError:
     debug = None
-    
+
+VERSION = (0, 9, 0)
+__version__ = '.'.join(map(str, VERSION))
+
+burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
+no_load = int(os.environ.get('BURLAP_NO_LOAD', 0))
+
 def _get_environ_handler(name, d):
     """
     Dynamically creates a Fabric task for each configuration role.
@@ -147,8 +143,6 @@ def _get_environ_handler(name, d):
         
         # Dynamically retrieve hosts.
         if env.hosts_retriever:
-#             print('retriever:',retriever)
-#            print('hosts:',env.hosts)
             if verbose:
                 print('Building host list...')
             env.hosts = list(retriever(site=site))
@@ -157,7 +151,6 @@ def _get_environ_handler(name, d):
                 print(env.hosts)
 
         # Filter hosts list by a specific host name.
-        #env.hostname = hostname
         if hostname:
             _hostname = hostname
             hostname = translator(hostname=hostname)
@@ -311,13 +304,9 @@ def populate_fabfile():
         
         # Put all virtual satchels in the global namespace so Fabric can find them.
         for _module_alias in common._post_import_modules:
-            exec("import %s" % _module_alias)
+            exec("import %s" % _module_alias) # pylint: disable=exec-used
             locals_[_module_alias] = locals()[_module_alias]
             
-#         locals_['shell'] = debug.shell
-#         locals_['info'] = debug.info
-#         #locals_['djshell'] = common.djshell
-#         locals_['tunnel'] = debug.tunnel
     finally:
         del stack
 
@@ -330,24 +319,15 @@ def load_role_handler(name):
 # Dynamically create a Fabric task for each role.
 role_commands = {}
 if common and not no_load:
-    #_common = type(env)()
-    #_common_fn = os.path.join(common.ROLE_DIR, 'all', 'settings.yaml')
-    #if os.path.isfile(_common_fn):
-    #    _common = yaml.safe_load(open(_common_fn))
     if os.path.isdir(common.ROLE_DIR):
         for _name in os.listdir(common.ROLE_DIR):
             _settings_fn = os.path.join(common.ROLE_DIR, _name, 'settings.yaml')
             if _name.startswith('.') or not os.path.isfile(_settings_fn):
                 continue
-#             _config = load_yaml_settings(_name)
-#             _f = _get_environ_handler(_name, _config)
-#             _var_name = 'role_'+_name
-#             _f = WrappedCallableTask(_f, name=_name)
             _f = load_role_handler(_name)
             _var_name = 'role_' + _name
             _cmd = "%s = _f" % (_var_name,)
-            exec(_cmd)
-            #print('Creating role %s.' % _var_name, file=sys.stderr)
+            exec(_cmd) # pylint: disable=exec-used
             role_commands[_var_name] = _f
 
     # Auto-import all sub-modules.

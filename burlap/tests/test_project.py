@@ -38,7 +38,6 @@ def test_project():
         
     finally:
         shutil.rmtree(project_dir)
-        pass
 
 def test_find_template():
     from burlap import common

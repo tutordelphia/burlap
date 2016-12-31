@@ -16,6 +16,7 @@ from burlap import Satchel
 from burlap.constants import *
 from burlap.decorators import task, task_or_dryrun
 
+
 def iter_hostnames():
     from burlap.common import get_hosts_retriever, get_verbose
     
@@ -32,27 +33,13 @@ def iter_hostnames():
 #         elif _data.public_dns_name == env.host_string:
 #             yield _hostname
 
+
 @task_or_dryrun
 @runs_once
 def list_hostnames():
     for hostname in iter_hostnames():
         print(hostname)
 
-@task_or_dryrun
-@runs_once
-def list_public_ips(show_hostname=0):
-    """
-    Aggregates the public IPs for several hosts.
-    """
-    show_hostname = int(show_hostname)
-    ret = execute(get_public_ip)
-    print('-'*80)
-    have_updates = 0
-    for hn, output in ret.items():
-        if show_hostname:
-            print(hn, output)
-        else:
-            print(output)
 
 class HostSatchel(Satchel):
     """
@@ -243,7 +230,7 @@ class HostSatchel(Satchel):
 #         needs = True
 #         if check:
 #             needs = self.needs_initrole(stop_on_error=True)
-        needs=False
+        needs = False
         
         if host_string is not None:
             self.genv.host_string = host_string

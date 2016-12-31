@@ -14,7 +14,7 @@ class IPSatchel(ServiceSatchel):
     post_deploy_command = None
 
     def set_defaults(self):
-        self.env.type = DYNAMIC#STATIC
+        self.env.type = DYNAMIC # STATIC
         self.env.interface = 'eth0'
         self.env.address = None
         self.env.network = '192.168.0.0'
@@ -52,7 +52,8 @@ class IPSatchel(ServiceSatchel):
         Configures the server to use a static IP.
         """
         fn = self.render_to_file('ip/ip_interfaces_static.template')
-        self.put_or_dryrun(local_path=fn, remote_path=env.interfaces_fn, use_sudo=True)
+        r = self.local_renderer
+        r.put(local_path=fn, remote_path=r.env.interfaces_fn, use_sudo=True)
     
     @task
     def dynamic(self):
@@ -60,7 +61,8 @@ class IPSatchel(ServiceSatchel):
         Configures the server to use a static IP.
         """
         fn = self.render_to_file('ip/ip_interfaces_dynamic.template')
-        self.put_or_dryrun(local_path=fn, remote_path=self.env.interfaces_fn, use_sudo=True)
+        r = self.local_renderer
+        r.put(local_path=fn, remote_path=r.env.interfaces_fn, use_sudo=True)
     
     @task
     def configure(self):

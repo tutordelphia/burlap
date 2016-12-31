@@ -4,17 +4,15 @@ import os
 import sys
 import datetime
 import warnings
+import posixpath
 from pprint import pprint
+from distutils.version import StrictVersion as V
 
 from fabric.api import settings
-
-from distutils.version import StrictVersion as V
-import posixpath
 
 from burlap.files import is_link
 from burlap.system import UnsupportedFamily, distrib_family, distrib_id, distrib_release
 from burlap.utils import run_as_root
-
 from burlap import Satchel, ServiceSatchel
 from burlap.constants import *
 from burlap.decorators import task
@@ -465,9 +463,9 @@ class ApacheSatchel(ServiceSatchel):
         Requires the APACHE2_VISITORS service to be enabled for the current host.
         """
         if not int(force):
-            assert APACHE2_VISITORS.upper() in self.genv.services or APACHE2_VISITORS.lower() in self.genv.services, \
+            assert ApacheVisitors.name.upper() in self.genv.services or ApacheVisitors.name.lower() in self.genv.services, \
                 'Visitors has not been configured for this host.'
-        self.run_or_dryrun('visitors -o text /var/log/apache2/%(apache_application_name)s-access.log* | less' % self.genv)
+        self.run('visitors -o text /var/log/apache2/%(apache_application_name)s-access.log* | less' % self.genv)
     
     def check_required(self):
         for name in ['apache_application_name', 'apache_server_name']:
@@ -509,7 +507,7 @@ class ApacheSatchel(ServiceSatchel):
             print('apache_ssl_domain:', self.genv.apache_ssl_domain, file=sys.stderr)
         for cert_type, cert_file_template in self.genv.apache_ssl_certificates_templates:
             if verbose:
-                print('cert_type, cert_file_template:',cert_type, cert_file_template, file=sys.stderr)
+                print('cert_type, cert_file_template:', cert_type, cert_file_template, file=sys.stderr)
             _local_cert_file = os.path.join(self.genv.apache_ssl_dir_local, cert_file_template % self.genv)
             local_cert_file = self.find_template(_local_cert_file)
             assert local_cert_file, 'Unable to find local certificate file: %s' % (_local_cert_file,)
@@ -553,6 +551,8 @@ class ApacheSatchel(ServiceSatchel):
         """
         from burlap.common import iter_sites
         
+        r = self.local_renderer
+        
         self.get_apache_settings()
         
         apache_specifics = self.set_apache_specifics()
@@ -560,21 +560,20 @@ class ApacheSatchel(ServiceSatchel):
         for site, site_data in iter_sites(site=site, setter=self.set_apache_site_specifics):
             if self.verbose:
                 print('~'*80, file=sys.stderr)
-                print('Site:',site, file=sys.stderr)
+                print('Site:', site, file=sys.stderr)
                 print('env.apache_auth_basic:', self.genv.apache_auth_basic, file=sys.stderr)
                 
             if not self.genv.apache_auth_basic:
                 continue
             
-            #assert self.genv.apache_auth_basic, 'This site is not configured for Apache basic authenticated.'
             assert self.genv.apache_auth_basic_users, 'No apache auth users specified.'
-            for username,password in self.genv.apache_auth_basic_users:
+            for username, password in self.genv.apache_auth_basic_users:
                 self.genv.apache_auth_basic_username = username
                 self.genv.apache_auth_basic_password = password
                 if self.files.exists(self.genv.apache_auth_basic_authuserfile):
-                    self.sudo_or_dryrun('htpasswd -b %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % self.genv)
+                    r.sudo('htpasswd -b {apache_auth_basic_authuserfile} {apache_auth_basic_username} {apache_auth_basic_password}')
                 else:
-                    self.sudo_or_dryrun('htpasswd -b -c %(apache_auth_basic_authuserfile)s %(apache_auth_basic_username)s %(apache_auth_basic_password)s' % self.genv)
+                    r.sudo('htpasswd -b -c {apache_auth_basic_authuserfile} {apache_auth_basic_username} {apache_auth_basic_password}')
     
     @task
     def install_auth_basic_user_file_all(self):
@@ -626,7 +625,7 @@ class ApacheSatchel(ServiceSatchel):
         for site, site_data in iter_sites(site=site, setter=self.set_apache_site_specifics):
             if self.verbose:
                 print('-'*80, file=sys.stderr)
-                print('Site:',site, file=sys.stderr)
+                print('Site:', site, file=sys.stderr)
                 print('-'*80, file=sys.stderr)
             
             # Only load site configurations that are allowed for this host.
@@ -799,6 +798,8 @@ class ApacheModSecurity(Satchel):
     def configure(self):
         self.install_packages()
         
+        r = self.local_renderer
+        
         self.get_apache_settings()
         
         self.genv.apache_mods_enabled.append('mod-security')
@@ -806,19 +807,23 @@ class ApacheModSecurity(Satchel):
         
         # Write modsecurity.conf.
         fn = self.render_to_file('apache_modsecurity.template.conf')
-        self.put_or_dryrun(local_path=fn, remote_path='/etc/modsecurity/modsecurity.conf', use_sudo=True)
+        r.put(local_path=fn, remote_path='/etc/modsecurity/modsecurity.conf', use_sudo=True)
         
         # Write OWASP rules.
         self.genv.apache_modsecurity_download_filename = '/tmp/owasp-modsecurity-crs.tar.gz'
-        self.sudo_or_dryrun('cd /tmp; wget --output-document=%(apache_modsecurity_download_filename)s %(apache_modsecurity_download_url)s' % self.genv)
-        self.genv.apache_modsecurity_download_top = self.sudo_or_dryrun("cd /tmp; tar tzf %(apache_modsecurity_download_filename)s | sed -e 's@/.*@@' | uniq" % self.genv)
-        self.sudo_or_dryrun('cd /tmp; tar -zxvf %(apache_modsecurity_download_filename)s' % self.genv)
-        self.sudo_or_dryrun('cd /tmp; cp -R %(apache_modsecurity_download_top)s/* /etc/modsecurity/' % self.genv)
-        self.sudo_or_dryrun('mv /etc/modsecurity/modsecurity_crs_10_setup.conf.example  /etc/modsecurity/modsecurity_crs_10_setup.conf' % self.genv)
+        r.sudo('cd /tmp; wget --output-document={apache_modsecurity_download_filename} {apache_modsecurity_download_url}')
+        self.genv.apache_modsecurity_download_top = r.sudo(
+            "cd /tmp; "
+            "tar tzf %(apache_modsecurity_download_filename)s | sed -e 's@/.*@@' | uniq" % self.genv)
+        r.sudo('cd /tmp; tar -zxvf %(apache_modsecurity_download_filename)s' % self.genv)
+        r.sudo('cd /tmp; cp -R %(apache_modsecurity_download_top)s/* /etc/modsecurity/' % self.genv)
+        r.sudo('mv /etc/modsecurity/modsecurity_crs_10_setup.conf.example  /etc/modsecurity/modsecurity_crs_10_setup.conf')
         
-        self.sudo_or_dryrun('rm -f /etc/modsecurity/activated_rules/*')
-        self.sudo_or_dryrun('cd /etc/modsecurity/base_rules; for f in * ; do ln -s /etc/modsecurity/base_rules/$f /etc/modsecurity/activated_rules/$f ; done')
-        self.sudo_or_dryrun('cd /etc/modsecurity/optional_rules; for f in * ; do ln -s /etc/modsecurity/optional_rules/$f /etc/modsecurity/activated_rules/$f ; done')
+        r.sudo('rm -f /etc/modsecurity/activated_rules/*')
+        r.sudo('cd /etc/modsecurity/base_rules; '
+            'for f in * ; do ln -s /etc/modsecurity/base_rules/$f /etc/modsecurity/activated_rules/$f ; done')
+        r.sudo('cd /etc/modsecurity/optional_rules; '
+            'for f in * ; do ln -s /etc/modsecurity/optional_rules/$f /etc/modsecurity/activated_rules/$f ; done')
         
         self.genv.apache_httpd_conf_append.append('Include "/etc/modsecurity/activated_rules/*.conf"')
         
@@ -845,16 +850,18 @@ class ApacheMediaSatchel(Satchel):
         Uploads select media to an Apache accessible directory.
         """
         
+        from burlap.dj import render_remote_paths
+        
         # Ensure a site is selected.
         self.genv.SITE = self.genv.SITE or self.genv.default_site
         
         apache.get_apache_settings()
         
-        from burlap.dj import render_remote_paths
-        
         apache_specifics = apache.set_apache_specifics()
         
         render_remote_paths()
+        
+        r = self.local_renderer
         
         clean = int(clean)
         print('Getting site data for %s...' % self.genv.SITE)
@@ -880,17 +887,17 @@ class ApacheMediaSatchel(Satchel):
                 self.genv.apache_sync_remote_path = paths['remote_path'] % self.genv
                 
                 if clean:
-                    self.sudo_or_dryrun('rm -Rf %(apache_sync_remote_path)s' % self.genv) 
+                    r.sudo('rm -Rf {apache_sync_remote_path}') 
                 
                 print('Syncing %s to %s...' % (self.genv.apache_sync_local_path, self.genv.apache_sync_remote_path))
                 
-                self.genv.apache_tmp_chmod = paths.get('chmod',  self.genv.apache_chmod)
+                self.genv.apache_tmp_chmod = paths.get('chmod', self.genv.apache_chmod)
                 #with settings(warn_only=True):
-                self.sudo_or_dryrun('mkdir -p %(apache_sync_remote_path)s' % self.genv, user=self.genv.apache_user)
-                self.sudo_or_dryrun('chmod -R %(apache_tmp_chmod)s %(apache_sync_remote_path)s' % self.genv, user=self.genv.apache_user)
-                cmd = ('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i %(key_filename)s" %(apache_sync_local_path)s %(user)s@%(host_string)s:%(apache_sync_remote_path)s') % self.genv
-                self.local_or_dryrun(cmd)
-                self.sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_sync_remote_path)s' % self.genv)
+                r.sudo('mkdir -p {apache_sync_remote_path}', user=self.genv.apache_user)
+                r.sudo('chmod -R {apache_tmp_chmod} {apache_sync_remote_path}', user=self.genv.apache_user)
+                r.local('rsync -rvz --progress --recursive --no-p --no-g '
+                    '--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {apache_sync_local_path} {user}@{host_string}:{apache_sync_remote_path}')
+                r.sudo('chown -R {apache_user}:{apache_group} {apache_sync_remote_path}')
                 
         if iter_local_paths:
             return ret_paths

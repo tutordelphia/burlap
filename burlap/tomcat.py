@@ -76,10 +76,9 @@ def install_from_source(path=DEFAULT_INSTALLATION_PATH,
                     run_as_root("rm -rf %s" % backup_installation_path)
                 run_as_root("mv %s %s" % (path, backup_installation_path))
 
-        """
-        After all that, let's ensure we have the installation path setup
-        properly and place the install.
-        """
+        
+        #After all that, let's ensure we have the installation path setup
+        #properly and place the install.
         require_directory(path, mode='755', use_sudo=True)
         run_as_root('mv %s/* %s' % (folder_name, path))
 

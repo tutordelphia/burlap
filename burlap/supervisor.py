@@ -137,7 +137,7 @@ class SupervisorSatchel(ServiceSatchel):
         }
     
     def render_paths(self):
-        from pip import render_paths as pip_render_paths
+        from burlap.pip import render_paths as pip_render_paths
         pip_render_paths()
         self.genv.supervisor_daemon_bin_path = self.genv.supervisor_daemon_bin_path_template % self.genv
         self.genv.supervisor_bin_path = self.genv.supervisor_bin_path_template % self.genv

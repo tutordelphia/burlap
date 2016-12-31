@@ -10,8 +10,9 @@ import importlib
 import traceback
 import glob
 from collections import defaultdict
-from six import StringIO
 from pprint import pprint
+
+from six import StringIO
 
 from fabric.api import (
     env,
@@ -39,8 +40,8 @@ if 'dj_settings_loaded' not in env:
     # The default django settings module import path.
     #print('reset django settings module template!!!'
     if 'django_settings_module_template' in env:
-        print( '!'*80, file=sys.stderr)
-        print( 'env.django_settings_module_template:',env.django_settings_module_template, file=sys.stderr)
+        print('!'*80, file=sys.stderr)
+        print('env.django_settings_module_template:', env.django_settings_module_template, file=sys.stderr)
     env.django_settings_module_template = '%(app_name)s.settings.settings'
     #
     # This is the name of the executable to call to access Django's management
@@ -143,7 +144,7 @@ def load_django_settings():
     try:
         from django.contrib import staticfiles
         from django.conf import settings as _settings
-        for k,v in settings.__dict__.iteritems():
+        for k, v in settings.__dict__.iteritems():
             setattr(_settings, k, v)
     except (ImportError, RuntimeError):
         traceback.print_exc()
@@ -156,7 +157,7 @@ def iter_static_paths(ignore_import_error=False):
 
     from django.contrib.staticfiles import finders, storage
     for finder in finders.get_finders():
-        for _n,_s in finder.storages.iteritems():
+        for _n, _s in finder.storages.iteritems():
             yield _s.location
 
 def iter_app_directories(ignore_import_error=False):
@@ -183,11 +184,11 @@ def iter_south_directories(*args, **kwargs):
             continue
         yield app_name, migrations_dir
 
-def iter_migrations(dir, *args, **kwargs):
-    for fn in sorted(os.listdir(dir)):
+def iter_migrations(d, *args, **kwargs):
+    for fn in sorted(os.listdir(d)):
         if fn.startswith('_') or not fn.endswith('.py'):
             continue
-        fqfn = os.path.join(dir, fn)
+        fqfn = os.path.join(d, fn)
         if not os.path.isfile(fqfn):
             continue
         yield fn
@@ -223,7 +224,7 @@ def shell():
     os.system(cmd)
     
 @task_or_dryrun
-def syncdb(site=None, all=0, database=None, ignore_errors=1):
+def syncdb(site=None, all=0, database=None, ignore_errors=1): # pylint: disable=redefined-builtin
     """
     Runs the standard Django syncdb command for one or more sites.
     """
@@ -273,6 +274,7 @@ def manage(cmd, *args, **kwargs):
         '%(django_manage)s %(dj_cmd)s %(dj_args)s %(dj_kwargs)s') % env
     run_or_dryrun(cmd)
 
+
 @task_or_dryrun
 def manage_all(*args, **kwargs):
     """
@@ -292,17 +294,17 @@ def manage_all(*args, **kwargs):
             
         manage(*args, **kwargs)
 
+
 @task_or_dryrun
 def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_databases=None, database=None, migrate_apps='', delete_ghosts=1):
     """
     Runs the standard South migrate command for one or more sites.
-    
-    Note, to pass a comma-delimted list in a fab command, escape the comma with a back slash.
-    
-    e.g.
-    
-        fab staging dj.migrate:migrate_apps=oneapp\,twoapp\,threeapp
     """
+#     Note, to pass a comma-delimted list in a fab command, escape the comma with a back slash.
+#         
+#         e.g.
+#         
+#             fab staging dj.migrate:migrate_apps=oneapp\,twoapp\,threeapp
     
     ignore_errors = int(ignore_errors)
     
@@ -356,7 +358,8 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
             _env.SITE = site
             cmd = (
                 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; '
-                '%(django_manage)s migrate --noinput %(django_migrate_merge)s --traceback %(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
+                '%(django_manage)s migrate --noinput %(django_migrate_merge)s --traceback '
+                '%(django_migrate_database)s %(delete_ghosts)s %(django_migrate_app)s %(django_migrate_migration)s '
                 '%(django_migrate_fake_str)s'
             ) % _env
 #             print('cmd:', cmd)
@@ -364,23 +367,12 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
             with settings(warn_only=ignore_errors):
                 run_or_dryrun(cmd)
 
+
 @task_or_dryrun
 def migrate_all(*args, **kwargs):
     kwargs['site'] = 'all'
     return migrate(*args, **kwargs)
-    
-@task_or_dryrun
-def create_db(name=None):
-    from burlap.db import create
-    set_db(name=name)
-    create(
-        name=name,
-        db_engine=env.db_engine,
-        db_user=env.db_user,
-        db_host=env.db_host,
-        db_password=env.db_password,
-        db_name=env.db_name,
-    )
+
 
 def set_db(name=None, site=None, role=None, verbose=0, e=None):
     if e is None:
@@ -418,9 +410,11 @@ def set_db(name=None, site=None, role=None, verbose=0, e=None):
     
     return default_db
 
+
 def has_database(name, site=None, role=None):
     settings = get_settings(site=site, role=role, verbose=0)
     return name in settings.DATABASES
+
 
 @task_or_dryrun
 def get_settings(site=None, role=None):
@@ -454,7 +448,7 @@ def get_settings(site=None, role=None):
             
             # We need to explicitly delete sub-modules from sys.modules. Otherwise, reload() skips
             # them and they'll continue to contain obsolete settings.
-            for name in sorted(sys.modules.keys()):
+            for name in sorted(sys.modules):
                 if name.startswith('alphabuyer.settings.role_') \
                 or name.startswith('alphabuyer.settings.site_'):
                     del sys.modules[name]
@@ -479,74 +473,17 @@ def get_settings(site=None, role=None):
         sys.stderr = stderr
     return module
 
-@task_or_dryrun
-def execute_sql(sql, name='default', site=None, as_text=False):
-    """
-    Executes an arbitrary SQL file.
-    """
-    from burlap.dj import set_db
-    from burlap.db import db
-    
-    load_db_set = db.load_db_set
-    
-    if as_text:
-        env.sql = sql
-    else:
-        fn = sql
-        assert os.path.isfile(fn), 'Missing file: %s' % fn
-    
-    site_summary = {} # {site: ret}
-    
-    for site, site_data in common.iter_sites(site=site, no_secure=True):
-        try:
-                    
-            set_db(name=name, site=site)
-#             load_db_set(name=name)
-            env.SITE = site
 
-            if not as_text:
-                put_or_dryrun(local_path=fn)
-            
-            with settings(warn_only=True):
-                ret = None
-                if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-                    if as_text:
-                        ret = run_or_dryrun("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s --command=%(sql)s" % env)
-                    else:
-                        ret = run_or_dryrun("psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s" % env)
-                                
-                elif 'mysql' in env.db_engine:
-                    if as_text:
-                        ret = run_or_dryrun('mysql -h %(db_host)s -u %(db_user)s -p\'%(db_password)s\' %(db_name)s -e "%(sql)s"' % env)
-                    else:
-                        ret = run_or_dryrun("mysql -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s" % env)
-                    
-                else:
-                    raise NotImplementedError('Unknown database type: %s' % env.db_engine)
-                
-            print('ret:', ret)
-            site_summary[site] = ret
-                    
-        except KeyError as e:
-            site_summary[site] = 'Error: %s' % str(e) 
-            pass
-            
-    print('-'*80)
-    print('Site Summary:')
-    for site, ret in sorted(site_summary.items(), key=lambda o: o[0]):
-        print(site, ret)
-    
 @task_or_dryrun
 def install_sql(site=None, database='default', apps=None):
     """
     Installs all custom SQL.
     """
-    from burlap.dj import set_db
-    from burlap.db import load_db_set
+    #from burlap.db import load_db_set
     
     name = database
     set_db(name=name, site=site)
-    load_db_set(name=name)
+    #load_db_set(name=name)
     paths = glob.glob(env.django_install_sql_path_template % env)
     #paths = glob.glob('%(src_dir)s/%(app_name)s/*/sql/*' % env)
     
@@ -572,7 +509,7 @@ def install_sql(site=None, database='default', apps=None):
             if not path.lower().endswith('.sql'):
                 continue
             content = open(path, 'r').read()
-            matches = re.findall('[\s\t]+VIEW[\s\t]+([a-zA-Z0-9_]+)', content, flags=re.IGNORECASE)
+            matches = re.findall(r'[\s\t]+VIEW[\s\t]+([a-zA-Z0-9_]+)', content, flags=re.IGNORECASE)
             #assert matches, 'Unable to find view name: %s' % (p,)
             view_name = ''
             if matches:
@@ -624,7 +561,6 @@ def createsuperuser(username='admin', email=None, password=None, site=None):
     """
     Runs the Django createsuperuser management command.
     """
-    from burlap.dj import render_remote_paths
     
     set_site(site)
     
@@ -632,32 +568,35 @@ def createsuperuser(username='admin', email=None, password=None, site=None):
     
     env.db_createsuperuser_username = username
     env.db_createsuperuser_email = email or username
-    run_or_dryrun('export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s createsuperuser --username=%(db_createsuperuser_username)s --email=%(db_createsuperuser_email)s' % env)
+    run_or_dryrun((
+        'export SITE=%(SITE)s; export ROLE=%(ROLE)s; '
+        'cd %(remote_manage_dir)s; %(django_manage)s createsuperuser '
+        '--username=%(db_createsuperuser_username)s --email=%(db_createsuperuser_email)s') % env)
 
-@task_or_dryrun
-def install_fixtures(name, site=None):
-    """
-    Installs a set of Django fixtures.
-    """
-    from burlap.dj import render_remote_paths
-    set_site(site)
-    
-    render_remote_paths()
-    
-    fixtures_paths = env.db_fixture_sets.get(name, [])
-    for fixture_path in fixtures_paths:
-        env.db_fq_fixture_path = os.path.join(env.remote_app_src_package_dir, fixture_path)
-        print('Loading %s...' % (env.db_fq_fixture_path,))
-        if not env.is_local and not files.exists(env.db_fq_fixture_path):
-            put_or_dryrun(
-                local_path=env.db_fq_fixture_path,
-                remote_path='/tmp/data.json',
-                use_sudo=True,
-                )
-            env.db_fq_fixture_path = env.put_remote_path
-        cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s loaddata %(db_fq_fixture_path)s' % env
-        print(cmd)
-        run_or_dryrun(cmd)
+# @task_or_dryrun
+# def install_fixtures(name, site=None):
+#     """
+#     Installs a set of Django fixtures.
+#     """
+#     
+#     set_site(site)
+#     
+#     render_remote_paths()
+#     
+#     fixtures_paths = env.db_fixture_sets.get(name, [])
+#     for fixture_path in fixtures_paths:
+#         env.db_fq_fixture_path = os.path.join(env.remote_app_src_package_dir, fixture_path)
+#         print('Loading %s...' % (env.db_fq_fixture_path,))
+#         if not env.is_local and not files.exists(env.db_fq_fixture_path):
+#             put_or_dryrun(
+#                 local_path=env.db_fq_fixture_path,
+#                 remote_path='/tmp/data.json',
+#                 use_sudo=True,
+#                 )
+#             env.db_fq_fixture_path = env.put_remote_path
+#         cmd = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s loaddata %(db_fq_fixture_path)s' % env
+#         print(cmd)
+#         run_or_dryrun(cmd)
 
 @task_or_dryrun
 def loaddata(path, site=None):
@@ -682,20 +621,20 @@ def loaddata(path, site=None):
         except KeyError:
             pass
 
-@task_or_dryrun
-def post_db_create(name=None, site=None, apps=None):
-    from burlap.db import load_db_set
-    print('post_db_create')
-    assert env[ROLE]
-    require('app_name')
-    site = site or env.SITE
-    set_db(name=name, site=site, verbose=1)
-    load_db_set(name=name)
-    
-    syncdb(all=True, site=site, database=name)
-    migrate(fake=True, site=site, database=name, migrate_apps=apps)
-    install_sql(site=site, database=name, apps=apps)
-    #createsuperuser()
+# @task_or_dryrun
+# def post_db_create(name=None, site=None, apps=None):
+#     from burlap.db import load_db_set
+#     print('post_db_create')
+#     assert env[ROLE]
+#     require('app_name')
+#     site = site or env.SITE
+#     set_db(name=name, site=site, verbose=1)
+#     load_db_set(name=name)
+#     
+#     syncdb(all=True, site=site, database=name)
+#     migrate(fake=True, site=site, database=name, migrate_apps=apps)
+#     install_sql(site=site, database=name, apps=apps)
+#     #createsuperuser()
 
 @task_or_dryrun
 def database_files_dump(site=None):
@@ -703,7 +642,7 @@ def database_files_dump(site=None):
     Runs the Django management command to export files stored in the database to the filesystem.
     Assumes the app django_database_files is installed.
     """
-    from burlap.dj import render_remote_paths
+    
     set_site(site or env.SITE)
     
     render_remote_paths()
@@ -831,11 +770,11 @@ class DjangoMigrations(Satchel):
         r.run('rm -f {app_dir}/{app}/migrations/*.pyc')
         r.run('touch {app_dir}/{app}/migrations/__init__.py')
         r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; ./manage schemamigration {app} --initial')
-        execute_sql(
-            sql="DELETE FROM south_migrationhistory WHERE app_name='{app}';".format(**r.env),
-            site=self.genv.SITE,
-            as_text=True,
-        )
+#         execute_sql(
+#             sql="DELETE FROM south_migrationhistory WHERE app_name='{app}';".format(**r.env),
+#             site=self.genv.SITE,
+#             as_text=True,
+#         )
         r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; ./manage migrate {app} --fake')
     
     @task    
@@ -867,7 +806,8 @@ class DjangoMigrations(Satchel):
         'mysql',
     ]
     #configure.takes_diff = True
-        
+
+
 class DjangoMediaSatchel(Satchel):
     
     name = 'djangomedia'

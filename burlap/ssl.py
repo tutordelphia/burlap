@@ -5,6 +5,9 @@ import sys
 import re
 from datetime import datetime, date
 
+import dateutil.parser
+import pytz
+
 from burlap import ServiceSatchel
 from burlap.constants import *
 from burlap.decorators import task
@@ -44,7 +47,10 @@ class SSLSatchel(ServiceSatchel):
         if not os.path.isdir(ssl_dst):
             os.makedirs(ssl_dst)
         r.env.base_dst = '%s/%s' % (ssl_dst, r.env.domain)
-        r.local('openssl req -new -newkey rsa:{ssl_length} -days {ssl_days} -nodes -x509 -subj "/C={ssl_country}/ST={ssl_state}/L={ssl_city}/O={ssl_organization}/CN={ssl_domain}" -keyout {ssl_base_dst}.key -out {ssl_base_dst}.crt')
+        r.local('openssl req -new -newkey rsa:{ssl_length} '
+            '-days {ssl_days} -nodes -x509 '
+            '-subj "/C={ssl_country}/ST={ssl_state}/L={ssl_city}/O={ssl_organization}/CN={ssl_domain}" '
+            '-keyout {ssl_base_dst}.key -out {ssl_base_dst}.crt')
     
     @task
     @runs_once
@@ -56,7 +62,7 @@ class SSLSatchel(ServiceSatchel):
         Note, the provider may say the CSR must be created on the target server,
         but this is not necessary.
         """
-        from apache import set_apache_site_specifics
+        from burlap.apache import set_apache_site_specifics
         
         r = r or self.local_renderer
         r.env.domain = domain or r.env.domain
@@ -73,7 +79,9 @@ class SSLSatchel(ServiceSatchel):
             assert self.env.domain, 'No SSL domain defined.'
             r.env.ssl_base_dst = '%s/%s' % (ssl_dst, self.env.domain.replace('*.', ''))
             r.env.ssl_csr_year = date.today().year
-            r.local('openssl req -nodes -newkey rsa:{ssl_length} -subj "/C={ssl_country}/ST={ssl_state}/L={ssl_city}/O={ssl_organization}/CN={ssl_domain}" -keyout {ssl_base_dst}.{ssl_csr_year}.key -out {ssl_base_dst}.{ssl_csr_year}.csr')
+            r.local('openssl req -nodes -newkey rsa:{ssl_length} '
+                '-subj "/C={ssl_country}/ST={ssl_state}/L={ssl_city}/O={ssl_organization}/CN={ssl_domain}" '
+                '-keyout {ssl_base_dst}.{ssl_csr_year}.key -out {ssl_base_dst}.{ssl_csr_year}.csr')
     
     def get_expiration_date(self, fn):
         """
@@ -101,7 +109,7 @@ class SSLSatchel(ServiceSatchel):
                 continue
             if not fn.endswith('.crt'):
                 continue
-            expiration_date = get_expiration_date(fqfn)
+            expiration_date = self.get_expiration_date(fqfn)
             max_fn_len = max(max_fn_len, len(fn))
             max_date_len = max(max_date_len, len(str(expiration_date)))
             data.append((fn, expiration_date))

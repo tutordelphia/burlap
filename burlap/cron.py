@@ -31,8 +31,8 @@ class CronSatchel(ServiceSatchel):
         self.env.python = None
         self.env.crontab_headers = ['PATH=/usr/sbin:/usr/bin:/sbin:/bin\nSHELL=/bin/bash']
         self.env.django_manage_template = '%(remote_app_src_package_dir)s/manage.py'
-        self.env.stdout_log_template = '/tmp/chroniker-%(SITE)s-stdout.$(date +\%%d).log'
-        self.env.stderr_log_template = '/tmp/chroniker-%(SITE)s-stderr.$(date +\%%d).log'
+        self.env.stdout_log_template = r'/tmp/chroniker-%(SITE)s-stdout.$(date +\%%d).log'
+        self.env.stderr_log_template = r'/tmp/chroniker-%(SITE)s-stderr.$(date +\%%d).log'
         self.env.crontabs_selected = [] # [name]
            
         self.env.service_commands = {
@@ -65,8 +65,8 @@ class CronSatchel(ServiceSatchel):
         }
         
     def render_paths(self, env=None):
-        from pip import render_paths as pip_render_paths
-        from dj import render_remote_paths as dj_render_paths
+        from burlap.pip import render_paths as pip_render_paths
+        from burlap.dj import render_remote_paths as dj_render_paths
         
         env = env or self.genv
         env = pip_render_paths(env)

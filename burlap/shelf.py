@@ -1,9 +1,15 @@
-import yaml
+
 from collections import OrderedDict
+
+import yaml
 
 from fabric.api import env
 
 class Shelf(object):
+    """
+    A helper class for serializing Python dictionaries to and from YAML,
+    keeping the dictionary keys sorted to help readability.
+    """
     
     def __init__(self, ascii_str=True, filename='roles/{role}/shelf.yaml'):
         

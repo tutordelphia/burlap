@@ -2,6 +2,10 @@ from __future__ import print_function
 
 import os
 import re
+from pipes import quote
+import posixpath
+import random
+import string
 
 from fabric.api import (
     env,
@@ -10,25 +14,16 @@ from fabric.api import (
     cd,
     task,
 )
-
 from fabric.contrib import files
 from fabric.tasks import Task
+from fabric.api import hide, run, settings, sudo, local
 
 from burlap.constants import *
 from burlap import Satchel
-
 from burlap import common
 from burlap.common import (
     QueuedCommand,
 )
-
-from pipes import quote
-import posixpath
-import random
-import string
-
-from fabric.api import hide, run, settings, sudo, local
-
 from burlap.group import (
     exists as _group_exists,
     create as _group_create,
@@ -444,8 +439,8 @@ class UserSatchel(Satchel):
                 
     @task
     def configure_keyless(self):
-        generate_keys()
-        passwordless()
+        self.generate_keys()
+        self.passwordless()
 
     @task
     def togroups(self, user, groups):

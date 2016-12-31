@@ -28,7 +28,8 @@ class RsyncSatchel(Satchel):
         self.env.extra_dirs = []
         self.env.chown_user = 'www-data'
         self.env.chown_group = 'www-data'
-        self.env.command = 'rsync --verbose --compress --recursive --delete --rsh "ssh -i {key_filename}" {exclusions_str} {rsync_src_dir} {user}@{host_string}:{rsync_dst_dir}'
+        self.env.command = 'rsync --verbose --compress --recursive --delete ' \
+            '--rsh "ssh -i {key_filename}" {exclusions_str} {rsync_src_dir} {user}@{host_string}:{rsync_dst_dir}'
     
     @task
     def deploy_code(self):
@@ -39,15 +40,13 @@ class RsyncSatchel(Satchel):
         assert self.genv.SITE, 'Site unspecified.'
         assert self.genv.ROLE, 'Role unspecified.'
         
-        _env = type(self.genv)(self.genv)
+        r = self.local_renderer
         
         if self.env.exclusions:
-            _env.exclusions_str = ' '.join(
+            r.env.exclusions_str = ' '.join(
                 "--exclude='%s'" % _ for _ in self.env.exclusions)
-            
-        cmd = _env.rsync_command.format(**_env)
-        self.local_or_dryrun(cmd)
         
-        self.sudo_or_dryrun('chown -R {rsync_chown_user}:{rsync_chown_group} {rsync_dst_dir}'.format(**_env))
+        r.local(r.env.rsync_command)
+        r.sudo('chown -R {rsync_chown_user}:{rsync_chown_group} {rsync_dst_dir}')
             
 rsync_satchel = RsyncSatchel()

@@ -7,12 +7,13 @@ directories.
 
 """
 
-import six
 from pipes import quote
 from tempfile import mkstemp
-from six.moves.urllib.parse import urlparse
 import hashlib
 import os
+
+import six
+from six.moves.urllib.parse import urlparse
 
 from fabric.api import hide, put, run, settings
 
@@ -82,7 +83,7 @@ def directories(path_list, use_sudo=False, owner='', group='', mode=''):
         directory(path, use_sudo, owner, group, mode)
 
 
-def file(path=None, contents=None, source=None, url=None, md5=None,
+def file(path=None, contents=None, source=None, url=None, md5=None, # pylint: disable=redefined-builtin
          use_sudo=False, owner=None, group='', mode=None, verify_remote=True,
          temp_dir='/tmp'):
     """
@@ -259,5 +260,5 @@ class TemporaryDirectory(str):
     def __enter__(self):
         return self
 
-    def __exit__(self, type, value, tb):
+    def __exit__(self, type, value, tb): # pylint: disable=redefined-builtin
         run('rm -rf %s' % quote(self))

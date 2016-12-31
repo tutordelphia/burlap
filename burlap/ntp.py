@@ -19,12 +19,12 @@ class NTPClientSatchel(ServiceSatchel):
     @property
     def packager_system_packages(self):
         return {
-            FEDORA: ['ntpdate','ntp'],
-            UBUNTU: ['ntpdate','ntp'],
-            (UBUNTU, '12.04'): ['ntpdate','ntp'],
-            (UBUNTU, '14.04'): ['ntpdate','ntp'],
-            (UBUNTU, '16.04'): ['ntpdate','ntp'],
-            DEBIAN: ['ntpdate','ntp'],
+            FEDORA: ['ntpdate', 'ntp'],
+            UBUNTU: ['ntpdate', 'ntp'],
+            (UBUNTU, '12.04'): ['ntpdate', 'ntp'],
+            (UBUNTU, '14.04'): ['ntpdate', 'ntp'],
+            (UBUNTU, '16.04'): ['ntpdate', 'ntp'],
+            DEBIAN: ['ntpdate', 'ntp'],
         }
     
     def set_defaults(self):

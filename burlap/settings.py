@@ -25,8 +25,9 @@ from burlap import common
 from burlap.common import DJANGO, ALL
 from burlap.decorators import task_or_dryrun
 
+
 @task_or_dryrun
-def list(keyword=''):
+def show(keyword=''):
     """
     Displays a list of all environment key/value pairs for the current role.
     """
@@ -38,11 +39,12 @@ def list(keyword=''):
             continue
         keyword_found = True
         #print '%s: %s' % (k, env[k])
-        print('%s: ' % (k.ljust(max_len),),
+        print('%s: ' % (k.ljust(max_len),))
         pprint(env[k], indent=4)
     if keyword:
         if not keyword_found:
             print('Keyword "%s" not found.' % keyword)
+
 
 @task_or_dryrun
 def record_manifest():
@@ -54,7 +56,7 @@ def record_manifest():
     # Record settings.
     data['settings'] = dict(
         (k, v)
-        for k,v in env.iteritems()
+        for k, v in env.iteritems()
         if not isinstance(v, types.GeneratorType) and k.strip() and not k.startswith('_') and not callable(v)
     )
     # Record tarball hash.
@@ -62,13 +64,10 @@ def record_manifest():
     # Record media hash.
     return data
 
+
 def compare_manifest(data=None):
     """
     Called before a deployment, given the data returned by record_manifest(),
     for determining what, if any, tasks need to be run to make the target
     server reflect the current settings within the current context.
     """
-
-#TODO:unnecessary?
-#common.manifest_recorder[ALL.upper()] = record_manifest
-#common.manifest_comparer[ALL.upper()] = compare_manifest

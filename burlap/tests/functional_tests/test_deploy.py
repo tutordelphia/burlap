@@ -1,6 +1,8 @@
 from __future__ import print_function
 
-import os, sys, shutil
+import os
+import sys
+import shutil
 
 import yaml
 
@@ -106,15 +108,10 @@ def test_deploy():
         with set_cwd(PROJECT_DIR):
             #from burlap import role_prod as prod
             prod = load_role_handler('prod')
-    #         print('A', prod)
             prod()
             assert 'app_name' in env
             assert 'sites' in env
             env.host_string = env.hosts[0]
-    #         print('B')
-    #         print('env.host_string:', env.host_string, env.host)
-    #         print('env.user:', env.user)
-    #         print('env.key_filename:', env.key_filename)
             
             changed_components, deploy_funcs = deploy_preview()
             print('changed_components:', changed_components)

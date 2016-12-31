@@ -15,6 +15,8 @@ from burlap import Satchel, ServiceSatchel
 from burlap.constants import *
 from burlap.decorators import task
 
+RABBITMQ = 'rabbitmq'
+
 class RabbitMQBleedingSatchel(Satchel):
 
     name = 'rabbitmqbleeding'
@@ -44,7 +46,7 @@ class RabbitMQBleedingSatchel(Satchel):
     
 class RabbitMQSatchel(ServiceSatchel):
     
-    name = 'rabbitmq'
+    name = RABBITMQ
     
     ## Service options.
     
@@ -198,7 +200,7 @@ class RabbitMQSatchel(ServiceSatchel):
                 continue
             if hasattr(_settings, 'BROKER_USER') and hasattr(_settings, 'BROKER_VHOST'):
                 if self.verbose:
-                    print('RabbitMQ:',_settings.BROKER_USER, _settings.BROKER_VHOST)
+                    print('RabbitMQ:', _settings.BROKER_USER, _settings.BROKER_VHOST)
                 params.add((_settings.BROKER_USER, _settings.BROKER_PASSWORD, _settings.BROKER_VHOST))
         
         params = sorted(list(params))
@@ -230,10 +232,10 @@ class RabbitMQSatchel(ServiceSatchel):
             current = current[RABBITMQ]
         
         if last.get('rabbitmq_management_enabled') != current.get('rabbitmq_management_enabled'):
-            enable_management_interface()
+            self.enable_management_interface()
         
         if last.get('rabbitmq_loopback_users') != current.get('rabbitmq_loopback_users'):
-            set_loopback_users()
+            self.set_loopback_users()
         
         kwargs['site'] = site or ALL
         return self._configure(**kwargs)

@@ -146,7 +146,7 @@ class NetworkManagerSatchel(ServiceSatchel):
         # Note, this will fail if the host's connection is currently using the connection.
         for old_ssid in lm_connections:
             if old_ssid not in r.env.connections:
-                self.remove_connection(ssid)
+                self.remove_connection(old_ssid)
         
         # Add or update connections.
         for ssid, passphrase in r.env.connections.items():

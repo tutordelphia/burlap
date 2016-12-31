@@ -20,7 +20,7 @@ from burlap.shorewall import (
 from burlap.system import UnsupportedFamily, distrib_family
 
 from burlap.require.deb import package as require_deb_package
-from burlap.require.files import file
+from burlap.require.files import file # pylint: disable=redefined-builtin
 
 
 DEFAULT_ZONES = [
@@ -143,7 +143,9 @@ RULES_HEADER = '''\
 #      \t      \t    \t     \tPORT(S)\tPORT(S)\tDEST\tLIMIT\tGROUP\t    \tLIMIT
 '''
 
-RULES_FORMAT = '%(action)s\t%(source)s\t%(dest)s\t%(proto)s\t%(dest_port)s\t%(source_port)s\t%(original_dest)s\t%(rate_limit)s\t%(user)s\t%(mark)s\t%(conn_limit)s\t%(time)s\n'
+RULES_FORMAT = (
+    '%(action)s\t%(source)s\t%(dest)s\t%(proto)s\t%(dest_port)s\t%(source_port)s\t'
+    '%(original_dest)s\t%(rate_limit)s\t%(user)s\t%(mark)s\t%(conn_limit)s\t%(time)s\n')
 
 
 def _rules_config(rules):

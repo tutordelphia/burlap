@@ -39,9 +39,9 @@ class PackagerSatchel(Satchel):
         """
         packager = self.packager
         if packager == APT:
-            self.sudo_or_dryrun('apt-get update')
-        elif package == YUM:
-            self.sudo_or_dryrun('yum update')
+            self.sudo('apt-get update')
+        elif packager == YUM:
+            self.sudo('yum update')
         else:
             raise Exception('Unknown packager: %s' % (packager,))
 
@@ -111,7 +111,7 @@ class PackagerSatchel(Satchel):
         packager = self.packager
         if packager == APT:
             return self.install_apt(*args, **kwargs)
-        elif package == YUM:
+        elif packager == YUM:
             return self.install_yum(*args, **kwargs)
         else:
             raise Exception('Unknown packager: %s' % (packager,))
@@ -131,7 +131,7 @@ class PackagerSatchel(Satchel):
         packager = self.packager
         if packager == APT:
             r.sudo('apt-get update -y --fix-missing')
-        elif package == YUM:
+        elif packager == YUM:
             raise NotImplementedError
             #return upgrade_yum(*args, **kwargs)
         else:
@@ -147,7 +147,7 @@ class PackagerSatchel(Satchel):
         if packager == APT:
             r.sudo('apt-get upgrade -y')
             r.sudo('apt-get dist-upgrade -y')
-        elif package == YUM:
+        elif packager == YUM:
             raise NotImplementedError
         else:
             raise Exception('Unknown packager: %s' % (packager,))
@@ -227,7 +227,7 @@ class PackagerSatchel(Satchel):
                 raise NotImplementedError, 'Unsupported repository type: %s' % repo_type
 
     @task
-    def list_required(self, type=None, service=None):
+    def list_required(self, type=None, service=None): # pylint: disable=redefined-builtin
         """
         Displays all packages required by the current role
         based on the documented services provided.
@@ -328,13 +328,13 @@ class PackagerSatchel(Satchel):
         if packager == APT:
             r.env.locale_string = ' '.join('%s=%s' % (_k, _v) for _k, _v in locale_dict.items())
             r.sudo('update-locale {locale_string}')
-        elif package == YUM:
+        elif packager == YUM:
             raise NotImplementedError
         else:
             raise Exception('Unknown packager: %s' % (packager,))
     
     @task
-    def install_required(self, type=None, service=None, list_only=0, **kwargs):
+    def install_required(self, type=None, service=None, list_only=0, **kwargs): # pylint: disable=redefined-builtin
         """
         Installs system packages listed as required by services this host uses.
         """

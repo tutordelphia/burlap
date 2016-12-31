@@ -40,15 +40,18 @@ env.celery_has_worker = False
 env.celery_daemon_user = 'www-data'
 env.celery_numprocs = 1
 env.celery_force_stop_command = 'pkill -9 -f celery'
-env.celery_celeryd_command_template = '%(celery_supervisor_python)s %(celery_supervisor_django_manage)s %(celery_celeryd_command)s %(celery_daemon_opts)s'
+env.celery_celeryd_command_template = ('%(celery_supervisor_python)s %(celery_supervisor_django_manage)s '
+    '%(celery_celeryd_command)s %(celery_daemon_opts)s')
 env.celery_supervisor_django_manage_template = '%(remote_app_src_package_dir)s/manage.py'
 env.celery_supervisor_directory_template = '/usr/local/myproject'
 
 env.celery_has_celerybeat = False
 env.celery_celerybeat_command = 'celerybeat'
 env.celery_paths_owned = ['/tmp/celerybeat-schedule*', '/var/log/celery*']
-env.celery_celerybeat_opts_template = '--schedule=/tmp/celerybeat-schedule-%(SITE)s --pidfile=/tmp/celerybeat-%(SITE)s.pid --logfile=%(celery_celerybeat_log_path)s --loglevel=DEBUG'
-env.celery_celerybeat_command_template = '%(celery_supervisor_python)s %(celery_supervisor_django_manage)s %(celery_celerybeat_command)s %(celery_celerybeat_opts)s'
+env.celery_celerybeat_opts_template = ('--schedule=/tmp/celerybeat-schedule-%(SITE)s --pidfile=/tmp/celerybeat-%(SITE)s.pid '
+    '--logfile=%(celery_celerybeat_log_path)s --loglevel=DEBUG')
+env.celery_celerybeat_command_template = ('%(celery_supervisor_python)s %(celery_supervisor_django_manage)s '
+    '%(celery_celerybeat_command)s %(celery_celerybeat_opts)s')
 
 env.celery_service_commands = {
     common.START:{
@@ -90,7 +93,7 @@ common.required_python_packages[CELERY] = {
 }
 
 def render_paths():
-    from pip import render_paths as pip_render_paths
+    from burlap.pip import render_paths as pip_render_paths
     
     pip_render_paths()
     
@@ -188,7 +191,7 @@ def force_stop():
     """
     with settings(warn_only=True):
         #sudo_or_dryrun(env.celery_force_stop_command % env)#fails?
-        run('sudo pkill -9 -f celery')
+        sudo_or_dryrun('pkill -9 -f celery')
     sudo_or_dryrun('rm -f /tmp/celery*.pid')
     #sudo_or_dryrun('rm -f /var/log/celery*.log')
 
@@ -217,4 +220,3 @@ def set_permissions():
 #        content = env.server.render_template(open(env.server.get_template_fn('celeryd.template.init')).read())
 #        fn = '%(celery_daemon)s' % env
 #        file_write(fn, content, mode='0755', owner=env.user, group=env.group, sudo=True)
-#        

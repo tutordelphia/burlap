@@ -38,75 +38,6 @@ from burlap.common import (
     LocalRenderer,
 )
 from burlap.decorators import task
-#from burlap.plan import run, sudo
-
-# if 'db_dump_fn' not in env:
-#     
-#     env.db_dump_fn = None
-#     #env.db_dump_fn_template = '%(db_dump_dest_dir)s/db_%(SITE)s_%(ROLE)s_%(db_date)s.sql.gz'
-#     env.db_dump_fn_template = '%(db_dump_dest_dir)s/db_%(db_type)s_%(SITE)s_%(ROLE)s_$(date +%%Y%%m%%d).sql.gz'
-#     
-#     # This overrides the built-in load command.
-#     env.db_dump_command = None
-#     
-#     env.db_engine = None # postgres|mysql
-#     env.db_engine_subtype = None # amazon_rds
-#     
-#     # This overrides the built-in dump command.
-#     env.db_load_command = None
-#     
-#     env.db_app_migration_order = []
-#     env.db_dump_dest_dir = '/tmp'
-#     env.db_dump_archive_dir = 'snapshots'
-#     
-#     # The login for performance administrative tasks (e.g. CREATE/DROP database).
-#     env.db_root_user = 'root'#DEPRECATED
-#     env.db_root_password = 'root'#DEPRECATED
-#     env.db_root_logins = {} # {(type,host):{user:?, password:?}}
-#     
-#     #DEPRECATED:2015.12.12
-#     #env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s | gzip -c > %(db_dump_fn)s'
-#     env.db_postgresql_dump_command = 'time pg_dump -c -U %(db_user)s --blobs --format=c %(db_name)s %(db_schemas_str)s > %(db_dump_fn)s'
-#     env.db_postgresql_createlangs = ['plpgsql'] # plpythonu
-#     env.db_postgresql_postgres_user = 'postgres'
-#     env.db_postgresql_encoding = 'UTF8'
-#     env.db_postgresql_custom_load_cmd = ''
-#     env.db_postgresql_port = 5432
-#     env.db_postgresql_pgass_path = '~/.pgpass'
-#     env.db_postgresql_pgpass_chmod = 600
-#     env.db_postgresql_version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
-#     
-#     #DEPRECATED:2015.12.12
-#     env.db_mysql_max_allowed_packet = 524288000 # 500M
-#     env.db_mysql_net_buffer_length = 1000000
-#     env.db_mysql_conf = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
-#     env.db_mysql_dump_command = 'mysqldump --opt --compress --max_allowed_packet=%(db_mysql_max_allowed_packet)s --force --single-transaction --quick --user %(db_user)s --password=%(db_password)s -h %(db_host)s %(db_name)s | gzip > %(db_dump_fn)s'
-#     env.db_mysql_preload_commands = []
-#     env.db_mysql_character_set = 'utf8'
-#     env.db_mysql_collate = 'utf8_general_ci'
-#     env.db_mysql_port = 3306
-#     env.db_mysql_root_password = None
-#     env.db_mysql_custom_mycnf = False
-#     
-#     # Should be set to False for Django >= 1.7.
-#     env.db_check_ghost_migrations = True
-#     
-#     env.db_syncdb_command_template = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(remote_manage_dir)s; %(django_manage)s syncdb --noinput %(db_syncdb_database)s %(db_syncdb_all_flag)s --traceback'
-#     
-#     # If true, means we're responsible for installing and configuring
-#     # the database server.
-#     # If false, means we can assume the server is not our responsibility.
-#     env.db_server_managed = True
-#     
-#     # If true, means we're responsible for creating the logical database on
-#     # the database server.
-#     # If false, means creation of the database is not our responsibility.
-#     env.db_database_managed = True
-#     
-#     env.db_fixture_sets = {} # {name:[list of fixtures]}
-#     
-#     #DEPRECATED
-#     env.db_sets = {} # {name:{configs}}
 
 CONNECTION_HANDLER_DJANGO = 'django'
 
@@ -252,8 +183,7 @@ class DatabaseSatchel(ServiceSatchel):
         assert len(lines) == 1, 'Ambiguous devices: %s' % str(lines)
         device, kb = lines[0].split(' ')
         free_space = int(kb) * 1024
-        if int(verbose):
-            print('free_space (bytes):', free_space)
+        self.vprint('free_space (bytes):', free_space)
         return free_space
     
     @task
@@ -269,8 +199,7 @@ class DatabaseSatchel(ServiceSatchel):
             #print cmd
             output = run_or_dryrun(cmd)
             output = int(output.strip().split('\n')[-1].strip())
-            if int(verbose):
-                print('database size (bytes):', output)
+            self.vprint('database size (bytes):', output)
             return output
         else:
             raise NotImplementedError
@@ -301,28 +230,28 @@ class DatabaseSatchel(ServiceSatchel):
         # Get source database size.
         src_task()
         env.host_string = env.hosts[0]
-        src_size_bytes = get_size()
+        src_size_bytes = self.get_size()
         
         # Get target database size, if any.
         dst_task()
         env.host_string = env.hosts[0]
         try:
-            dst_size_bytes = get_size()
-        except:
+            dst_size_bytes = self.get_size()
+        except (ValueError, TypeError):
             dst_size_bytes = 0
         
         # Get target host disk size.
-        free_space_bytes = get_free_space()
+        free_space_bytes = self.get_free_space()
         
         # Deduct existing database size, because we'll be deleting it.
         balance_bytes = free_space_bytes + dst_size_bytes - src_size_bytes
         balance_bytes_scaled, units = common.pretty_bytes(balance_bytes)
         
         viable = balance_bytes >= 0
-        if int(verbose):
-            print('src_db_size:',common.pretty_bytes(src_size_bytes))
-            print('dst_db_size:',common.pretty_bytes(dst_size_bytes))
-            print('dst_free_space:',common.pretty_bytes(free_space_bytes))
+        if self.verbose:
+            print('src_db_size:', common.pretty_bytes(src_size_bytes))
+            print('dst_db_size:', common.pretty_bytes(dst_size_bytes))
+            print('dst_free_space:', common.pretty_bytes(free_space_bytes))
             print
             if viable:
                 print('Viable! There will be %.02f %s of disk space left.' % (balance_bytes_scaled, units))
@@ -332,7 +261,7 @@ class DatabaseSatchel(ServiceSatchel):
         return viable
     
     @task
-    def dumpload(self):
+    def dumpload(self, site=None, role=None):
         """
         Dumps and loads a database snapshot simultaneously.
         Requires that the destination server has direct database access
@@ -347,15 +276,7 @@ class DatabaseSatchel(ServiceSatchel):
         2. Usually takes up less disk space since no separate dump file is
             downloaded.
         """
-        set_db(site=env.SITE, role=env.ROLE)
-        if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-            cmd = ('pg_dump -c --host=%(host_string)s --username=%(db_user)s '\
-                '--blobs --format=c %(db_name)s -n public | '\
-                'pg_restore -U %(db_postgresql_postgres_user)s --create '\
-                '--dbname=%(db_name)s') % env
-            run_or_dryrun(cmd)
-        else:
-            raise NotImplementedError
+        raise NotImplementedError
 
     def render_fn(self, fn):
         return subprocess.check_output('echo %s' % fn, shell=True)
@@ -409,7 +330,8 @@ class DatabaseSatchel(ServiceSatchel):
         # Download the database dump file on the remote host to localhost.
         if not from_local and to_local:
             r.pc('Downloading database snapshot to localhost.')
-            r.local('rsync -rvz --progress --recursive --no-p --no-g --rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {user}@{host_string}:{dump_fn} {dump_fn}')
+            r.local('rsync -rvz --progress --recursive --no-p --no-g '
+                '--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {user}@{host_string}:{dump_fn} {dump_fn}')
             
             # Delete the snapshot file on the remote system.
             if int(cleanup):
@@ -443,70 +365,6 @@ class DatabaseSatchel(ServiceSatchel):
         and user supports this feature.
         """
         raise NotImplementedError
-        from burlap.dj import set_db
-        
-        r = self.database_renderer
-        
-        verbose = self.verbose
-        
-        root = int(root)
-        write_password = int(write_password)
-        no_db = int(no_db)
-        no_pw = int(no_pw)
-        
-        # Load database credentials.
-        #set_db(name=name, verbose=verbose, e=r.genv)
-        #load_db_set(name=name, verbose=verbose, r=r)
-        #set_root_login()
-        if root:
-            env.db_user = env.db_root_user
-            env.db_password = env.db_root_password
-        else:
-            if user is not None:
-                env.db_user = user
-            if password is not None:
-                env.db_password = password
-        
-        # Switch relative to absolute host name.
-        env.db_shell_host = env.db_host
-        
-        if no_pw:
-            env.db_password = ''
-        
-        cmds = []
-        env.db_name_str = ''
-        if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-            # Note, psql does not support specifying password at the command line.
-            # If you don't want to manually type it at the command line, you must
-            # add the password to your local ~/.pgpass file.
-            # Each line in that file should be formatted as:
-            # host:port:username:password
-            
-            # Set pgpass file.
-            if write_password and env.db_password:
-                cmds.extend(write_postgres_pgpass(verbose=0, commands_only=1, name=name))
-            
-        elif 'mysql' in env.db_engine:
-            
-            if not no_db:
-                env.db_name_str = ' %(db_name)s' % env
-            
-            if env.db_password:
-                cmds.append(('/bin/bash -i -c \"mysql -u %(db_user)s '\
-                    '-p\'%(db_password)s\' -h %(db_shell_host)s%(db_name_str)s\"') % env)
-            else:
-                cmds.append(('/bin/bash -i -c "mysql -u {db_user} -h {db_shell_host}{db_name_str}"') % env)
-        else:
-            raise NotImplementedError
-            
-        if cmds:
-            for cmd in cmds:
-                if verbose:
-                    print(cmd)
-                if env.is_local:
-                    local_or_dryrun(cmd)
-                else:
-                    run_or_dryrun(cmd)
 
     @task
     def create(self, **kwargs):

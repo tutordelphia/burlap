@@ -13,16 +13,16 @@ from __future__ import print_function
 
 import time
 
-from burlap import Satchel
-from burlap.constants import *
-from burlap.decorators import task
-from burlap.exceptions import AbortDeployment
-
 from fabric.api import run
 from fabric.api import sudo
 from fabric.context_managers import cd
 
+from burlap import Satchel
+from burlap.constants import *
+from burlap.decorators import task
+from burlap.exceptions import AbortDeployment
 from burlap.utils import run_as_root
+
 
 def clone(remote_url, path=None, use_sudo=False, user=None):
     """
@@ -315,6 +315,7 @@ class GitTrackerSatchel(Satchel):
         update_tickets_from_git()
     
     configure.deploy_before = ['packager', 'pip', 'tarball', 'djangomedia', 'djangomigrations']
+
 
 gitchecker = GitCheckerSatchel()
 gittracker = GitTrackerSatchel()

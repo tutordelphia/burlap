@@ -32,16 +32,18 @@ def list_settings(name):
     from burlap import load_yaml_settings
     load_yaml_settings(name=name, verbose=1)
 
+
 @task_or_dryrun
 def list_env(key=None):
     """
     Displays a list of environment key/value pairs.
     """
-    for k,v in sorted(env.iteritems(), key=lambda o:o[0]):
+    for k, v in sorted(env.iteritems(), key=lambda o: o[0]):
         if key and k != key:
             continue
         print('%s ' % (k,))
         pprint(v, indent=4)
+
 
 @task_or_dryrun
 def list_sites(site='all', *args, **kwargs):
@@ -50,10 +52,12 @@ def list_sites(site='all', *args, **kwargs):
     for site, data in iter_sites(*args, **kwargs):
         print(site)
 
+
 def list_to_str_or_unknown(lst):
     if len(lst):
         return ', '.join(map(str, lst))
     return 'unknown'
+
 
 @task_or_dryrun
 def list_server_specs(cpu=1, memory=1, hdd=1):
@@ -64,13 +68,13 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
     
     cpu = int(cpu)
     memory = int(memory)
-    hdd=  int(hdd)
+    hdd = int(hdd)
     
     # CPU
     if cpu:
         cmd = 'cat /proc/cpuinfo | grep -i "model name"'
         ret = run_or_dryrun(cmd)
-        matches = map(str.strip, re.findall('model name\s+:\s*([^\n]+)', ret, re.DOTALL|re.I))
+        matches = map(str.strip, re.findall(r'model name\s+:\s*([^\n]+)', ret, re.DOTALL|re.I))
         cores = {}
         for match in matches:
             cores.setdefault(match, 0)
@@ -81,12 +85,12 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
         cmd = 'dmidecode --type 17'
         ret = sudo_or_dryrun(cmd)
         #print repr(ret)
-        matches = re.findall('Memory\s+Device\r\n(.*?)(?:\r\n\r\n|$)', ret, flags=re.DOTALL|re.I)
+        matches = re.findall(r'Memory\s+Device\r\n(.*?)(?:\r\n\r\n|$)', ret, flags=re.DOTALL|re.I)
         #print len(matches)
         #print matches[0]
         memory_slot_dicts = []
         for match in matches:
-            attrs = dict([(_a.strip(), _b.strip()) for _a, _b in re.findall('^([^:]+):\s+(.*)$', match, flags=re.MULTILINE)])
+            attrs = dict([(_a.strip(), _b.strip()) for _a, _b in re.findall(r'^([^:]+):\s+(.*)$', match, flags=re.MULTILINE)])
             #print attrs
             memory_slot_dicts.append(attrs)
         total_memory_gb = 0
@@ -97,7 +101,7 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
         memory_speeds = set()
         for memory_dict in memory_slot_dicts:
             try:
-                size = int(round(float(re.findall('([0-9]+)\s+MB', memory_dict['Size'])[0])/1024.))
+                size = int(round(float(re.findall(r'([0-9]+)\s+MB', memory_dict['Size'])[0])/1024.))
                 #print size
                 total_memory_gb += size
                 total_slots_filled += 1
@@ -125,7 +129,7 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
         for device in devices:
             cmd = 'udisks --show-info %s |grep -i "  size:"' % (device)
             ret = run_or_dryrun(cmd)
-            size_bytes = float(re.findall('size:\s*([0-9]+)', ret)[0].strip())
+            size_bytes = float(re.findall(r'size:\s*([0-9]+)', ret)[0].strip())
             size_gb = int(round(size_bytes/1024/1024/1024))
             #print device, size_gb
             total_physical_storage_gb += size_gb
@@ -167,16 +171,19 @@ def list_server_specs(cpu=1, memory=1, hdd=1):
         print('Total logical storage: %s GB' % total_logical_storage_gb)
         print('Types: %s' % list_to_str_or_unknown(drive_transports))
 
+
 @task_or_dryrun
 def list_hosts():
     print('hosts:', env.hosts)
 
+
 @task_or_dryrun
 def info():
     print('Info')
-    print('\tROLE:',env.ROLE)
-    print('\tSITE:',env.SITE)
-    print('\tdefault_site:',env.default_site)
+    print('\tROLE:', env.ROLE)
+    print('\tSITE:', env.SITE)
+    print('\tdefault_site:', env.default_site)
+
 
 @task_or_dryrun
 @runs_once
@@ -187,7 +194,7 @@ def shell(gui=0, command=''):
     from burlap.common import get_hosts_for_site
     
     try:
-        from dj import render_remote_paths
+        from burlap.dj import render_remote_paths
         render_remote_paths()
     except Exception:
         pass
@@ -228,10 +235,12 @@ def shell(gui=0, command=''):
         cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % _env
     local_or_dryrun(cmd)
 
+
 @task_or_dryrun
 def run(command):
     with settings(warn_only=True):
         run_or_dryrun(command)
+
 
 @task_or_dryrun
 def disk():
@@ -239,6 +248,7 @@ def disk():
     Display percent of disk usage.
     """
     run_or_dryrun(env.disk_usage_command % env)
+
 
 @task_or_dryrun
 def tunnel(local_port, remote_port):

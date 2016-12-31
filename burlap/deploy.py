@@ -9,13 +9,14 @@ import datetime
 import glob
 import tempfile
 import json
-import yaml
 import shutil
 import functools
 import traceback
 import time
 from collections import defaultdict
 from pprint import pprint
+
+import yaml
 
 from fabric.api import (
     env, runs_once, sudo as _sudo, get as _get,
@@ -296,7 +297,11 @@ class Step(object):
     A single piece of a plan.
     """
     
-    def __init__(self, command, host, method, user=None, key=None, args=[], kwargs={}):
+    def __init__(self, command, host, method, user=None, key=None, args=None, kwargs=None):
+        
+        args = args or []
+        kargs = kwargs or {}
+        
         self.command = command
         self.host = host
         self.user = user
@@ -333,7 +338,6 @@ class Step(object):
         return step
     
     def execute(self):
-        print('execute:',self)
         method = getattr(common, '%s_or_dryrun' % self.method)
         env.user = self.user
         env.host_string = self.host
@@ -378,52 +382,60 @@ class Plan(object):
         
         self.role = role or env.ROLE
         
-        if verbose: print('init plan dir')
+        self.vprint('init plan dir')
         self.plan_dir = get_plan_dir(role, name)
         make_dir(self.plan_dir)
         assert is_dir(self.plan_dir)
         
-        if verbose: print('init plan history dir')
+        self.vprint('init plan history dir')
         self.plan_dir_history = os.path.join(self.plan_dir, 'history')
         if not is_file(self.plan_dir_history):
             fout = open_file(self.plan_dir_history, 'w')
             fout.write(','.join(HISTORY_HEADERS))
             fout.close()
-        if verbose: print('loading plan history')
+        self.vprint('loading plan history')
         
         self.load_history()
         
-        if verbose: print('init plan index')
+        self.vprint('init plan index')
         self.plan_dir_index = os.path.join(self.plan_dir, 'index')
         if not is_file(self.plan_dir_index):
             fout = open_file(self.plan_dir_index, 'w')
             fout.write(str(0))
             fout.close()
-        if verbose: print('loading plan index')
+        self.vprint('loading plan index')
         self.load_index()
         
-        if verbose: print('init plan steps')
+        self.vprint('init plan steps')
         self.plan_dir_steps = os.path.join(self.plan_dir, 'steps')
         if not is_file(self.plan_dir_steps):
             fout = open_file(self.plan_dir_steps, 'w')
             fout.write('')
             fout.close()
-        if verbose: print('loading plan steps')
+        self.vprint('loading plan steps')
         self.load_steps()
         
-        if verbose: print('init plan hosts')
+        self.vprint('init plan hosts')
         self.plan_dir_hosts = os.path.join(self.plan_dir, 'hosts')
         if self.role == env.ROLE and not is_file(self.plan_dir_hosts):
             fout = open_file(self.plan_dir_hosts, 'w')
             fout.write('\n'.join(sorted(env.hosts)))
             fout.close()
-        if verbose: print('loading plan hosts')
+        self.vprint('loading plan hosts')
         self.load_hosts()
         
         #self.plan_thumbprint_fn = os.path.join(self.plan_dir, 'thumbprint')
         
-        if verbose: print('plan init done')
-    
+        self.vprint('plan init done')
+
+    def vprint(self, *args, **kwargs):
+        """
+        When verbose is set, acts like the normal print() function.
+        Otherwise, does nothing.
+        """
+        if common.get_verbose():
+            print(*args, **kwargs)
+
     def __cmp__(self, other):
         if not isinstance(other, Plan):
             return NotImplemented
@@ -483,13 +495,13 @@ class Plan(object):
     @property
     def thumbprint(self):
         verbose = common.get_verbose()
-        if verbose: print('plan.thumbprint')
+        self.vprint('plan.thumbprint')
         fn = self.get_thumbprint_filename(env.host_string)
-        if verbose: print('plan.thumbprint.fn:', fn)
+        self.vprint('plan.thumbprint.fn:', fn)
         content = open_file(fn).read()
-        if verbose: print('plan.thumbprint.yaml.raw:', content)
+        self.vprint('plan.thumbprint.yaml.raw:', content)
         data = yaml.load(content)
-        if verbose: print('plan.thumbprint.yaml.data:', data)
+        self.vprint('plan.thumbprint.yaml.data:', data)
         return data
     
     @thumbprint.setter
@@ -653,8 +665,8 @@ def get_last_completed_plan():
     for _name in reversed(sorted(list(iter_plan_names()))):
         plan = Plan.load(_name)
         if verbose:
-            print('plan:',plan.name)
-            print('plan.completed:',plan.is_complete())
+            print('plan:', plan.name)
+            print('plan.completed:', plan.is_complete())
         if plan.is_complete():
             return plan
             
@@ -717,7 +729,7 @@ def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None
 #     raw_input('enter')
     for component_name, func in common.manifest_recorder.iteritems():
         component_name = component_name.upper()
-        print('component_name:',component_name)
+        print('component_name:', component_name)
         
         if only_components and component_name not in only_components:
             if common.get_verbose():
@@ -1008,13 +1020,13 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
     
     for _c in components:
         if verbose:
-            print('checking:',_c)
+            print('checking:', _c)
         deps = set(common.manifest_deployers_befores.get(_c, []))
         if verbose:
-            print('deps0:',deps)
+            print('deps0:', deps)
         deps = deps.intersection(components)
         if verbose:
-            print('deps1:',deps)
+            print('deps1:', deps)
         component_dependences[_c] = deps
         
     if verbose:

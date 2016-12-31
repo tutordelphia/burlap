@@ -7,7 +7,7 @@ import re
 import tempfile
 import traceback
 from collections import defaultdict
-import shutil, csv
+import shutil
 
 from fabric.api import (
     env,
@@ -41,6 +41,7 @@ from burlap.decorators import task_or_dryrun
 #from burlap import versioner
 from burlap.constants import *
 from burlap.decorators import task
+from burlap import versioner
 
 try:
     from requirements.requirement import Requirement
@@ -61,15 +62,18 @@ env.pip_use_virt = True
 env.pip_bootstrap_packages = ['setuptools', 'distribute', 'virtualenv', 'pip']
 env.pip_build_dir = '/tmp/pip-build'
 env.pip_path = 'pip%(pip_python_version)s'
-env.pip_update_command = '%(pip_path_versioned)s install --use-mirrors --timeout=120 --no-install %(pip_no_deps)s --build %(pip_build_dir)s --download %(pip_cache_dir)s --exists-action w %(pip_package)s'
-#env.pip_install_command = 'cd %(pip_virtual_env_dir)s; . %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade --timeout=60 "%(pip_package)s"; deactivate'
+env.pip_update_command = ('%(pip_path_versioned)s install --use-mirrors --timeout=120 '
+    '--no-install %(pip_no_deps)s --build %(pip_build_dir)s --download %(pip_cache_dir)s '
+    '--exists-action w %(pip_package)s')
 env.pip_remote_cache_dir = '/tmp/pip_cache'
 env.pip_local_cache_dir_template = './.pip_cache/%(ROLE)s'
 env.pip_upgrade = ''
 env.pip_download_dir = '/tmp'
-env.pip_install_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install %(pip_no_deps)s %(pip_upgrade_flag)s --build %(pip_build_dir)s --find-links file://%(pip_cache_dir)s --no-index %(pip_package)s; deactivate"
+env.pip_install_command = (". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install "
+    "%(pip_no_deps)s %(pip_upgrade_flag)s --build %(pip_build_dir)s --find-links file://%(pip_cache_dir)s --no-index %(pip_package)s; deactivate")
 env.pip_uninstall_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s uninstall %(pip_package)s; deactivate"
-env.pip_depend_command = ". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install --no-install --ignore-installed --download=%(pip_download_dir)s --use-mirrors %(pip_package)s; deactivate"
+env.pip_depend_command = (". %(pip_virtual_env_dir)s/bin/activate; %(pip_path_versioned)s install "
+    "--no-install --ignore-installed --download=%(pip_download_dir)s --use-mirrors %(pip_package)s; deactivate")
 
 INSTALLED = 'installed'
 PENDING = 'pending'
@@ -242,13 +246,13 @@ def get_desired_package_versions(preserve_order=False):
         if not line.strip() or line.startswith('#'):
             continue
         #print line
-        matches = re.findall('([a-zA-Z0-9\-_]+)[\=\<\>]{2}(.*)', line)
+        matches = re.findall(r'([a-zA-Z0-9\-_]+)[\=\<\>]{2}(.*)', line)
         if matches:
             if matches[0][0] not in versions_lst:
                 versions_lst.append((matches[0][0], (matches[0][1], line)))
             versions[matches[0][0]] = (matches[0][1], line)
         else:
-            matches = re.findall('([a-zA-Z0-9\-]+)\-([0-9\.]+)(?:$|\.)', line)
+            matches = re.findall(r'([a-zA-Z0-9\-]+)\-([0-9\.]+)(?:$|\.)', line)
             if matches:
                 if matches[0][0] not in versions_lst:
                     versions_lst.append((matches[0][0], (matches[0][1], line)))
@@ -261,11 +265,11 @@ def get_desired_package_versions(preserve_order=False):
         return versions_lst
     return versions
 
-PIP_REQ_NAME_PATTERN = re.compile('^[a-z_\-0-9]+', flags=re.I)
-PIP_REQ_SPEC_PATTERN = re.compile(',?([\!\>\<\=]+)([a-z0-9\.]+)', flags=re.I)
+PIP_REQ_NAME_PATTERN = re.compile(r'^[a-z_\-0-9]+', flags=re.I)
+PIP_REQ_SPEC_PATTERN = re.compile(r',?([\!\>\<\=]+)([a-z0-9\.]+)', flags=re.I)
 
 PIP_DEP_PATTERN = re.compile(
-    '^\s*(?:Collecting|Downloading/unpacking)\s+(?P<name>[^\(\n]+)\(from\s+(?P<from>[^,\)]+)',
+    r'^\s*(?:Collecting|Downloading/unpacking)\s+(?P<name>[^\(\n]+)\(from\s+(?P<from>[^,\)]+)',
     flags=re.I|re.DOTALL|re.M)
     
 PIP_DEPENDS_HEADERS = [
@@ -331,9 +335,9 @@ def update_dependency_cache(name=None, output=None):
         cmd = env.pip_depend_command % env
         #with hide('output', 'running', 'warnings'):
         ret = local_or_dryrun(cmd, capture=True)
-        print('ret:',ret)
+        print('ret:', ret)
         matches = PIP_DEP_PATTERN.findall(ret) # [(child,parent)]
-        print('matches:',matches)
+        print('matches:', matches)
         
         for child, parent in matches:
             try:
@@ -393,7 +397,7 @@ def sort_requirements(fn=None):
         try:
             line = line.strip()
             parent = Requirement.parse_line(line)
-            print(parent.specs,parent.__dict__)
+            print(parent.specs, parent.__dict__)
             package_name, package_version = line.split('==')
             if package_name in ignore_packages:
                 continue
@@ -421,10 +425,10 @@ def sort_requirements(fn=None):
         package_to_deps[package_name].add(dependency_name)
         
     reqs_missing_deps = set(map(str.lower, package_names_req)).difference(set(map(str.lower, package_names_dep)))
-    print('reqs_missing_deps:',reqs_missing_deps, file=sys.stderr)
+    print('reqs_missing_deps:', reqs_missing_deps, file=sys.stderr)
     
     deps_missing_reqs = set(map(str.lower, package_names_dep)).difference(set(map(str.lower, package_names_req)))
-    print('deps_missing_reqs:',deps_missing_reqs, file=sys.stderr)
+    print('deps_missing_reqs:', deps_missing_reqs, file=sys.stderr)
     
 #     def sort_by_dep(a_name, b_name):
 #         if a_name in package_to_deps[b_name]:
@@ -452,11 +456,7 @@ def check_report():
     """
     execute(check)
 
-    #report here
-    todo
-    pass
-
-GITHUB_TO_PIP_NAME_PATTERN = re.compile('^.*github.com/[^/]+/(?P<name>[^/]+)/[^/]+/(?P<tag>[^/]+)/?')
+GITHUB_TO_PIP_NAME_PATTERN = re.compile(r'^.*github.com/[^/]+/(?P<name>[^/]+)/[^/]+/(?P<tag>[^/]+)/?')
 
 def pip_line_to_package_name(line):
     return list(pip_to_deps(lines=[line]))[0].name
@@ -570,7 +570,7 @@ def check_for_updates():
         print('The following packages have updated versions available:')
         spaced_lines = []
         max_lengths = defaultdict(int)
-        for dep in sorted(stale_lines, key=lambda _:_.name):
+        for dep in sorted(stale_lines, key=lambda _: _.name):
             dep_name = dep.name
             dep_current_version = dep.get_current_version()
             dep_installed_version = dep.version
@@ -583,21 +583,14 @@ def check_for_updates():
         columns = ['package', 'installed_version', 'most_recent_version']
         for column in columns:
             max_lengths[column] = max(max_lengths[column], len(column))
-        print(''.join((_+('' if i+1==len(columns) else delimiter)).ljust(max_lengths[_]+2) for i,_ in enumerate(columns)))
+        print(''.join((_+('' if i+1 == len(columns) else delimiter)).ljust(max_lengths[_]+2) for i, _ in enumerate(columns)))
         for dep in sorted(spaced_lines):
             last = i+1 == len(columns)
             line_data = dict(zip(columns, dep))
-            print(''.join((line_data[_]+('' if i+1==len(columns) else delimiter)).ljust(max_lengths[_]+2) for i,_ in enumerate(columns)))
+            print(''.join((line_data[_]+('' if i+1 == len(columns) else delimiter)).ljust(max_lengths[_]+2) for i, _ in enumerate(columns)))
     print('-'*80)
     print('%i packages have updates' % (len(stale_lines),))
 
-@task_or_dryrun
-def validate_requirements():
-    """
-    Ensures all package dependencies are included in our pip-requirements.txt
-    file and that they're in the appropriate order.
-    """
-    todo
 
 @task_or_dryrun
 def check(return_type=PENDING):
@@ -606,10 +599,6 @@ def check(return_type=PENDING):
     
     return_type := pending|installed
     """
-#     from burlap.plan import get_original
-#     run0 = get_original('run')
-#     import inspect
-#     print('run0:',run0, inspect.getsourcefile(run0)
     
     assert env[ROLE]
     
@@ -619,7 +608,7 @@ def check(return_type=PENDING):
     init()
     
     def get_version_nums(v):
-        if re.findall('^[0-9\.]+$', v):
+        if re.findall(r'^[0-9\.]+$', v):
             return tuple(int(_) for _ in v.split('.') if _.strip().isdigit())
     
     use_virt = env.pip_use_virt
@@ -648,14 +637,14 @@ def check(return_type=PENDING):
             continue
         if not k.strip() or not v.strip():
             continue
-        print('Installed:',k,v)
+        print('Installed:', k, v)
         if k.strip().lower() in ignored_packages:
             continue
         installed_package_versions[k.strip()] = v.strip()
         
     desired_package_version = get_desired_package_versions()
-    for k,v in desired_package_version.iteritems():
-        print('Desired:',k,v)
+    for k, v in desired_package_version.iteritems():
+        print('Desired:', k, v)
     
     pending = [] # (package_line, type)]
     
@@ -667,24 +656,24 @@ def check(return_type=PENDING):
     if not_installed:
         print('!'*80)
         print('Not installed:')
-        for k,(v,line) in sorted(not_installed.iteritems(), key=lambda o:o[0]):
+        for k, (v, line) in sorted(not_installed.iteritems(), key=lambda o: o[0]):
             if k.lower() in ignored_packages:
                 continue
-            print(k,v)
-            pending.append((line,'install'))
+            print(k, v)
+            pending.append((line, 'install'))
     else:
         print('-'*80)
         print('All are installed.')
     
     obsolete = {}
-    for k,(v,line) in desired_package_version.iteritems():
+    for k, (v, line) in desired_package_version.iteritems():
         #line
-        if v != 'current' and v != installed_package_versions.get(k,v):
+        if v != 'current' and v != installed_package_versions.get(k, v):
             obsolete[k] = (v, line)
     if obsolete:
         print('!'*80)
         print('Obsolete:')
-        for k,(v0,line) in sorted(obsolete.iteritems(), key=lambda o:o[0]):
+        for k, (v0, line) in sorted(obsolete.iteritems(), key=lambda o: o[0]):
             v0nums = get_version_nums(v0) or v0
             v1 = installed_package_versions[k]
             v1nums = get_version_nums(v1) or v1
@@ -693,8 +682,8 @@ def check(return_type=PENDING):
             newer_str = ''
             if installed_is_newer:
                 newer_str = ', this is newer!!! Update pip-requirements.txt???'
-            print(k,v0,'(Installed is %s%s)' % (v1, newer_str))
-            pending.append((line,'update'))
+            print(k, v0, '(Installed is %s%s)' % (v1, newer_str))
+            pending.append((line, 'update'))
     else:
         print('-'*80)
         print('None are obsolete.')
@@ -703,9 +692,10 @@ def check(return_type=PENDING):
         return installed_package_versions
     return pending
 
+
 @task_or_dryrun
 @runs_once
-def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1):
+def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1): # pylint: disable=redefined-builtin
     """
     Updates the local cache of pip packages.
     
@@ -746,7 +736,7 @@ def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1):
             if int(all):
                 packages = list(iter_pip_requirements())
             else:
-                packages = [k for k,v in check()]
+                packages = [k for k, v in check()]
             
             for package in packages:
                 env.pip_package = package.strip()
@@ -756,6 +746,7 @@ def update(package='', ignore_errors=0, no_deps=0, all=0, mirrors=1):
                     cmd = cmd.replace('--use-mirrors', '')
                     
                 local_or_dryrun(cmd)
+
 
 @task_or_dryrun
 def upgrade_pip():
@@ -768,6 +759,7 @@ def upgrade_pip():
     run_or_dryrun(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade distribute" % env)
     with settings(warn_only=True):
         run_or_dryrun(". %(pip_virtual_env_dir)s/bin/activate; pip install --upgrade pip" % env)
+
 
 @task_or_dryrun
 def uninstall(package):
@@ -837,7 +829,7 @@ def update_install(clean=0, pip_requirements_fn=None, virtualenv_dir=None, user=
         )
     
 @task_or_dryrun
-def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
+def install(package='', clean=0, no_deps=1, all=0, upgrade=1): # pylint: disable=redefined-builtin
     """
     Installs the local cache of pip packages.
     """
@@ -862,15 +854,17 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
         env.pip_cache_dir = os.path.abspath(env.pip_local_cache_dir % env)
     else:
         env.pip_cache_dir = env.pip_remote_cache_dir % env
-        print('env.host_string:',env.host_string)
-        print('env.key_filename:',env.key_filename)
+        print('env.host_string:', env.host_string)
+        print('env.key_filename:', env.key_filename)
         run_or_dryrun('mkdir -p %(pip_cache_dir)s' % env)
         
         if not env.pip_cache_dir.endswith('/'):
             env.pip_cache_dir = env.pip_cache_dir + '/'
         
         env.pip_key_filename = os.path.abspath(env.key_filename)
-        local_or_dryrun('rsync -avz --progress --rsh "ssh -o StrictHostKeyChecking=no -i %(pip_key_filename)s" %(pip_local_cache_dir)s/* %(user)s@%(host_string)s:%(pip_cache_dir)s' % env)
+        local_or_dryrun((
+            'rsync -avz --progress --rsh "ssh -o StrictHostKeyChecking=no '
+            '-i %(pip_key_filename)s" %(pip_local_cache_dir)s/* %(user)s@%(host_string)s:%(pip_cache_dir)s') % env)
     
     env.pip_upgrade_flag = ''
     if int(upgrade):
@@ -885,7 +879,7 @@ def install(package='', clean=0, no_deps=1, all=0, upgrade=1):
     elif package:
         packages = [package]
     else:
-        packages = [k for k,v in check()]
+        packages = [k for k, v in check()]
     
     env.pip_build_dir = tempfile.mkdtemp()
     for package in packages:

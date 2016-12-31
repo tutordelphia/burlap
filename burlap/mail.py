@@ -47,7 +47,7 @@ class PostfixSatchel(ServiceSatchel):
         self.env.mailrc_fn = '~/.mailrc'
     
     @task
-    def configure():
+    def configure(self):
         r = self.local_renderer
         
         if self.env.enabled:

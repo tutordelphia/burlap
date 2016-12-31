@@ -39,6 +39,7 @@ def ssh_config(name=''):
         config[key] = value
     return config
 
+
 def _get_settings(config):
     settings = {}
 
@@ -82,57 +83,50 @@ def version():
     version = re.match(r'Vagrant (?:v(?:ersion )?)?(.*)', line).group(1)
     return tuple(_to_int(part) for part in version.split('.'))
 
+
 @task_or_dryrun
-def set(name=''):
+def setup(name=''):
     _settings = _get_settings(ssh_config(name=name))
     if get_verbose():
         print(_settings)
     env.update(_settings)
+
     
 @task_or_dryrun
 def init():
     local_or_dryrun('vagrant init %(vagrant_box)s' % env)
+
     
 @task_or_dryrun
 def up():
     local_or_dryrun('vagrant up --provider=%(vagrant_provider)s' % env)
+
     
 @task_or_dryrun
 def shell():
-    set()
+    setup()
     local_or_dryrun(env.vagrant_shell_command)
-    
+
+
 @task_or_dryrun
 def destroy():
     local_or_dryrun('vagrant destroy' % env)
+
 
 @task_or_dryrun
 def upload(src, dst=None):
     put_or_dryrun(local_path=src, remote_path=dst)
 
+
 #http://serverfault.com/a/758017/41252
 @task_or_dryrun
 def ssh():
-    set()
+    setup()
     hostname, port = env.host_string.split('@')[-1].split(':')
     local_or_dryrun((
         'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '
         '-i %s %s@%s -p %s') % (
         env.key_filename, env.user, hostname, port))
-
-
-def ssh_config(name=''):
-    """
-    Get the SSH parameters for connecting to a vagrant VM.
-    """
-    with settings(hide('running')):
-        output = local('vagrant ssh-config %s' % name, capture=True)
-
-    config = {}
-    for line in output.splitlines()[1:]:
-        key, value = line.strip().split(' ', 2)
-        config[key] = value
-    return config
 
 
 def _settings_dict(config):

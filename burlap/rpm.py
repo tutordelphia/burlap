@@ -19,7 +19,7 @@ MANAGER = 'yum -y --color=never'
 def update(kernel=False):
     """
     Upgrade all packages, skip obsoletes if ``obsoletes=0`` in ``yum.conf``.
-
+    
     Exclude *kernel* upgrades by default.
     """
     manager = MANAGER
@@ -192,4 +192,4 @@ def repolist(status='', media=None):
             repos = run_as_root("%(manager)s repolist %(status)s | sed '$d' | sed -n '/repo id/,$p'" % locals())
         else:
             repos = run_as_root("%(manager)s repolist %(status)s | sed '/Media\\|Debug/d' | sed '$d' | sed -n '/repo id/,$p'" % locals())
-        return map(lambda line: line.split(' ')[0], repos.splitlines()[1:])
+        return [line.split(' ')[0] for line in repos.splitlines()[1:]]

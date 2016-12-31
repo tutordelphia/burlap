@@ -1,5 +1,6 @@
-import mock
 import unittest
+
+import mock
 
 
 class TestRequirePostgresDatabase(unittest.TestCase):
