@@ -17,6 +17,7 @@ matrix:
             sudo: required
             python: 2.7
             #env: TOXENV=py27
+            env: BURLAP_TEST_BOX=localhost
 
 install:
 -   sudo apt-key update
@@ -47,4 +48,14 @@ script:
 #-  ./pep8.sh
 #-  tox
 #-   "tox -e py27 -- -s burlap/tests/test_project.py::test_project"
+-   "tox -e py27 -- -s burlap/tests/test_apache.py"
+-   "tox -e py27 -- -s burlap/tests/test_files.py"
+-   "tox -e py27 -- -s burlap/tests/test_group.py"
+-   "tox -e py27 -- -s burlap/tests/test_oracle_jdk.py"
+-   "tox -e py27 -- -s burlap/tests/test_postgres.py"
 -   "tox -e py27 -- -s burlap/tests/test_project.py"
+-   "tox -e py27 -- -s burlap/tests/test_python.py"
+-   "tox -e py27 -- -s burlap/tests/test_redis.py"
+-   "tox -e py27 -- -s burlap/tests/test_system.py"
+-   "tox -e py27 -- -s burlap/tests/test_user.py"
+#-   "tox -e py27 -- -s burlap/tests/functional_tests/test_apache.py::test_require_module_disabled"
