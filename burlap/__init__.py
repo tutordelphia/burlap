@@ -57,13 +57,14 @@ try:
     Satchel = common.Satchel
     ServiceSatchel = common.ServiceSatchel
     env_default = common.save_env()
-except NameError as e:
+except (ImportError, NameError) as e:
     print('Unable to initialize common: %s' % e, file=sys.stderr)
     common = None
 
 try:
     from . import debug
-except NameError:
+except (ImportError, NameError) as e:
+    print('Unable to initialize debug: %s' % e, file=sys.stderr)
     debug = None
 
 VERSION = (0, 9, 0)
