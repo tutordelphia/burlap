@@ -45,7 +45,7 @@ before_script:
 -   ssh-add
 
 script:
-#-  ./pep8.sh
+-  ./pep8.sh
 #-  tox
 #-   "tox -e py27 -- -s burlap/tests/test_project.py::test_project"
 -   "tox -e py27 -- -s burlap/tests/test_apache.py"
