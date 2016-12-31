@@ -129,13 +129,12 @@ def update_tickets_from_git(last=None, current=None):
             issue = jira.issue(ticket)
             print('Ticket %s retrieved.' % ticket)
             transition_to_id = dict((t['name'], t['id']) for t in jira.transitions(issue))
-            print('%i allowable transitions found: %s' % (len(transition_to_id), ', '.join(transition_to_id.keys())))
+            print('%i allowable transitions found: %s' \
+                % (len(transition_to_id), ', '.join(transition_to_id.keys())))
             next_transition_name = env.jira_deploy_workflow.get(issue.fields.status.name.title())
             next_transition_id = transition_to_id.get(next_transition_name)
             if next_transition_name:
                 new_fields = {}
-                
-#                 print('jira_assignee_by_status:', env.jira_assignee_by_status, issue.fields.status.name.title()
                 new_assignee = env.jira_assignee_by_status.get(
                     #issue.fields.status.name.title(),
                     next_transition_name,
@@ -176,4 +175,3 @@ def update_tickets_from_git(last=None, current=None):
                     
             if not recheck:
                 break
-                

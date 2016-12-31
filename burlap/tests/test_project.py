@@ -54,11 +54,10 @@ def test_render_to_string():
     ret = common.render_to_string(
         'postfix/etc_postfix_sasl_sasl_passwd',
         dict(
-            postfix_host='smpt.test.com',
+            postfix_host='smtp.test.com',
             postfix_port=1234,
             postfix_username='myusername',
             postfix_password='mypassword',
         ))
     print('ret:', ret)
-    assert ret == "[smpt.test.com]:1234 myusername:mypassword"
-    
+    assert ret == "[smtp.test.com]:1234 myusername:mypassword"

@@ -874,13 +874,29 @@ class Satchel(object):
     def local(self, *args, **kwargs):
         return local_or_dryrun(*args, **kwargs)
     
-    def sudo_or_dryrun(self, *args, **kwargs):
-        return sudo_or_dryrun(*args, **kwargs)
+    def local_if_missing(self, fn, cmd, **kwargs):
+        _cmd = "[ ! -f '%s' ] && %s || true" % (fn, cmd)
+        self.local(_cmd, **kwargs)
     
-    def sudo(self, *args, **kwargs):
+    def local_if_exists(self, fn, cmd, **kwargs):
+        _cmd = "[ -f '%s' ] && %s || true" % (fn, cmd)
+        self.local(_cmd, **kwargs)
+    
+    def sudo_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.sudo() instead.', DeprecationWarning, stacklevel=2)
         return sudo_or_dryrun(*args, **kwargs)
     
+    def sudo(self, *args, **kwargs):
+        return sudo_or_dryrun(*args, **kwargs)
+    
+    def sudo_if_missing(self, fn, cmd, **kwargs):
+        _cmd = "[ ! -f '%s' ] && %s || true" % (fn, cmd)
+        self.sudo(_cmd, **kwargs)
+    
+    def sudo_if_exists(self, fn, cmd, **kwargs):
+        _cmd = "[ -f '%s' ] && %s || true" % (fn, cmd)
+        self.sudo(_cmd, **kwargs)
+        
     def write_temp_file(self, *args, **kwargs):
         return write_temp_file_or_dryrun(*args, **kwargs)
     
@@ -912,7 +928,6 @@ class Satchel(object):
 
     # List of satchels that should be run before this one during deployments.
     configure.deploy_before = []
-    
     configure.takes_diff = False #DEPRECATED
     
     #TODO:deprecated, remove?

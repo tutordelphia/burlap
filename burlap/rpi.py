@@ -33,7 +33,8 @@ class RaspberryPiSatchel(Satchel):
         
         self.env.hardware_version = RPI3
         
-#         self.env.firmware_update_bin_url = 'https://raw.githubusercontent.com/Hexxeh/rpi-update/master/rpi-update'
+#         self.env.firmware_update_bin_url = \
+#             'https://raw.githubusercontent.com/Hexxeh/rpi-update/master/rpi-update'
         
         self.env.gpu_mem = 256
         
@@ -53,10 +54,9 @@ class RaspberryPiSatchel(Satchel):
         self.env.raspbian_kernel = 'kernel-qemu-4.1.13-jessie'
         
         # Ubuntu specifics.
-        # NOTE: not stable on RPi3.
-        #self.env.ubuntu_download_url = 'http://www.finnie.org/software/raspberrypi/ubuntu-rpi3/ubuntu-16.04-preinstalled-server-armhf+raspi3.img.xz'
         # NOTE: found to work reliably on both RPi3 and RPi2.
-        self.env.ubuntu_download_url = 'http://phillw.net/isos/pi2/ubuntu-minimal-16.04-server-armhf-raspberry-pi.img.xz'
+        self.env.ubuntu_download_url = \
+            'http://phillw.net/isos/pi2/ubuntu-minimal-16.04-server-armhf-raspberry-pi.img.xz'
         
         self.env.conf_os_type = RASPBIAN
         self.env.conf_os_release = JESSIE
@@ -86,7 +86,10 @@ class RaspberryPiSatchel(Satchel):
         self.install_packages()
         
         # Install most recent version of rpi-update, if not present.
-#         r.sudo("[ ! -f '/usr/bin/rpi-update' ] && curl -L --output /usr/bin/rpi-update {firmware_update_bin_url} && chmod +x /usr/bin/rpi-update || true")
+        r.sudo_if_missing(
+            fn='/usr/bin/rpi-update',
+            cmd='curl -L --output /usr/bin/rpi-update {firmware_update_bin_url} && '
+                'chmod +x /usr/bin/rpi-update')
         
         # Update firmware.
         r.sudo("sudo rpi-update")
@@ -99,13 +102,18 @@ class RaspberryPiSatchel(Satchel):
         """
         A bug as of 2016.10.10 causes eth0 to be renamed to enx*.
         This renames it to eth0.
-        http://raspberrypi.stackexchange.com/questions/43560/raspberry-pi-3-eth0-wrongfully-named-enx
+        
+        http://raspberrypi.stackexchange.com/q/43560/29103
         """
         r = self.local_renderer
         r.env.hardware_addr = hardware_addr
         r.sudo('ln -s /dev/null /etc/udev/rules.d/80-net-name-slot.rules')
         r.append(
-            text='SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR\{address\}=="{hardware_addr}", ATTR\{dev_id\}=="0x0", ATTR\{type\}=="1", KERNEL=="eth*", NAME="eth0"',
+            text='SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", '
+                'ATTR\{address\}=="{hardware_addr}", '
+                'ATTR\{dev_id\}=="0x0", '
+                'ATTR\{type\}=="1", '
+                'KERNEL=="eth*", NAME="eth0"',
             filename='/etc/udev/rules.d/70-persistent-net.rules',
             use_sudo=True,
         )
@@ -136,9 +144,12 @@ class RaspberryPiSatchel(Satchel):
             return
             
         r = self.local_renderer
-        r.local('[ ! -f {raspbian_image_zip} ] && wget {raspbian_download_url} -O raspbian_lite_latest.zip || true')
+        r.local_if_missing(
+            fn='{raspbian_image_zip}',
+            cmd='wget {raspbian_download_url} -O raspbian_lite_latest.zip')
             
-        r.lenv.img_fn = r.local("unzip -l {raspbian_image_zip} | sed -n 4p | awk '{{print $4}}'", capture=True) or '$IMG_FN'
+        r.lenv.img_fn = \
+            r.local("unzip -l {raspbian_image_zip} | sed -n 4p | awk '{{print $4}}'", capture=True) or '$IMG_FN'
         r.local('echo {img_fn}')
         r.local('[ ! -f {img_fn} ] && unzip {raspbian_image_zip} {img_fn} || true')
         r.lenv.img_fn = r.local('readlink -f {img_fn}', capture=True)

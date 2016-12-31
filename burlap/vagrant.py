@@ -115,7 +115,9 @@ def upload(src, dst=None):
 def ssh():
     set()
     hostname, port = env.host_string.split('@')[-1].split(':')
-    local_or_dryrun('ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s %s@%s -p %s' % (
+    local_or_dryrun((
+        'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '
+        '-i %s %s@%s -p %s') % (
         env.key_filename, env.user, hostname, port))
 
 
