@@ -35,26 +35,34 @@ def setup_package():
     
     # Setup.
     _check_vagrant_version()
-    vagrant_box = os.environ.get('BURLAP_TEST_BOX')
+    vagrant_box = (os.environ.get('BURLAP_TEST_BOX') or '').strip()
     if not vagrant_box:
         pytest.skip("Set BURLAP_TEST_BOX to choose a Vagrant base box for functional tests")
-    vagrant_provider = os.environ.get('BURLAP_TEST_PROVIDER')
-    reuse_vm = os.environ.get('BURLAP_TEST_REUSE_VM')
-    _configure_logging()
-    _allow_fabric_to_access_the_real_stdin()
-    if not reuse_vm:
-        _stop_vagrant_machine()
-    _fix_home_directory()
-    _init_vagrant_machine(vagrant_box)
-    _start_vagrant_machine(vagrant_provider)
-    _target_vagrant_machine()
-    _set_optional_http_proxy()
-    _update_package_index()
-    yield
-    
-    # Teardown.
-    if not reuse_vm:
-        _stop_vagrant_machine()
+    elif vagrant_box == 'localhost':
+        # Use no VM. This is intended for use on Travis-CI, where we're already running inside a VM.
+        # Be careful with using this option on your development environment, because the tests
+        # may disrupt your configuration.
+        _configure_logging()
+        _target_local_machine()
+        yield
+    else:
+        vagrant_provider = os.environ.get('BURLAP_TEST_PROVIDER')
+        reuse_vm = os.environ.get('BURLAP_TEST_REUSE_VM')
+        _configure_logging()
+        _allow_fabric_to_access_the_real_stdin()
+        if not reuse_vm:
+            _stop_vagrant_machine()
+        _fix_home_directory()
+        _init_vagrant_machine(vagrant_box)
+        _start_vagrant_machine(vagrant_provider)
+        _target_vagrant_machine()
+        _set_optional_http_proxy()
+        _update_package_index()
+        yield
+        
+        # Teardown.
+        if not reuse_vm:
+            _stop_vagrant_machine()
 
 
 def _check_vagrant_version():
@@ -77,6 +85,7 @@ def _allow_fabric_to_access_the_real_stdin():
 
 def _fix_home_directory():
     local('sudo chown -R `whoami`:`whoami` ~/.vagrant.d')
+
 
 def _init_vagrant_machine(base_box):
     path = os.path.join(HERE, 'Vagrantfile')
@@ -132,6 +141,18 @@ def _target_vagrant_machine():
     _clear_fabric_connection_cache()
 
 
+def _target_local_machine():
+    import getpass
+    #http://stackoverflow.com/a/16651742/247542
+    _set_fabric_env(
+        host='127.0.0.1',
+        port='',
+        user=getpass.getuser(),
+        key_filename=None,
+    )
+    _clear_fabric_connection_cache()
+
+
 def _vagrant_ssh_config():
     with lcd(HERE):
         with settings(hide('running')):
@@ -144,7 +165,10 @@ def _vagrant_ssh_config():
 
 
 def _set_fabric_env(host, port, user, key_filename):
-    env.host_string = env.host = "%s:%s" % (host, port)
+    if port:
+        env.host_string = env.host = "%s:%s" % (host, port)
+    else:
+        env.host_string = env.host = host
     env.user = user
     env.key_filename = key_filename
     env.disable_known_hosts = True
