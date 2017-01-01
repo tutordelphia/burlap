@@ -30,7 +30,7 @@ install:
 -   sudo apt-get purge virtualbox*
 -   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
 -   sudo apt-get -y install build-essential
--   sudo apt-get -y --force-yes install linux-headers-`uname -r` vagrant
+-   sudo apt-get -y --force-yes install linux-headers-`uname -r`
 # Build/test dependencies
 -   pip install -r requirements.txt
 #TODO: Get fab to test fab
