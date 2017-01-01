@@ -17,7 +17,10 @@ matrix:
             sudo: required
             python: 2.7
             #env: TOXENV=py27
-            env: BURLAP_TEST_BOX=localhost
+            #env: BURLAP_TEST_BOX=localhost
+
+env:
+-   BURLAP_TEST_BOX=localhost
 
 install:
 -   sudo apt-key update
