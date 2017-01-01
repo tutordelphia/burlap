@@ -36,6 +36,7 @@ def setup_package():
     # Setup.
     _check_vagrant_version()
     vagrant_box = (os.environ.get('BURLAP_TEST_BOX') or '').strip()
+    print('vagrant_box:', vagrant_box)
     if not vagrant_box:
         pytest.skip("Set BURLAP_TEST_BOX to choose a Vagrant base box for functional tests")
     elif vagrant_box == 'localhost':

@@ -20,7 +20,8 @@ matrix:
             #env: BURLAP_TEST_BOX=localhost
 
 env:
--   BURLAP_TEST_BOX=localhost
+    global:
+    -   BURLAP_TEST_BOX=localhost
 
 install:
 -   sudo apt-key update
