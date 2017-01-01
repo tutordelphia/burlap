@@ -59,4 +59,4 @@ script:
 -   "tox -e py27 -- -s burlap/tests/test_system.py"
 -   "tox -e py27 -- -s burlap/tests/test_user.py"
 #-   "tox -e py27 -- -s burlap/tests/functional_tests/test_apache.py::test_require_module_disabled"
--   "tox -e py27 -- -s burlap/tests/functional_tests/test_apache.py"
+-   "export BURLAP_TEST_BOX=localhost; tox -e py27 -- -s burlap/tests/functional_tests/test_apache.py"
