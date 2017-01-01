@@ -34,8 +34,8 @@ MIN_VAGRANT_VERSION = (1, 3)
 def setup_package():
     
     # Setup.
-    _check_vagrant_version()
     vagrant_box = (os.environ.get('BURLAP_TEST_BOX') or '').strip()
+    print('vagrant_box:', vagrant_box)
     if not vagrant_box:
         pytest.skip("Set BURLAP_TEST_BOX to choose a Vagrant base box for functional tests")
     elif vagrant_box == 'localhost':
@@ -46,6 +46,7 @@ def setup_package():
         _target_local_machine()
         yield
     else:
+        _check_vagrant_version()
         vagrant_provider = os.environ.get('BURLAP_TEST_PROVIDER')
         reuse_vm = os.environ.get('BURLAP_TEST_REUSE_VM')
         _configure_logging()
