@@ -1,13 +1,14 @@
 from __future__ import print_function
+
+import os
+import sys
  
 from setuptools import setup, find_packages, Command
 from setuptools.command.test import test as TestCommand
 
-import os
-
 os.environ['BURLAP_NO_LOAD'] = '1'
 
-import burlap
+import burlap # pylint: disable=wrong-import-position
 
 CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -34,14 +35,14 @@ class Tox(TestCommand):
 
     def run_tests(self):
         import tox
-        errno = tox.cmdline(self.test_args)
-        sys.exit(errno)
+        tox.cmdline(self.test_args)
+        sys.exit(0)
         
 setup(
     name="burlap",
     version=burlap.__version__,
     packages=find_packages(exclude=['ez_setup', 'tests']),
-    scripts=['bin/burlap'],
+    scripts=['bin/blp'],
     package_data={
         'burlap': [
             'templates/*.*',

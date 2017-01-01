@@ -16,6 +16,3 @@ def test_create_user():
  
     finally:
         sudo_or_dryrun('userdel -r user1')
-
-def test_create_user2():
-    pass

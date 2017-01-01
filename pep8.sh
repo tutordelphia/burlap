@@ -1,2 +1,2 @@
 #!/bin/bash
-pylint --rcfile=pylint.rc burlap
+pylint --rcfile=pylint.rc burlap setup.py bin/blp

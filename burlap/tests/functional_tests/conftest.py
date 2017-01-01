@@ -46,6 +46,10 @@ def setup_package():
         _target_local_machine()
         yield
     else:
+        # Spin up a VM for each test.
+        # This is used when running on your development platform.
+        # Unfortunately, this isn't supported in Travis-CI, which is already a VM and doesn't support
+        # running additional VMs inside of it.
         _check_vagrant_version()
         vagrant_provider = os.environ.get('BURLAP_TEST_PROVIDER')
         reuse_vm = os.environ.get('BURLAP_TEST_REUSE_VM')
