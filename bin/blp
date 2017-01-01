@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from __future__ import print_function
 """
 Command line tool for initializing Burlap-structured Django projects.
 
@@ -7,6 +6,7 @@ e.g.
 
     burlap skel --name=myproject
 """
+from __future__ import print_function
 
 import argparse
 import os
@@ -16,8 +16,8 @@ import re
 _path = os.path.normpath(os.path.join(os.path.realpath(__file__), '../..'))
 sys.path.insert(0, _path)
 
-import burlap
-from burlap import common
+import burlap # pylint: disable=wrong-import-position
+from burlap import common # pylint: disable=wrong-import-position
 
 fabfile_template = os.path.join(
     os.path.dirname(burlap.__file__),
@@ -124,7 +124,7 @@ export ROLE=dev
 fi
 . ~/.bash_aliases
 ./manage runserver localhost:$PORT''')
-    open('src/shell', 'w').write('''#!/bin/bash
+    open('src/shell', 'w').write(r'''#!/bin/bash
 # Creates a local PIP-aware shell.
 #set -e
 if [ $_ == $0 ]
