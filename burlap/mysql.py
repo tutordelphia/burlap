@@ -43,9 +43,14 @@ class MySQLSatchel(DatabaseSatchel):
         
         self.env.net_buffer_length = 1000000
         self.env.conf = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
+        
         self.env.dump_command = 'mysqldump --opt --compress --max_allowed_packet={max_allowed_packet} ' \
             '--force --single-transaction --quick --user {db_user} ' \
             '--password={db_password} -h {db_host} {db_name} | gzip > {dump_fn}'
+        
+        self.env.load_command = 'gunzip < {remote_dump_fn} | mysql -u {db_root_username} ' \
+            '--password={db_root_password} --host={db_host} -D {db_name}'
+        
         self.env.preload_commands = []
         self.env.character_set = 'utf8'
         self.env.collate = 'utf8_general_ci'
@@ -311,12 +316,7 @@ class MySQLSatchel(DatabaseSatchel):
         
         # Restore the database content from the dump file.
         if not prep_only:
-            if r.env.load_command:
-                r.run(r.env.load_command)
-            else:
-                r.run('gunzip < {remote_dump_fn} | mysql -u {db_root_username} '
-                    '--password={db_root_password} --host={db_host} '
-                    '-D {db_name}')
+            r.run(r.env.load_command)
         
         self.set_collation(name=name, site=site)
 

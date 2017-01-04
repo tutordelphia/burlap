@@ -157,7 +157,14 @@ class PostgreSQLSatchel(DatabaseSatchel):
     def set_defaults(self):
         super(PostgreSQLSatchel, self).set_defaults()
         
-        self.env.dump_command = 'time pg_dump -c -U {db_user} --no-password --blobs --format=c --schema=public --host={db_host} {db_name} > {dump_fn}'
+        # Note, if you use gzip, you can't use parallel restore.
+        #self.env.dump_command = 'time pg_dump -c -U {db_user} --no-password --blobs --format=c --schema=public --host={db_host} {db_name} > {dump_fn}'
+        self.env.dump_command = 'time pg_dump -c -U {db_user} --no-password --blobs --format=c --schema=public --host={db_host} {db_name} | gzip -c > {dump_fn}'
+        self.env.dump_fn_template = '{dump_dest_dir}/db_{db_type}_{SITE}_{ROLE}_{db_name}_$(date +%Y%m%d).sql.gz'
+        
+        #self.env.load_command = 'gunzip < {remote_dump_fn} | pg_restore --jobs=8 -U {db_root_username} --format=c --create --dbname={db_name}'
+        self.env.load_command = 'gunzip < {remote_dump_fn} | pg_restore -U {db_root_username} --format=c --create --dbname={db_name}'
+        
         self.env.createlangs = ['plpgsql'] # plpythonu
         self.env.postgres_user = 'postgres'
         self.env.encoding = 'UTF8'
@@ -361,7 +368,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         else:
             r.env.remote_dump_fn = '/tmp/' + os.path.split(r.env.dump_fn)[-1]
         
-        print('r.genv.is_local:', r.genv.is_local, r.genv.hosts)
+        #print('r.genv.is_local:', r.genv.is_local, r.genv.hosts)
         if not prep_only and not r.genv.is_local:
             if not self.dryrun:
                 assert os.path.isfile(r.env.dump_fn), \
@@ -403,10 +410,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
             r.run('createlang -U {db_root_username} {createlang} {db_name} || true')
         
         if not prep_only:
-            if r.env.load_command:
-                r.run(r.env.load_command)
-            else:
-                r.run('pg_restore --jobs=8 -U {db_root_username} --create --dbname={db_name} {remote_dump_fn}')
+            r.run(r.env.load_command)
 
     @task
     def shell(self, name='default', site=None, **kwargs):
