@@ -1,7 +1,7 @@
 Burlap - configuration management designed for simplicity and speed
-=============================================================================
+===================================================================
 
-![Build Status](https://secure.travis-ci.org/chrisspen/burlap.png?branch=master)
+[![](https://img.shields.io/pypi/v/burlap.svg)](https://pypi.python.org/pypi/burlap) [![Build Status](https://img.shields.io/travis/chrisspen/burlap.svg?branch=master)](https://travis-ci.org/chrisspen/burlap) [![](https://pyup.io/repos/github/chrisspen/burlap/shield.svg)](https://pyup.io/repos/github/chrisspen/burlap)
 
 Overview
 --------
