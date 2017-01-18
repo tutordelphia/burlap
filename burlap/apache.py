@@ -549,7 +549,7 @@ class ApacheSatchel(ServiceSatchel):
         """
         Installs users for basic httpd auth.
         """
-        from burlap.common import iter_sites
+        from burlap.common import get_current_hostname, iter_sites
         
         r = self.local_renderer
         
@@ -557,12 +557,22 @@ class ApacheSatchel(ServiceSatchel):
         
         apache_specifics = self.set_apache_specifics()
         
+        hostname = get_current_hostname()
+        
+        target_sites = self.genv.available_sites_by_host.get(hostname, None)
+        
         for site, site_data in iter_sites(site=site, setter=self.set_apache_site_specifics):
             if self.verbose:
                 print('~'*80, file=sys.stderr)
                 print('Site:', site, file=sys.stderr)
                 print('env.apache_auth_basic:', self.genv.apache_auth_basic, file=sys.stderr)
-                
+            
+            # Only load site configurations that are allowed for this host.
+            if target_sites is not None:
+                assert isinstance(target_sites, (tuple, list))
+                if site not in target_sites:
+                    continue
+            
             if not self.genv.apache_auth_basic:
                 continue
             

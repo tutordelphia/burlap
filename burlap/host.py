@@ -409,7 +409,7 @@ class HostnameSatchel(Satchel):
                 #Deprecated in Ubuntu 15?
                 #r.sudo('service hostname restart; sleep 3')
                 r.sudo('hostname {hostname}')
-                r.reboot(new_hostname=hostname)
+                r.reboot()#new_hostname=hostname)
     
     configure.deploy_before = []
 

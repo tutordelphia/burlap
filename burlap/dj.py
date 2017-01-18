@@ -310,7 +310,10 @@ def migrate(app='', migration='', site=None, fake=0, ignore_errors=0, skip_datab
     
     delete_ghosts = int(delete_ghosts)
     
-    post_south = env.django_version >= (1, 7, 0)
+    post_south = tuple(env.django_version) >= (1, 7, 0)
+    
+    if tuple(env.django_version) >= (1, 9, 0):
+        delete_ghosts = 0
     
     skip_databases = (skip_databases or '')
     if isinstance(skip_databases, basestring):

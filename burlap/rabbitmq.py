@@ -79,6 +79,7 @@ class RabbitMQSatchel(ServiceSatchel):
         self.env.ignore_service_errors = 0
         self.env.management_enabled = False
         self.env.loopback_users = False
+        self.env.admin_username = 'admin'
             
         self.env.service_commands = {
             START:{
@@ -127,20 +128,24 @@ class RabbitMQSatchel(ServiceSatchel):
         """
         Displays a list of configured RabbitMQ vhosts.
         """
-        self.sudo_or_dryrun('rabbitmqctl list_vhosts')
+        self.sudo('rabbitmqctl list_vhosts')
     
     @task
     def list_users(self):
         """
         Displays a list of configured RabbitMQ users.
         """
-        self.sudo_or_dryrun('rabbitmqctl list_users')
+        self.sudo('rabbitmqctl list_users')
+        
+    @task
+    def list_queues(self):
+        self.sudo('rabbitmqctl list_queues')
         
     @task
     def create_user(self, username, password):
         self.genv._rabbitmq_user = username
         self.genv._rabbitmq_password = password
-        self.sudo_or_dryrun('rabbitmqctl add_user %(_rabbitmq_user)s %(_rabbitmq_password)s' % self.genv)
+        self.sudo('rabbitmqctl add_user %(_rabbitmq_user)s %(_rabbitmq_password)s' % self.genv)
 
     @task
     def force_stop_and_purge(self):
@@ -153,25 +158,33 @@ class RabbitMQSatchel(ServiceSatchel):
         reinstalled.
         """
         r = self.local_renderer
-        #self.stop()
         r.sudo('killall rabbitmq-server')
         r.sudo('killall beam.smp')
+        #TODO:explicitly delete all subfolders, star-delete doesn't work
         r.sudo('rm -Rf /var/lib/rabbitmq/mnesia/*')
 
     @task
+    def add_admin_user(self):
+        r = self.local_renderer
+        r.sudo('rabbitmqctl add_user {admin_username} {admin_password}')
+        r.sudo('rabbitmqctl set_user_tags {admin_username} administrator')
+        r.sudo('rabbitmqctl set_permissions -p / {admin_username} ".*" ".*" ".*"')
+
+    @task
     def enable_management_interface(self):
-        self.sudo_or_dryrun('rabbitmq-plugins enable rabbitmq_management')
-        self.sudo_or_dryrun('service rabbitmq-server restart')
-        print('You should not be able to access the RabbitMQ web console from:')
-        print('\n    http://54.83.61.46:15672/')
-        print('\nNote, the default login is guest/guest.')
+        r = self.local_renderer
+        r.sudo('rabbitmq-plugins enable rabbitmq_management')
+        r.sudo('service rabbitmq-server restart')
+        self.add_admin_user()
+        print('You should now be able to access the RabbitMQ web console from:')
+        print('\n    http://%s:15672/' % self.genv.host_string)
     
     @task
     def set_loopback_users(self):
         # This allows guest to login through the management interface.
-        self.sudo_or_dryrun('touch /etc/rabbitmq/rabbitmq.config')
-        self.sudo_or_dryrun("echo '[{rabbit, [{loopback_users, []}]}].' >> /etc/rabbitmq/rabbitmq.config")
-        self.sudo_or_dryrun('service rabbitmq-server restart')
+        self.sudo('touch /etc/rabbitmq/rabbitmq.config')
+        self.sudo("echo '[{rabbit, [{loopback_users, []}]}].' >> /etc/rabbitmq/rabbitmq.config")
+        self.sudo('service rabbitmq-server restart')
     
     def _configure(self, site=None, full=0, only_data=0):
         """
@@ -179,7 +192,7 @@ class RabbitMQSatchel(ServiceSatchel):
         """
         from burlap.dj import get_settings
         from burlap import packager
-        from burlap.common import iter_sites
+        from burlap.common import get_current_hostname, iter_sites
         
         full = int(full)
         
@@ -189,11 +202,24 @@ class RabbitMQSatchel(ServiceSatchel):
         
         #render_paths()
         
+        hostname = get_current_hostname()
+        
+        target_sites = self.genv.available_sites_by_host.get(hostname, None)
+        
+        r = self.local_renderer
+        
         params = set() # [(user,vhost)]
         for site, site_data in iter_sites(site=site, renderer=self.render_paths, no_secure=True):
             if self.verbose:
                 print('!'*80, file=sys.stderr)
                 print('site:', site, file=sys.stderr)
+                
+            # Only load site configurations that are allowed for this host.
+            if target_sites is not None:
+                assert isinstance(target_sites, (tuple, list))
+                if site not in target_sites:
+                    continue
+                
             _settings = get_settings(site=site)
             #print '_settings:',_settings
             if not _settings:
@@ -203,18 +229,20 @@ class RabbitMQSatchel(ServiceSatchel):
                     print('RabbitMQ:', _settings.BROKER_USER, _settings.BROKER_VHOST)
                 params.add((_settings.BROKER_USER, _settings.BROKER_PASSWORD, _settings.BROKER_VHOST))
         
+        with settings(warn_only=True):
+            self.add_admin_user()
+        
         params = sorted(list(params))
         if not only_data:
             for user, password, vhost in params:
-                self.env.broker_user = user
-                self.env.broker_password = password
-                self.env.broker_vhost = vhost
+                r.env.broker_user = user
+                r.env.broker_password = password
+                r.env.broker_vhost = vhost
                 with settings(warn_only=True):
-                    self.sudo_or_dryrun('rabbitmqctl add_user %(rabbitmq_broker_user)s %(rabbitmq_broker_password)s' % self.genv)
-                    cmd = 'rabbitmqctl add_vhost %(rabbitmq_broker_vhost)s' % self.genv
-                    self.sudo_or_dryrun(cmd)
-                    cmd = 'rabbitmqctl set_permissions -p %(rabbitmq_broker_vhost)s %(rabbitmq_broker_user)s ".*" ".*" ".*"' % self.genv
-                    self.sudo_or_dryrun(cmd)
+                    r.sudo('rabbitmqctl add_user {broker_user} {broker_password}')
+                    r.sudo('rabbitmqctl add_vhost {broker_vhost}')
+                    r.sudo('rabbitmqctl set_permissions -p {broker_vhost} {broker_user} ".*" ".*" ".*"')
+                    r.sudo('rabbitmqctl set_permissions -p {broker_vhost} {admin_username} ".*" ".*" ".*"')
                     
         return params
     

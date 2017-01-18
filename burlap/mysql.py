@@ -231,8 +231,9 @@ class MySQLSatchel(DatabaseSatchel):
         self.set_collation(name=name, site=site)
             
         # Create user.
-        r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "\
-            "--execute=\"GRANT USAGE ON *.* TO {db_user}@'%%'; DROP USER {db_user}@'%%';\"")
+        with self.settings(warn_only=True):
+            r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "\
+                "--execute=\"GRANT USAGE ON *.* TO {db_user}@'%%'; DROP USER {db_user}@'%%';\"")
         
         # Grant user access to the database.
         r.run("mysql -v -h {db_host} -u {db_root_username} "\

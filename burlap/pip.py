@@ -59,6 +59,7 @@ env.pip_virtual_env_dir = '.env'
 env.pip_virtual_env_exe = sudo_or_dryrun
 env.pip_requirements_fn = 'pip-requirements.txt'
 env.pip_use_virt = True
+env.pip_bootstrap_method = 'ez_setup' # |python-pip
 env.pip_bootstrap_packages = ['setuptools', 'distribute', 'virtualenv', 'pip']
 env.pip_build_dir = '/tmp/pip-build'
 env.pip_path = 'pip%(pip_python_version)s'
@@ -134,18 +135,26 @@ def bootstrap(force=0):
     _env = type(env)(env)
         
     _env.pip_path_versioned = _env.pip_path % _env
-    run_or_dryrun('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py')
-    #sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env))
-    with settings(warn_only=True):
-        sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**_env))
-    sudo_or_dryrun('easy_install -U pip')
+    
+    if _env.pip_bootstrap_method == 'ez_setup':
+        #TODO:buggy and unreliable? replace with `sudo apt-get install python-pip`?
+        run_or_dryrun('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py')
+        #sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**env))
+        with settings(warn_only=True):
+            sudo_or_dryrun('python{pip_python_version} /tmp/ez_setup.py -U setuptools'.format(**_env))
+        sudo_or_dryrun('easy_install -U pip')
+    elif _env.pip_bootstrap_method == 'python-pip':
+        sudo_or_dryrun('apt-get install python-pip')
+    else:
+        raise NotImplementedError('Unknown pip bootstrap method: %s' % _env.pip_bootstrap_method)
+        
     # Hacky fix for bug https://github.com/pypa/pip/issues/3045
     sudo_or_dryrun('pip uninstall distribute -y || true')
     sudo_or_dryrun('pip uninstall setuptools -y || true')
     if env.pip_bootstrap_packages:
         for package in _env.pip_bootstrap_packages:
             _env.package = package
-            sudo_or_dryrun('{pip_path_versioned} install --upgrade {package}'.format(**_env))
+            sudo_or_dryrun('pip install --upgrade {package}'.format(**_env))
 
 @task_or_dryrun
 def virtualenv_exists(virtualenv_dir=None):
@@ -928,7 +937,12 @@ class PIPSatchel(Satchel):
     
     @task
     def configure(self, *args, **kwargs):
-        return update_install(*args, **kwargs)
+        
+        # Necessary to make warning message go away.
+        # http://stackoverflow.com/q/27870003/247542
+        self.genv['sudo_prefix'] += '-H '
+        
+        update_install(*args, **kwargs)
     
     configure.deploy_before = ['packager', 'user']
         

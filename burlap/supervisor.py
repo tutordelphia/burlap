@@ -227,13 +227,18 @@ class SupervisorSatchel(ServiceSatchel):
         Collects the configurations for all registered services and writes
         the appropriate supervisord.conf file.
         """
-        from burlap.common import iter_sites
+        from burlap.common import get_current_hostname, iter_sites
         
         verbose = self.verbose
+        
+        hostname = get_current_hostname()
+        
+        target_sites = self.genv.available_sites_by_host.get(hostname, None)
         
         self.render_paths()
         
         supervisor_services = []
+        
         process_groups = []
         
         # We use supervisorctl to configure supervisor, but this will throw a uselessly vague
@@ -246,6 +251,13 @@ class SupervisorSatchel(ServiceSatchel):
         for site, site_data in iter_sites(site=site, renderer=self.render_paths):
             if verbose:
                 print(site)
+                
+            # Only load site configurations that are allowed for this host.
+            if target_sites is not None:
+                assert isinstance(target_sites, (tuple, list))
+                if site not in target_sites:
+                    continue
+                
             for cb in self.genv._supervisor_create_service_callbacks:
                 ret = cb()
                 if isinstance(ret, basestring):

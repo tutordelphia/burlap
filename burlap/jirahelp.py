@@ -3,6 +3,8 @@ from __future__ import print_function
 import os
 import sys
 import re
+import traceback
+from pprint import pprint
 
 from fabric.api import (
     env,
@@ -129,10 +131,16 @@ def update_tickets_from_git(last=None, current=None):
             issue = jira.issue(ticket)
             print('Ticket %s retrieved.' % ticket)
             transition_to_id = dict((t['name'], t['id']) for t in jira.transitions(issue))
-            print('%i allowable transitions found: %s' \
-                % (len(transition_to_id), ', '.join(transition_to_id.keys())))
-            next_transition_name = env.jira_deploy_workflow.get(issue.fields.status.name.title())
+            print('%i allowable transitions found:')
+            pprint(transition_to_id)
+            print('issue.fields.status.id:', issue.fields.status.id)
+            print('issue.fields.status.name:', issue.fields.status.name)
+            jira_status_id = issue.fields.status.name.title()
+            print('jira_status_id:', jira_status_id)
+            next_transition_name = env.jira_deploy_workflow.get(jira_status_id)
+            print('next_transition_name:', next_transition_name)
             next_transition_id = transition_to_id.get(next_transition_name)
+            print('next_transition_id:', next_transition_id)
             if next_transition_name:
                 new_fields = {}
                 new_assignee = env.jira_assignee_by_status.get(
@@ -144,8 +152,8 @@ def update_tickets_from_git(last=None, current=None):
                     new_assignee = issue.fields.reporter.name
 #                 print('new_assignee:', new_assignee)
                     
-                print('Updating ticket %s to status %s and assigning it to %s.' \
-                    % (ticket, next_transition_name, new_assignee))
+                print('Updating ticket %s to status %s (%s) and assigning it to %s.' \
+                    % (ticket, next_transition_name, next_transition_id, new_assignee))
                 if not dryrun:
                     try:
                         jira.transition_issue(
@@ -156,6 +164,7 @@ def update_tickets_from_git(last=None, current=None):
                     except AttributeError as e:
                         print('Unable to transition ticket %s to %s: %s' \
                             % (ticket, next_transition_name, e), file=sys.stderr)
+                        traceback.print_exc()
                     
                     # Note assignment should happen after transition, since the assignment may
                     # effect remove transitions that we need.
