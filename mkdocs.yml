@@ -1,5 +1,11 @@
 site_name: Burlap
-pages:
--   [index.md, Home]
--   [tests.md, Tests]
+
+site_author: Chris Spencer
+
+repo_url: https://github.com/chrisspen/django-chroniker
+
 theme: readthedocs
+
+pages:
+-   Home: index.md
+-   Tests: tests.md
