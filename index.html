@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="None">
+  
+  <link rel="shortcut icon" href="./img/favicon.ico">
+  <title>Home - Burlap</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="./css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="./css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="./css/highlight.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Home";
+    var mkdocs_page_input_path = "index.md";
+    var mkdocs_page_url = "/";
+  </script>
+  
+  <script src="./js/jquery-2.1.1.min.js"></script>
+  <script src="./js/modernizr-2.8.3.min.js"></script>
+  <script type="text/javascript" src="./js/highlight.pack.js"></script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href="." class="icon icon-home"> Burlap</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="./search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+          
+            <li>
+    <li class="toctree-l1 current">
+        <a class="current" href=".">Home</a>
+        
+            <ul>
+            
+                <li class="toctree-l3"><a href="#burlap-configuration-management-designed-for-simplicity-and-speed">Burlap - configuration management designed for simplicity and speed</a></li>
+                
+                    <li><a class="toctree-l4" href="#overview">Overview</a></li>
+                
+                    <li><a class="toctree-l4" href="#installation">Installation</a></li>
+                
+                    <li><a class="toctree-l4" href="#usage">Usage</a></li>
+                
+                    <li><a class="toctree-l4" href="#development">Development</a></li>
+                
+            
+            </ul>
+        
+    </li>
+<li>
+          
+            <li>
+    <li class="toctree-l1 ">
+        <a class="" href="tests/">Tests</a>
+        
+    </li>
+<li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href=".">Burlap</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Home</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h1 id="burlap-configuration-management-designed-for-simplicity-and-speed">Burlap - configuration management designed for simplicity and speed</h1>
+<p><a href="https://pypi.python.org/pypi/burlap"><img alt="" src="https://img.shields.io/pypi/v/burlap.svg" /></a> <a href="https://travis-ci.org/chrisspen/burlap"><img alt="Build Status" src="https://img.shields.io/travis/chrisspen/burlap.svg?branch=master" /></a> <a href="https://pyup.io/repos/github/chrisspen/burlap"><img alt="" src="https://pyup.io/repos/github/chrisspen/burlap/shield.svg" /></a></p>
+<h2 id="overview">Overview</h2>
+<p>Burlap is a <a href="https://en.wikipedia.org/wiki/Comparison_of_open-source_configuration_management_software">configuration management</a>
+tool and framework for deploying software to servers.</p>
+<p>It's written in Python and is built ontop of <a href="http://www.fabfile.org/">Fabric</a> to run commands remotely over SSH.</p>
+<p>Unlike <a href="https://www.chef.io/">Chef</a> or <a href="http://www.ansible.com/">Ansible</a> that target large "web-scale" platforms at the expense of great complexity, Burlap targets small to medium-scale platforms and keeps its configuration simple.</p>
+<p>Much of the code is also heavily influenced by <a href="https://github.com/fabtools/fabtools">Fabtools</a>, another Fabric-based toolkit.</p>
+<h2 id="installation">Installation</h2>
+<p>Install the package via pip with:</p>
+<pre><code>pip install burlap
+</code></pre>
+<h2 id="usage">Usage</h2>
+<ol>
+<li>
+<p>CD to a directory on your computer where you want to start your project and then run:</p>
+<p>burlap skel --name=<project name></p>
+</li>
+</ol>
+<p>This will create a structure like:</p>
+<pre><code>&lt;project root&gt;
+├── roles
+|   ├── all
+|   |   ├── templates
+|   |   ├── settings.yaml
+|   |   ├── pip-requirements.txt
+|   |   └── &lt;apt|yum&gt;-requirements.txt
+|   |
+|   ├── dev
+|   |   ├── templates
+|   |   └── settings.yaml
+|   |
+|   └── prod
+|       ├── templates
+|       └── settings.yaml
+|
+├── src
+|   ├── &lt;project name&gt;
+|   └── manage.py
+|
+└── fabfile.py
+</code></pre>
+<ol>
+<li>
+<p>Now add the roles appropriate for your application. Common roles are development and production, e.g.</p>
+<p>burlap add role prod dev</p>
+</li>
+<li>
+<p>Create your application code and test with Django's dev server.</p>
+</li>
+<li>
+<p>Prepare remote host for deployment.</p>
+</li>
+</ol>
+<p>Allocate your production environment by setting up the physical server
+or creating a VPS.</p>
+<p>Populate your settings.yaml. At minimum it would have hosts, key_filename,
+and user.</p>
+<pre><code>hosts: [myserver.mydomain.com]
+user: sys-user
+key_filename: roles/prod/mydomain.pem
+</code></pre>
+<p>If you need to generate pub/pem files for passwordless SSH access, run:</p>
+<pre><code>fab prod user.generate_keys
+</code></pre>
+<p>Ensure the filename of the *.pem file matches the key_filename in your
+settings.yaml.</p>
+<p>If you just created a fresh server and have password SSH access and need
+to configure passwordless access, run:</p>
+<pre><code>fab prod user.passwordless:username=&lt;username&gt;,pubkey=&lt;path/to/yourdomain.pub&gt;
+</code></pre>
+<p>Confirm you have passwordless access by running:</p>
+<pre><code>fab prod shell
+</code></pre>
+<p>If you have an active shell prompt on the remote host and weren't prompted for
+a password, you're ready to deploy.</p>
+<ol>
+<li>
+<p>Deploy your code.</p>
+<p>fab prod tarball.create tarball.deploy</p>
+</li>
+<li>
+<p>Prepare your PIP cache.</p>
+</li>
+</ol>
+<p>List all your Python packages in pip-requirements.txt and then run:</p>
+<pre><code>fab prod pip.update
+</code></pre>
+<p>This will download, but not install, all your packages into a local cache.
+We do this to prevent network latency or timeouts from interferring with our
+deployment. Few things are more frustrating then waiting for 50 packages to
+install, only for the 50th to fail and torpedo our entire deployment.</p>
+<p>Note, if you have multiple roles you're deploying to, you can update them all
+in parallel by running this command for each role in separate terminals.
+This can save quite a bit of time if you have many packages.</p>
+<ol>
+<li>
+<p>Install packages.</p>
+<p>fab prod pip.install</p>
+</li>
+</ol>
+<p>This will rsync all your cached packages up to the host, create a virtual
+environment and install the packages.</p>
+<ol>
+<li>Check for package updates.</li>
+</ol>
+<p>Detecting updated packages is easy:</p>
+<pre><code>fab prod pip.check_for_updates
+</code></pre>
+<p>example output:</p>
+<pre><code>Checking requirement 83 of 83... 
+===========================================================================
+The following packages have updated versions available:
+package,       installed_version, most_recent_version  
+Django,        1.5.5,             1.6.2                
+FeinCMS,       1.7.4,             1.9.3                
+billiard,      3.3.0.13,          3.3.0.16             
+celery,        3.1.1,             3.1.9                
+django-celery, 3.1.1,             3.1.9                
+kombu,         3.0.8,             3.0.12               
+reportlab,     2.2,               3.0                  
+---------------------------------------------------------------------------
+7 packages have updates
+</code></pre>
+<p>Using this, you can review each package, determine which should be
+updated in your pip-requirements.txt and installed via pip.install.</p>
+<h2 id="development">Development</h2>
+<p>To run tests:</p>
+<pre><code>[tox](http://tox.readthedocs.org/en/latest/)
+
+tox -e py27 -- -s burlap/tests/test_project.py::test_project
+</code></pre>
+<p>To run the <a href="http://www.mkdocs.org/#getting-started">documentation server</a> locally:</p>
+<pre><code>mkdocs serve -a :9999
+</code></pre>
+<p>To <a href="http://www.mkdocs.org/user-guide/deploying-your-docs/">deploy documentation</a>, run:</p>
+<pre><code>mkdocs gh-deploy --clean
+</code></pre>
+<p>To build and deploy a versioned package to PyPI, verify <a href="https://travis-ci.org/chrisspen/django-chroniker">all unittests are passing</a>, and then run:</p>
+<pre><code>python setup.py sdist
+python setup.py sdist upload
+</code></pre>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="tests/" class="btn btn-neutral float-right" title="Tests">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+	  
+        </div>
+      </div>
+
+    </section>
+    
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+      
+        <span style="margin-left: 15px"><a href="tests/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script src="./js/theme.js"></script>
+
+</body>
+</html>
+
+<!--
+MkDocs version : 0.16.1
+Build Date UTC : 2017-01-22 17:44:03
+-->

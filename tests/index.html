@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Tests - Burlap</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="../css/highlight.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Tests";
+    var mkdocs_page_input_path = "tests.md";
+    var mkdocs_page_url = "/tests/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js"></script>
+  <script src="../js/modernizr-2.8.3.min.js"></script>
+  <script type="text/javascript" src="../js/highlight.pack.js"></script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href=".." class="icon icon-home"> Burlap</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+          
+            <li>
+    <li class="toctree-l1 ">
+        <a class="" href="..">Home</a>
+        
+    </li>
+<li>
+          
+            <li>
+    <li class="toctree-l1 current">
+        <a class="current" href="./">Tests</a>
+        
+            <ul>
+            
+                <li class="toctree-l3"><a href="#tests">Tests</a></li>
+                
+                    <li><a class="toctree-l4" href="#using-tox">Using tox</a></li>
+                
+                    <li><a class="toctree-l4" href="#using-pytest">Using py.test</a></li>
+                
+                    <li><a class="toctree-l4" href="#unit-tests">Unit tests</a></li>
+                
+                    <li><a class="toctree-l4" href="#functional-tests">Functional tests</a></li>
+                
+            
+                <li class="toctree-l3"><a href="#requirements">Requirements</a></li>
+                
+            
+                <li class="toctree-l3"><a href="#target-boxes">Target boxes</a></li>
+                
+            
+                <li class="toctree-l3"><a href="#skipping-the-functional-tests">Skipping the functional tests</a></li>
+                
+            
+                <li class="toctree-l3"><a href="#using-a-specific-vagrant-box">Using a specific Vagrant box</a></li>
+                
+            
+                <li class="toctree-l3"><a href="#using-a-specific-vagrant-provider">Using a specific Vagrant provider</a></li>
+                
+            
+                <li class="toctree-l3"><a href="#debugging-functional-tests">Debugging functional tests</a></li>
+                
+            
+            </ul>
+        
+    </li>
+<li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="..">Burlap</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="..">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Tests</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h1 id="tests">Tests</h1>
+<h2 id="using-tox">Using tox</h2>
+<p>The preferred way to run tests is to use <code>tox &lt;https://tox.readthedocs.org/en/latest/&gt;</code>_.
+It will take care of everything and run the tests on all supported Python
+versions (each in its own virtualenv) and all target operating systems :</p>
+<pre><code>$ tox
+</code></pre>
+<p>Tox will also build the Sphinx documentation, so it will tell you about any
+reStructuredText syntax errors.</p>
+<p>Extra options after a <code>--</code> on the command line will be passed to the
+<code>py.test &lt;https://pytest.org/&gt;</code>_ test runner. For example, to stop immediately
+after the first failure:</p>
+<pre><code>$ tox -- -x
+</code></pre>
+<p>Or to only run the test <code>test_create_user</code> in file <code>test_users.py</code>:</p>
+<pre><code>$ tox -- burlap/tests/functional_tests/test_users.py::test_create_user
+</code></pre>
+<p>By default, the py.test backend hides normal output. To see everything:</p>
+<pre><code>$ tox -- -s burlap/tests/functional_tests/test_users.py::test_create_user
+</code></pre>
+<p>Note: If tox ever gives you trouble, you can ask it to recreate its virtualenvs
+by using the <code>-r</code> (or <code>--recreate</code>) option. Alternatively, you can start
+over completely by removing the <code>.tox</code> directory.</p>
+<h2 id="using-pytest">Using py.test</h2>
+<p>If you want to use <code>py.test</code> directly, you will first need to install the test
+dependencies. You will also need to install burlap itself in <em>development
+mode</em> (also called <em>editable mode</em>):</p>
+<pre><code>$ pip install pytest mock
+$ pip install -e .
+$ py.test
+</code></pre>
+<h2 id="unit-tests">Unit tests</h2>
+<p>The goal of the unit tests is to test the internal logic of burlap functions,
+without actually running shell commands on a target system.</p>
+<p>Most unit tests make use of the <code>mock &lt;http://pypi.python.org/pypi/mock/&gt;</code>_
+library.</p>
+<h2 id="functional-tests">Functional tests</h2>
+<p>The goal of the functional tests is to test that burlap functions have the
+expected effect when run against a real target system.</p>
+<p>Functional tests are contained in the <code>burlap/tests/functional_tests/</code> folder.</p>
+<h1 id="requirements">Requirements</h1>
+<p>Running functional tests requires <code>Vagrant &lt;https://vagrantup.com/&gt;</code><em> and
+<code>VirtualBox &lt;https://www.virtualbox.org&gt;</code></em> to launch the virtual machines
+against which the tests will be run.</p>
+<p>If Vagrant is not installed, the functional tests will be skipped automatically
+and pytest will show a warning message.</p>
+<h1 id="target-boxes">Target boxes</h1>
+<p>The default tox configuration will run the functional tests using both
+Python 2.6 and 2.7, against a specific list of vagrant boxes. These boxes
+will be downloaded from Atlas (formerly Vagrant Cloud) when needed if
+they're not already installed on your computer.</p>
+<table>
+<thead>
+<tr>
+<th>Target OS</th>
+<th>Vagrant Box Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>centos_6_5</td>
+<td><a href="https://atlas.hashicorp.com/chef/boxes/centos-6.5">https://atlas.hashicorp.com/chef/boxes/centos-6.5</a></td>
+</tr>
+<tr>
+<td>debian_6</td>
+<td><a href="https://atlas.hashicorp.com/chef/boxes/debian-6.0.10">https://atlas.hashicorp.com/chef/boxes/debian-6.0.10</a></td>
+</tr>
+<tr>
+<td>debian_7</td>
+<td><a href="https://atlas.hashicorp.com/chef/boxes/debian-7.8">https://atlas.hashicorp.com/chef/boxes/debian-7.8</a></td>
+</tr>
+<tr>
+<td>debian_8</td>
+<td><a href="https://atlas.hashicorp.com/debian/boxes/jessie64">https://atlas.hashicorp.com/debian/boxes/jessie64</a></td>
+</tr>
+<tr>
+<td>ubuntu_12_04</td>
+<td><a href="https://atlas.hashicorp.com/hashicorp/boxes/precise64">https://atlas.hashicorp.com/hashicorp/boxes/precise64</a></td>
+</tr>
+<tr>
+<td>ubuntu_14_04</td>
+<td><a href="https://atlas.hashicorp.com/ubuntu/boxes/trusty64">https://atlas.hashicorp.com/ubuntu/boxes/trusty64</a></td>
+</tr>
+</tbody>
+</table>
+<p>A tox environment name is the combination of the Python version
+(either <code>py26</code> or <code>py27</code>) and a target operating system.</p>
+<p>You can use <code>tox -l</code> to get the list of all test environments.</p>
+<p>You can use the <code>-e</code> option to run tests in one or more specific
+environments. For example, you could run the tests using Python 2.7
+only, against both Ubuntu 12.04 and 14.04 boxes ::</p>
+<pre><code>$ tox -e py27-ubuntu_12_04,py27-ubuntu_14_04
+</code></pre>
+<h1 id="skipping-the-functional-tests">Skipping the functional tests</h1>
+<p>To run the unit tests only, you can use the <code>none</code> target:</p>
+<pre><code>$ tox -e py26-none,py27-none
+</code></pre>
+<h1 id="using-a-specific-vagrant-box">Using a specific Vagrant box</h1>
+<p>If you want to run the tests with a specific Vagrant box, you can use
+the <code>BURLAP_TEST_BOX</code> environment variable and the <code>none</code> target::</p>
+<pre><code>$ export BURLAP_TEST_BOX='mybox'
+$ tox -e py27-none
+</code></pre>
+<h1 id="using-a-specific-vagrant-provider">Using a specific Vagrant provider</h1>
+<p>If you want to run the tests with a specific Vagrant provider, you can use
+the <code>BURLAP_TEST_PROVIDER</code> environment variable::</p>
+<pre><code>$ export BURLAP_TEST_BOX='vmware_box'
+$ export BURLAP_TEST_PROVIDER='vmware_fusion'
+$ tox -e py27-none
+</code></pre>
+<h1 id="debugging-functional-tests">Debugging functional tests</h1>
+<p>When you're working on a functional test, sometimes you'll want to manually inspect
+the state of the Vagrant VM. To do that, you can prevent it from being destroyed
+at the end of the test run by using the <code>BURLAP_TEST_REUSE_VM</code> environment
+variable:</p>
+<pre><code>$ export BURLAP_TEST_REUSE_VM=1
+$ tox -e py27-ubuntu_14_04 -- -x -k apache
+$ cd burlap/tests/functional_tests
+$ vagrant ssh
+</code></pre>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href=".." class="btn btn-neutral" title="Home"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+	  
+        </div>
+      </div>
+
+    </section>
+    
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href=".." style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+    </span>
+</div>
+    <script src="../js/theme.js"></script>
+
+</body>
+</html>
