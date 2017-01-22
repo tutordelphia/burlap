@@ -2,4 +2,3 @@ recursive-include burlap/templates *
 include requirements.txt
 include requirements-test.txt
 include README.md
-include docs/CHANGELOG.md
