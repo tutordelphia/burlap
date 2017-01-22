@@ -19,6 +19,7 @@ from fabric.api import (
     require,
     settings,
     cd,
+    runs_once,
 )
 
 from burlap import Satchel
@@ -705,7 +706,7 @@ def update(name=None, site=None, skip_databases=None, do_install_sql=0, apps='',
     #TODO:run syncdb --all to force population of new content types?
 
 @task_or_dryrun
-#@runs_once
+@runs_once
 def update_all(skip_databases=None, do_install_sql=0, apps='', ignore_errors=0):
     """
     Runs the Django migrate command for all unique databases
@@ -719,7 +720,13 @@ def update_all(skip_databases=None, do_install_sql=0, apps='', ignore_errors=0):
     else:
         sites = env.available_sites
     
-    for site in sites:
+    i = 0
+    total = len(sites)
+    for site in sorted(sites):
+        i += 1
+        print('!'*80)
+        print('Updating site %s (%i of %i)...' % (site, i, total))
+        print('!'*80)
         
         with settings(warn_only=int(ignore_errors)):
             update(

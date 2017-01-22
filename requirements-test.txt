@@ -1,5 +1,4 @@
-Sphinx
-sphinx_rtd_theme
+mkdocs
 tox>=2.0.0
 mock
 pytest

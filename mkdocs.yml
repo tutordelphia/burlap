@@ -1,7 +1,5 @@
 site_name: Burlap
 pages:
 -   [index.md, Home]
--   ['components/pip.md', Components, PIP]
--   ['components/plan.md', Components, Plan]
--   [about.md, About]
+-   [tests.md, Tests]
 theme: readthedocs
