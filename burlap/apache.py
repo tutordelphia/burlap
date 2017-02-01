@@ -783,7 +783,7 @@ class ApacheModRPAFSatchel(Satchel):
     @task
     def configure(self):
         self.install_packages()
-        self.get_apache_settings()
+        apache.get_apache_settings()
         self.genv.apache_mods_enabled.append('rpaf')
         
     configure.deploy_before = ['apache']

@@ -35,15 +35,14 @@ class CloudfrontSatchel(Satchel):
             distro = None
             dists = conn.get_all_distributions()
             for d in dists:
-                print('Checking existing Cloudfront distribution %s...' \
-                    % d.get_distribution().config.origin.dns_name)
+                print('Checking existing Cloudfront distribution %s...' % d.get_distribution().config.origin.dns_name)
                 if origin_dns == d.get_distribution().config.origin.dns_name:
                     print('Found existing distribution!')
                     distro = d
                     break
                     
                 # Necessary to avoid "Rate exceeded" errors.
-                time.sleep(0.2)
+                time.sleep(0.4)
             
             if not distro:
                 print('Creating new distribution from %s...' % origin)

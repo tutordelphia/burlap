@@ -58,6 +58,7 @@ class RabbitMQSatchel(ServiceSatchel):
             FEDORA: ['rabbitmq-server'],
             (UBUNTU, '12.04'): ['rabbitmq-server'],
             (UBUNTU, '14.04'): ['rabbitmq-server'],
+            (UBUNTU, '16.04'): ['rabbitmq-server'],
         }
     
     def set_defaults(self):
@@ -250,6 +251,9 @@ class RabbitMQSatchel(ServiceSatchel):
     def configure(self, last=None, current=None, site=None, **kwargs):
         
         RABBITMQ = self.name.upper()
+        
+        print('install_packages')
+        self.install_packages()
         
         last = last or {}
         if RABBITMQ in last:

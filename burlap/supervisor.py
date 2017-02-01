@@ -241,10 +241,7 @@ class SupervisorSatchel(ServiceSatchel):
         
         process_groups = []
         
-        # We use supervisorctl to configure supervisor, but this will throw a uselessly vague
-        # error message is supervisor isn't running.
-        if not self.is_running():
-            self.start()
+        self.sudo_or_dryrun('rm -Rf /etc/supervisor/conf.d/*')
         
         #TODO:check available_sites_by_host and remove dead?
         self.write_configs(site=site)
@@ -259,18 +256,18 @@ class SupervisorSatchel(ServiceSatchel):
                     continue
                 
             for cb in self.genv._supervisor_create_service_callbacks:
+                print('cb:', cb)
                 ret = cb()
+                print('ret:', ret)
                 if isinstance(ret, basestring):
                     supervisor_services.append(ret)
                 elif isinstance(ret, tuple):
                     assert len(ret) == 2
                     conf_name, conf_content = ret
-                    if verbose:
-                        print('conf_name:', conf_name)
-                        print('conf_content:', conf_content)
+                    print('conf_name:', conf_name)
+#                     print('conf_content:', conf_content)
                     remote_fn = os.path.join(self.env.conf_dir, conf_name)
                     local_fn = self.write_to_file(conf_content)
-#                     self.put_or_dryrun(local_path=local_fn, remote_path=remote_fn, use_sudo=True)
 #                     
                     process_groups.append(os.path.splitext(conf_name)[0])
                     
@@ -279,6 +276,11 @@ class SupervisorSatchel(ServiceSatchel):
         fn = self.render_to_file(self.env.config_template)
         self.put_or_dryrun(local_path=fn, remote_path=self.env.config_path, use_sudo=True)
         
+        # We use supervisorctl to configure supervisor, but this will throw a uselessly vague
+        # error message is supervisor isn't running.
+        if not self.is_running():
+            self.start()
+            
         for pg in process_groups:
             self.sudo_or_dryrun('supervisorctl add %s' % pg)
         

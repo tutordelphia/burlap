@@ -10,6 +10,13 @@ os.environ['BURLAP_NO_LOAD'] = '1'
 
 import burlap # pylint: disable=wrong-import-position
 
+try:
+    from pypandoc import convert
+    read_md = lambda f: convert(f, 'rst')
+except ImportError:
+    print('warning: pypandoc module not found, could not convert Markdown to RST')
+    read_md = lambda f: open(f, 'r').read()
+
 CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
 
 def read(filename):
@@ -51,7 +58,7 @@ setup(
     author="Chris Spencer",
     author_email="chrisspen@gmail.com",
     description="Fabric commands for simplifying server deployments",
-    long_description=read('README.md') + '\n' + read('docs/CHANGELOG.md'),
+    long_description=read_md('README.md'),
     license="MIT",
     url="https://github.com/chrisspen/burlap",
     #https://pypi.python.org/pypi?%3Aaction=list_classifiers

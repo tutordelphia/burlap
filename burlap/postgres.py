@@ -152,6 +152,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         return {
             (UBUNTU, '12.04'): ['postgresql-9.1'],
             (UBUNTU, '14.04'): ['postgresql-9.3'],
+            (UBUNTU, '16.04'): ['postgresql-9.5'],
         }
     
     def set_defaults(self):
@@ -172,7 +173,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         self.env.port = 5432
         self.env.pgpass_path = '~/.pgpass'
         self.env.pgpass_chmod = 600
-        self.env.default_version = '9.3'
+        self.env.force_version = None
         self.env.version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
         self.env.engine = 'postgresql' # 'postgresql' | 'postgis'
 
@@ -436,6 +437,16 @@ class PostgreSQLSatchel(DatabaseSatchel):
         r.sudo('apt-get update') 
 
     @task
+    def version(self):
+        r = self.local_renderer
+        if self.dryrun:
+            v = r.env.version_command
+        else:
+            v = (r.run('echo {version_command}') or '').strip()
+        print(v)
+        return v
+
+    @task
     def configure(self, *args, **kwargs):
         #TODO:set postgres user password?
         #https://help.ubuntu.com/community/PostgreSQL
@@ -451,7 +462,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         if r.env.apt_repo_enabled:
             self.configure_apt_repository()
 
-        r.env.pg_version = r.run('echo {version_command}') or r.env.default_version
+        r.env.pg_version = self.version()# or r.env.default_version
         
 #         r.pc('Backing up PostgreSQL configuration files...')
         r.sudo('cp /etc/postgresql/{pg_version}/main/postgresql.conf /etc/postgresql/{pg_version}/main/postgresql.conf.$(date +%Y%m%d%H%M).bak')
@@ -501,24 +512,29 @@ class PostgreSQLClientSatchel(Satchel):
     name = 'postgresqlclient'
 
     def set_defaults(self):
-        self.env.default_version = '9.3'
+        self.env.force_version = None
         
     @property
     def packager_system_packages(self):
         return {
             FEDORA: ['postgresql-client'],
+#             UBUNTU: [
+#                 'postgresql-client-%s' % self.env.default_version,
+#                 #'python-psycopg2',#install from pip instead
+#                 #'postgresql-server-dev-9.3',
+#             ],
             (UBUNTU, '12.04'): [
-                'postgresql-client-%s' % self.env.default_version,
+                'postgresql-client-9.1',
                 #'python-psycopg2',#install from pip instead
                 #'postgresql-server-dev-9.1',
             ],
             (UBUNTU, '14.04'): [
-                'postgresql-client-%s' % self.env.default_version,
+                'postgresql-client-9.3',
                 #'python-psycopg2',#install from pip instead
                 #'postgresql-server-dev-9.3',
             ],
-            UBUNTU: [
-                'postgresql-client-%s' % self.env.default_version,
+            (UBUNTU, '16.04'): [
+                'postgresql-client-9.5',
                 #'python-psycopg2',#install from pip instead
                 #'postgresql-server-dev-9.3',
             ],

@@ -45,6 +45,9 @@ class DatabaseSatchel(ServiceSatchel):
     
     name = 'db'
     
+    # Local cache for renderers.
+    _database_renderers = {} # {(name, site): renderer}
+    
     def set_defaults(self):
                 
         # If set, allows remote users to connect to the database.
@@ -73,9 +76,6 @@ class DatabaseSatchel(ServiceSatchel):
         self.env.databases = {} # {name: {}}
         
         self.env.default_db_name = 'default'
-        
-        # Local cache for renderers.
-        self._database_renderers = {} # {(name, site): renderer}
 
     def get_database_defaults(self):
         """

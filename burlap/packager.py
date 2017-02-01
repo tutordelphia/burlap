@@ -334,6 +334,10 @@ class PackagerSatchel(Satchel):
             raise Exception('Unknown packager: %s' % (packager,))
     
     @task
+    def install_required_system(self):
+        self.install_required(type=SYSTEM)
+
+    @task
     def install_required(self, type=None, service=None, list_only=0, **kwargs): # pylint: disable=redefined-builtin
         """
         Installs system packages listed as required by services this host uses.

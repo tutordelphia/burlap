@@ -790,12 +790,16 @@ class Satchel(object):
         self.vprint('req_packages1:', req_packages1)
         self.vprint('req_packages2:', req_packages2)
         package_list = None
+        found = False
         for pattern in patterns:
             self.vprint('pattern:', pattern)
             for req_packages in (req_packages1, req_packages2):
                 if pattern in req_packages:
                     package_list = req_packages[pattern]
+                    found = True
                     break
+        if not found:
+            print('Warning: No operating system pattern found for %s' % (os_version,))
         self.vprint('package_list:', package_list)
         if package_list:
             package_list_str = ' '.join(package_list)
@@ -1036,9 +1040,14 @@ class Service(object):
         
     def restart(self):
         s = {'warn_only':True} if self.ignore_errors else {} 
-        with settings(**s):
-            cmd = self.get_command(RESTART)
-            sudo_or_dryrun(cmd)
+        restart_cmd = self.get_command(RESTART)
+        if restart_cmd:
+            with settings(**s):
+                sudo_or_dryrun(restart_cmd)
+        else:
+            self.stop()
+            self.start()
+                
         
     def reload(self):
         s = {'warn_only':True} if self.ignore_errors else {} 
@@ -1053,7 +1062,7 @@ class Service(object):
             sudo_or_dryrun(cmd)
         
     def stop(self, ignore_errors=True):
-        s = {'warn_only':True} if ignore_errors else {} 
+        s = {'warn_only': True} if ignore_errors else {} 
         with settings(**s):
             cmd = self.get_command(STOP)
             sudo_or_dryrun(cmd)
@@ -2000,21 +2009,23 @@ def install_script(local_path=None, remote_path=None, render=True, extra=None):
 def write_to_file(content, fn=None, **kwargs):
     import tempfile
     dryrun = get_dryrun(kwargs.get('dryrun'))
-    if fn:
-        fout = open(fn, 'w')
-    else:
+    
+    if not fn:
         fd, fn = tempfile.mkstemp()
-        fout = os.fdopen(fd, 'wt')
-        
+
     if dryrun:
         cmd = 'echo -e %s > %s' % (shellquote(content), fn)
         if BURLAP_COMMAND_PREFIX:
             print('%s local: %s' % (render_command_prefix(is_local=True), cmd))
         else:
             print(cmd)
-            
-    fout.write(content)
-    fout.close()
+    else:
+        if fn:
+            fout = open(fn, 'w')
+        else:
+            fout = os.fdopen(fd, 'wt')
+        fout.write(content)
+        fout.close()
     return fn
 
 def set_site(site):

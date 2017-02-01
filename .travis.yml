@@ -31,12 +31,12 @@ install:
 -   sudo apt-get -y --force-yes install linux-headers-`uname -r`
 # Build/test dependencies
 -   pip install -r requirements.txt
+-   pip install -r requirements-test.txt
 #TODO: Get fab to test fab
 #-  pip install -e .
 # Deal with issue on Travis builders re: multiprocessing.Queue :(
--   "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
+#-   "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
 #-  "pip install jinja2"
--   sudo pip install tox pylint
   
 before_script:
 # Allow us to SSH passwordless to localhost

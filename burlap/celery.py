@@ -116,8 +116,14 @@ def render_paths():
     env.celery_celerybeat_command = env.celery_celerybeat_command_template % env
 
 def create_supervisor_services():
+    from burlap.common import get_current_hostname
     #print 'create_supervisor_services:',env.celery_has_worker
     if not env.celery_has_worker:
+        return
+
+    hostname = get_current_hostname()
+    target_sites = env.available_sites_by_host.get(hostname, None)
+    if target_sites and env.SITE and env.SITE not in target_sites:
         return
 
     if CELERY.lower() not in env.services:
