@@ -1071,11 +1071,16 @@ class Service(object):
         with settings(warn_only=True):
             cmd = self.get_command(STATUS)
             return sudo_or_dryrun(cmd)
-            
+    
+    @task
     def is_running(self):
-        status = str(self.status())
+        status = str(self.status() or '')
         status = re.sub(r'[\s\s]+', ' ', status)
-        return 'is running' in status or 'start/running' in status
+        ret = 'is running' in status or 'start/running' in status or 'active (running)' in status
+        if self.verbose:
+            print('is_running.status:', status)
+            print('is_running.ret:', ret)
+        return ret
 
 class ServiceSatchel(Satchel, Service):
     pass

@@ -231,6 +231,8 @@ class SupervisorSatchel(ServiceSatchel):
         
         verbose = self.verbose
         
+        r = self.local_renderer
+        
         hostname = get_current_hostname()
         
         target_sites = self.genv.available_sites_by_host.get(hostname, None)
@@ -241,7 +243,7 @@ class SupervisorSatchel(ServiceSatchel):
         
         process_groups = []
         
-        self.sudo_or_dryrun('rm -Rf /etc/supervisor/conf.d/*')
+        r.sudo('rm -Rf /etc/supervisor/conf.d/*')
         
         #TODO:check available_sites_by_host and remove dead?
         self.write_configs(site=site)
@@ -282,12 +284,13 @@ class SupervisorSatchel(ServiceSatchel):
             self.start()
             
         for pg in process_groups:
-            self.sudo_or_dryrun('supervisorctl add %s' % pg)
+            r.env.pg = pg
+            r.sudo('supervisorctl add {pg}')
         
         #TODO:are all these really necessary?
-        self.sudo_or_dryrun('supervisorctl reread')
-        self.sudo_or_dryrun('supervisorctl update')
-        self.sudo_or_dryrun('supervisorctl restart all')
+        r.sudo('supervisorctl reread')
+        #r.sudo('supervisorctl update')
+        r.sudo('supervisorctl restart all')
     
     @task
     def configure(self, **kwargs):
