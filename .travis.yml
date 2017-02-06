@@ -29,9 +29,8 @@ install:
 -   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
 -   sudo apt-get -y install build-essential
 -   sudo apt-get -y --force-yes install linux-headers-`uname -r`
--   apt-get install pandoc
--   pip install -r requirements.txt
--   pip install -r requirements-test.txt
+-   sudo apt-get install pandoc
+-   sudo pip install -r requirements-test.txt
 #TODO: Get fab to test fab
 #-  pip install -e .
 # Deal with issue on Travis builders re: multiprocessing.Queue :(
