@@ -486,6 +486,8 @@ class Satchel(object):
     }
     
     # These files will have their changes tracked.
+    # You can specify dynamic values by using brace notation to refer to a satchel variable.
+    # e.g. templates = ['{my_conf_template}']
     templates = []
     
     def __init__(self):
@@ -928,7 +930,10 @@ class Satchel(object):
     
     def print_command(self, *args, **kwargs):
         return print_command(*args, **kwargs)
-        
+    
+    def get_templates(self):
+        return self.templates or []
+    
     def record_manifest(self):
         """
         Returns a dictionary representing a serialized state of the service.
@@ -936,7 +941,10 @@ class Satchel(object):
         manifest = get_component_settings(self.name)
         
         # Record a signature of each template so we know to redeploy when they change.
-        for template in self.templates:
+        for template in self.get_templates():
+            # Dereference brace notation. e.g. convert '{var}' to `env[var]`.
+            if template and template.startswith('{') and template.endswith('}'):
+                template = self.env[template[1:-1]]
             fqfn = self.find_template('%s/%s' % (self.name, template))
             assert fqfn, 'Unable to find template: %s/%s' % (self.name, template)
             manifest['_%s' % template] = get_file_hash(fqfn)

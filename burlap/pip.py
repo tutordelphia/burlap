@@ -153,12 +153,13 @@ class PIPSatchel(Satchel):
         requirements = requirements or self.env.requirements
         
         def iter_lines(fn):
-            with open(fn, 'r') as fin:
-                for line in fin.readlines():
-                    line = line.strip()
-                    if not line or line.startswith('#'):
-                        continue
-                    yield line
+            if fn:
+                with open(fn, 'r') as fin:
+                    for line in fin.readlines():
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        yield line
         
         content = []
         if isinstance(requirements, (tuple, list)):
@@ -222,11 +223,12 @@ class PIPSatchel(Satchel):
         Called after a deployment to record any data necessary to detect changes
         for a future deployment.
         """
-        data = self.env.copy()
-        data['all-requirements'] = self.get_combined_requirements()
+        manifest = super(PIPSatchel, self).record_manifest()
+        print('pip.manifest:', manifest)
+        manifest['all-requirements'] = self.get_combined_requirements()
         if self.verbose:
-            pprint(data, indent=4)
-        return data
+            pprint(manifest, indent=4)
+        return manifest
     
     @task
     def configure(self, *args, **kwargs):

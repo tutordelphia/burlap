@@ -2,227 +2,44 @@ from __future__ import print_function
 
 import os
 import sys
-import warnings
-import posixpath
+# import warnings
+# import posixpath
 from pprint import pprint
-from distutils.version import StrictVersion as V
+# from distutils.version import StrictVersion as V
 
-from fabric.api import settings
+# from fabric.api import settings
 
-from burlap.files import is_link
-from burlap.system import UnsupportedFamily, distrib_family, distrib_id, distrib_release
-from burlap.utils import run_as_root
+# from burlap.files import is_link
+# from burlap.system import UnsupportedFamily, distrib_family, distrib_id, distrib_release
+# from burlap.utils import run_as_root
 from burlap import Satchel, ServiceSatchel
 from burlap.constants import *
 from burlap.decorators import task
 
-#TODO:deprecated, removed
-ignore_keys = [
-    # These are templated environment variables, so we should ignore them when
-    # saving a snapshot of the apache settings, since they'll be host-specific.
-    'apache_docroot',
-    'apache_wsgi_dir',
-    'apache_domain',
-    'apache_wsgi_python_path',
-    'apache_django_wsgi',
-    'apache_server_aliases',
-    'apache_ssl_domain',
-    'apache_auth_basic_authuserfile',
-    'apache_domain_with_sub',
-    'apache_domain_without_sub',
-    'apache_ports',
-    'apache_ssl_dir',
-]
 
+# def _choose(old_style, new_style):
+#     family = distrib_family()
+#     if family == 'debian':
+#         distrib = distrib_id()
+#         at_least_trusty = (distrib == 'Ubuntu' and V(distrib_release()) >= V('14.04'))
+#         at_least_jessie = (distrib == 'Debian' and V(distrib_release()) >= V('8.0'))
+#         if at_least_trusty or at_least_jessie:
+#             return new_style
+#         else:
+#             return old_style
+#     else:
+#         raise UnsupportedFamily(supported=['debian'])
 
-def is_module_enabled(module):
-    """
-    Check if an Apache module is enabled.
-    """
-    return is_link('/etc/apache2/mods-enabled/%s.load' % module)
-
-
-def enable_module(module):
-    """
-    Enable an Apache module.
-
-    This creates a symbolic link from ``/etc/apache2/mods-available/``
-    into ``/etc/apache2/mods-enabled/``.
-
-    This does not cause Apache to reload its configuration.
-
-    ::
-
-        import burlap
-
-        burlap.apache.enable_module('rewrite')
-        burlap.service.reload('apache2')
-
-    .. seealso:: :py:func:`burlap.require.apache.module_enabled`
-    """
-    if not is_module_enabled(module):
-        run_as_root('a2enmod %s' % module)
-
-
-def disable_module(module):
-    """
-    Disable an Apache module.
-
-    This deletes the symbolink link in ``/etc/apache2/mods-enabled/``.
-
-    This does not cause Apache to reload its configuration.
-
-    ::
-
-        import burlap
-
-        burlap.apache.disable_module('rewrite')
-        burlap.service.reload('apache2')
-
-    .. seealso:: :py:func:`burlap.require.apache.module_disabled`
-    """
-    if is_module_enabled(module):
-        run_as_root('a2dismod %s' % module)
-
-
-def is_site_enabled(site_name):
-    """
-    Check if an Apache site is enabled.
-    """
-    return is_link(_site_link_path(site_name))
-
-
-def enable_site(site_name):
-    """
-    Enable an Apache site.
-
-    This creates a symbolic link from ``/etc/apache2/sites-available/``
-    into ``/etc/apache2/sites-enabled/``.
-
-    This does not cause Apache to reload its configuration.
-
-    ::
-
-        import burlap
-
-        burlap.apache.enable_site('default')
-        burlap.service.reload('apache2')
-
-    .. seealso:: :py:func:`burlap.require.apache.site_enabled`
-    """
-    if not is_site_enabled(site_name):
-        run_as_root('a2ensite %s' % _site_config_filename(site_name))
-
-
-def disable_site(site_name):
-    """
-    Disable an Apache site.
-
-    This deletes the symbolink link in ``/etc/apache2/sites-enabled/``.
-
-    This does not cause Apache to reload its configuration.
-
-    ::
-
-        import burlap
-
-        burlap.apache.disable_site('default')
-        burlap.service.reload('apache2')
-
-    .. seealso:: :py:func:`burlap.require.apache.site_disabled`
-    """
-    if is_site_enabled(site_name):
-        run_as_root('a2dissite %s' % _site_config_filename(site_name))
-
-
-def _site_config_path(site_name):
-    config_filename = _site_config_filename(site_name)
-    return posixpath.join('/etc/apache2/sites-available', config_filename)
-
-
-def _site_config_filename(site_name):
-    if site_name == 'default':
-        return _default__site_config_filename()
-    else:
-        return '{0}.conf'.format(site_name)
-
-
-def _site_link_path(site_name):
-    link_filename = _site_link_filename(site_name)
-    return posixpath.join('/etc/apache2/sites-enabled', link_filename)
-
-
-def _site_link_filename(site_name):
-    if site_name == 'default':
-        return _default__site_link_filename()
-    else:
-        return '{0}.conf'.format(site_name)
-
-
-def _default__site_config_filename():
-    return _choose(old_style='default', new_style='000-default.conf')
-
-
-def _default__site_link_filename():
-    return _choose(old_style='000-default', new_style='000-default.conf')
-
-
-def _choose(old_style, new_style):
-    family = distrib_family()
-    if family == 'debian':
-        distrib = distrib_id()
-        at_least_trusty = (distrib == 'Ubuntu' and V(distrib_release()) >= V('14.04'))
-        at_least_jessie = (distrib == 'Debian' and V(distrib_release()) >= V('8.0'))
-        if at_least_trusty or at_least_jessie:
-            return new_style
-        else:
-            return old_style
-    else:
-        raise UnsupportedFamily(supported=['debian'])
-
-
-# backward compatibility (deprecated)
-enable = enable_site
-disable = disable_site
-
-#DEPRECATED
-def set_apache_site_specifics(site):
-    from burlap.common import env
-    from burlap.dj import get_settings
-    
-    warnings.warn("Use ApacheSatchel instead.", DeprecationWarning)
-    
-    print('site.apache:', site, file=sys.stderr)
-    site_data = env.sites[site]
-    
-    get_settings(site=site)
-    
-    # Set site specific values.
-    env.apache_site = site
-    env.update(site_data)
-    env.apache_docroot = env.apache_docroot_template % env
-    env.apache_wsgi_dir = env.apache_wsgi_dir_template % env
-    #env.apache_app_log_dir = env.apache_app_log_dir_template % env
-    env.apache_domain = env.apache_domain_template % env
-    env.apache_server_name = env.apache_domain
-    env.apache_wsgi_python_path = env.apache_wsgi_python_path_template % env
-    env.apache_django_wsgi = env.apache_django_wsgi_template % env
-    env.apache_django_wsgi = env.apache_django_wsgi.replace('-', '_')
-    env.apache_server_aliases = env.apache_server_aliases_template % env
-    env.apache_ssl_domain = env.apache_ssl_domain_template % env
-    env.apache_auth_basic_authuserfile = env.apache_auth_basic_authuserfile_template % env
-    env.apache_domain_with_sub = env.apache_domain_with_sub_template % env
-    env.apache_domain_without_sub = env.apache_domain_without_sub_template % env
-    
-    env.apache_domain_redirects = []
-    for _wrong, _right in env.apache_domain_redirect_templates:
-        env.apache_domain_redirects.append((_wrong % env, _right % env))
     
 class ApacheSatchel(ServiceSatchel):
     
     name = 'apache'
     
     post_deploy_command = 'reload'
+    
+    templates = [
+        '{site_template}',
+    ]
     
     @property
     def packager_system_packages(self):
@@ -416,35 +233,11 @@ class ApacheSatchel(ServiceSatchel):
         
     @task
     def enable_site(self, name):
-        self.sudo_or_dryrun('a2ensite %s' % name)
+        self.sudo('a2ensite %s' % name)
         
     @task
     def disable_site(self, name):
-        self.sudo_or_dryrun('a2dissite %s' % name)
-    
-    def set_apache_specifics(self):
-        from burlap import common
-        
-        if not self.genv.get('_apache_settings'):
-            self.genv._apache_settings = type(self.genv)()
-            for _k, _v in self.genv.iteritems():
-                if _k.startswith('apache_') and _k not in ignore_keys:
-                    self.genv._apache_settings[_k] = _v
-                    
-        os_version = self.os_version
-        apache_specifics = self.genv.apache_specifics[os_version.type][os_version.distro]
-        
-        self.genv.apache_root = apache_specifics.root
-        self.genv.apache_conf = apache_specifics.conf
-        self.genv.apache_sites_available = apache_specifics.sites_available
-        self.genv.apache_sites_enabled = apache_specifics.sites_enabled
-        self.genv.apache_log_dir = apache_specifics.log_dir
-        self.genv.apache_pid = apache_specifics.pid
-    
-        self.genv.apache_ports = self.genv.apache_ports_template % self.genv
-        self.genv.apache_ssl_dir = self.genv.apache_ssl_dir_template % self.genv
-    
-        return apache_specifics
+        self.sudo('a2dissite %s' % name)
     
     @task
     def optimize_wsgi_processes(self):
@@ -482,6 +275,30 @@ class ApacheSatchel(ServiceSatchel):
         for name in ['apache_application_name', 'apache_server_name']:
             assert self.genv[name], 'Missing %s.' % (name,)
     
+    def set_apache_specifics(self):
+        from burlap import common
+        
+        if not self.genv.get('_apache_settings'):
+            self.genv._apache_settings = type(self.genv)()
+            for _k, _v in self.genv.iteritems():
+                if _k.startswith('apache_') and _k not in ignore_keys:
+                    self.genv._apache_settings[_k] = _v
+                    
+        os_version = self.os_version
+        apache_specifics = self.genv.apache_specifics[os_version.type][os_version.distro]
+        
+        self.genv.apache_root = apache_specifics.root
+        self.genv.apache_conf = apache_specifics.conf
+        self.genv.apache_sites_available = apache_specifics.sites_available
+        self.genv.apache_sites_enabled = apache_specifics.sites_enabled
+        self.genv.apache_log_dir = apache_specifics.log_dir
+        self.genv.apache_pid = apache_specifics.pid
+    
+        self.genv.apache_ports = self.genv.apache_ports_template % self.genv
+        self.genv.apache_ssl_dir = self.genv.apache_ssl_dir_template % self.genv
+    
+        return apache_specifics
+        
     def set_apache_site_specifics(self, site):
         from burlap.dj import get_settings
         
@@ -605,11 +422,14 @@ class ApacheSatchel(ServiceSatchel):
     def view_error_log(self):
         self.run_or_dryrun('tail -f %(apache_error_log)s' % self.genv)
     
+    @task
     def record_manifest(self):
         """
         Called after a deployment to record any data necessary to detect changes
         for a future deployment.
         """
+        manifest = super(ApacheSatchel, self).record_manifest()
+        
         data = self.get_apache_settings()
         data['site_template_contents'] = self.get_template_contents(self.env.site_template)
         if self.verbose:
