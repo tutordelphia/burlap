@@ -8,22 +8,14 @@ run several instances of Celery for multiple Apache sites.
 from __future__ import print_function
 
 import os
-import re
 
 from fabric.api import (
     env,
-    require,
     settings,
-    cd,
 )
 
-from fabric.contrib import files
-
 from burlap.common import (
-    run_or_dryrun,
-    put_or_dryrun,
     sudo_or_dryrun,
-    local_or_dryrun,
 )
 from burlap.decorators import task_or_dryrun
 from burlap import common
@@ -93,9 +85,9 @@ common.required_python_packages[CELERY] = {
 }
 
 def render_paths():
-    from burlap.pip import render_paths as pip_render_paths
+    #from burlap.pip import render_paths as pip_render_paths
     
-    pip_render_paths()
+    #pip_render_paths()
     
     env.celery_supervisor_directory = env.celery_supervisor_directory_template % env
     env.celery_supervisor_remote_app_src_package_dir = env.remote_app_src_package_dir

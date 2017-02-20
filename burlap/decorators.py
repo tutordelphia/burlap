@@ -3,10 +3,6 @@ Convenience decorators for use in fabfiles.
 """
 from __future__ import with_statement
 
-import types
-from functools import wraps
-import inspect
-
 #from Crypto import Random
 
 #from fabric import tasks

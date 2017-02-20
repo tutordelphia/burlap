@@ -10,14 +10,10 @@ from fabric.api import (
     task,
 )
 
-import burlap
-
 #from burlap import user, package, pip, service, file, tarball
 from burlap.common import (
     put_or_dryrun,
-    sudo_or_dryrun,
     local_or_dryrun,
-    run_or_dryrun,
     get_verbose,
 )
 from burlap.decorators import task_or_dryrun

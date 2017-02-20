@@ -1,18 +1,13 @@
 from __future__ import print_function
 
 import os
-import gc
 import re
 import sys
-import types
 import datetime
-import glob
 import tempfile
 import json
-import shutil
 import functools
 import traceback
-import time
 from collections import defaultdict
 from pprint import pprint
 
@@ -27,7 +22,6 @@ import fabric.api
 from burlap import common
 from burlap.common import (
     local_or_dryrun,
-    get_or_dryrun,
     put_or_dryrun,
     sudo_or_dryrun,
 )
@@ -729,7 +723,7 @@ def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None
 #     raw_input('enter')
     for component_name, func in common.manifest_recorder.iteritems():
         component_name = component_name.upper()
-        print('component_name:', component_name)
+        #print('component_name:', component_name)
         
         if only_components and component_name not in only_components:
             if common.get_verbose():

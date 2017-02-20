@@ -9,12 +9,9 @@ processes using `supervisor`_.
 
 """
 
-from fabric.api import hide, settings
-
 from burlap.files import watch
 from burlap.supervisor import update_config, process_status, start_process
-from burlap.system import UnsupportedFamily, distrib_family, distrib_id
-from burlap.utils import run_as_root
+from burlap.system import UnsupportedFamily, distrib_family
 
 
 def process(name, **kwargs):

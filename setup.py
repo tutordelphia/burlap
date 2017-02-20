@@ -49,7 +49,7 @@ setup(
     name="burlap",
     version=burlap.__version__,
     packages=find_packages(exclude=['ez_setup', 'tests']),
-    scripts=['bin/blp'],
+    scripts=['bin/burlap-admin'],
     package_data={
         'burlap': [
             'templates/*.*',

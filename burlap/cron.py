@@ -1,6 +1,5 @@
 from __future__ import print_function
 
-import os
 import sys
 
 from burlap import ServiceSatchel
@@ -65,17 +64,17 @@ class CronSatchel(ServiceSatchel):
         }
         
     def render_paths(self, env=None):
-        from burlap.pip import render_paths as pip_render_paths
-        from burlap.dj import render_remote_paths as dj_render_paths
+        #from burlap.pip import render_paths as pip_render_paths
+        #from burlap.dj import render_remote_paths as dj_render_paths
         
         env = env or self.genv
-        env = pip_render_paths(env)
-        env = dj_render_paths(env)
+        #env = pip_render_paths(env)
+        #env = dj_render_paths(env)
         
-        print('remote_app_src_package_dir:', env.remote_app_src_package_dir)
+        #print('remote_app_src_package_dir:', env.remote_app_src_package_dir)
         
-        env.cron_python = os.path.join(env.pip_virtual_env_dir, 'bin', 'python')
-        env.cron_django_manage = self.env.django_manage_template % env
+        #env.cron_python = os.path.join(env.pip_virtual_env_dir, 'bin', 'python')
+        #env.cron_django_manage = self.env.django_manage_template % env
         env.cron_stdout_log = self.env.stdout_log_template % env
         env.cron_stderr_log = self.env.stderr_log_template % env
         

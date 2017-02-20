@@ -1,12 +1,12 @@
 from __future__ import print_function
 
 import os
-import unittest
+# import unittest
 
-try:
-    import pytest
-except ImportError:
-    pass
+# try:
+#     import pytest
+# except ImportError:
+#     pass
 
 def test_shellquote():
     from burlap.common import shellquote

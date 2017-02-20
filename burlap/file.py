@@ -4,27 +4,15 @@ Various tools for manipulating files.
 from __future__ import print_function
 
 import os
-import re
 import warnings
 from datetime import date
-
-try:
-    import boto
-except ImportError:
-    boto = None
     
 from fabric.api import env
-from fabric.contrib import files
-from fabric.tasks import Task
 
-from burlap import common
 from burlap.common import (
     run_or_dryrun,
     put_or_dryrun,
     sudo_or_dryrun,
-    local_or_dryrun,
-    SITE,
-    ROLE,
 )
 from burlap.decorators import task_or_dryrun
 

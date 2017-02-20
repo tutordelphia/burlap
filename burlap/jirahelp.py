@@ -1,6 +1,5 @@
 from __future__ import print_function
 
-import os
 import sys
 import re
 import traceback
@@ -8,21 +7,8 @@ from pprint import pprint
 
 from fabric.api import (
     env,
-    require,
-    settings,
-    cd,
-    task,
 )
-from fabric.contrib import files
 
-from burlap.common import (
-    run_or_dryrun,
-    put_or_dryrun,
-    sudo_or_dryrun,
-    local_or_dryrun,
-    render_to_string,
-    QueuedCommand,
-)
 from burlap import common
 from burlap.decorators import task_or_dryrun
 

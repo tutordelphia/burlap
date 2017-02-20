@@ -1,4 +1,3 @@
-import os
  
 from burlap.files import is_dir
 from burlap.common import (

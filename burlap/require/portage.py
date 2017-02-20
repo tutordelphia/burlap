@@ -14,7 +14,6 @@ from burlap.portage import (
     install,
     is_installed,
     uninstall,
-    update_index,
 )
 
 

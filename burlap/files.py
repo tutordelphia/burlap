@@ -20,7 +20,6 @@ from fabric.contrib.files import upload_template as _upload_template
 from fabric.contrib.files import exists
 
 from burlap.utils import run_as_root
-from burlap.common import sudo_or_dryrun
 
 
 def is_file(path, use_sudo=False):

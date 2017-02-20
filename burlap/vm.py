@@ -1,7 +1,6 @@
 from __future__ import print_function
 
 import os
-import sys
 import datetime
 import socket
 from pprint import pprint
@@ -13,20 +12,14 @@ from fabric.api import (
     env,
     require,
     runs_once,
-    execute,
     settings,
-    cd,
 )
-from fabric.contrib import files
 
 from burlap import common
 from burlap.common import (
     run_or_dryrun,
-    put_or_dryrun,
-    sudo_or_dryrun,
     local_or_dryrun,
     get_dryrun,
-    get_verbose,
 )
 from burlap import constants as c
 from burlap.decorators import task_or_dryrun

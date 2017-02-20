@@ -1,8 +1,5 @@
 from __future__ import print_function
 
-import os
-import hashlib
-
 from burlap import Satchel
 from burlap.constants import *
 from burlap.decorators import task

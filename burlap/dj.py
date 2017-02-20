@@ -16,16 +16,14 @@ from six import StringIO
 
 from fabric.api import (
     env,
-    require,
     settings,
-    cd,
     runs_once,
 )
 
 from burlap import Satchel
 from burlap import common
 from burlap.common import (
-    ROLE, QueuedCommand, ALL,
+    ROLE,
     sudo_or_dryrun,
     run_or_dryrun,
     local_or_dryrun,

@@ -3,26 +3,13 @@ Inspects and manipulates settings files.
 """
 from __future__ import print_function
 
-import os
-import re
 from pprint import pprint
 import types
 
 from fabric.api import (
     env,
-    local,
-    put as _put,
-    require,
-    run as _run,
-    settings,
-    sudo,
-    cd,
-    task,
 )
-from fabric.tasks import Task
 
-from burlap import common
-from burlap.common import DJANGO, ALL
 from burlap.decorators import task_or_dryrun
 
 

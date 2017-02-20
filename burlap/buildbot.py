@@ -3,7 +3,7 @@ import os
 from fabric.api import settings
 
 from burlap.constants import *
-from burlap import Satchel, ServiceSatchel
+from burlap import ServiceSatchel
 from burlap.decorators import task
 
 class BuildBotSatchel(ServiceSatchel):

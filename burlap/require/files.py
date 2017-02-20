@@ -12,7 +12,6 @@ from tempfile import mkstemp
 import hashlib
 import os
 
-import six
 from six.moves.urllib.parse import urlparse
 
 from fabric.api import hide, put, run, settings
@@ -27,7 +26,6 @@ from burlap.files import (
     umask,
 )
 from burlap.utils import run_as_root
-import burlap.files
 
 
 BLOCKSIZE = 2 ** 20  # 1MB

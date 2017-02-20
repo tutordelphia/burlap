@@ -11,7 +11,6 @@ from burlap.opkg import (
     install,
     is_installed,
     uninstall,
-    update_index,
 )
 
 

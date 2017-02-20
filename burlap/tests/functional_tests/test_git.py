@@ -4,8 +4,6 @@ Test high level git tools.  These tests should also cover the low
 level tools as all of them are called indirectly.
 """
 
-import functools
-
 import pytest
 
 from fabric.api import cd, run, sudo

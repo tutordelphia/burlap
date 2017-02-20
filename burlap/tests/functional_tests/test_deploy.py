@@ -4,15 +4,12 @@ import os
 import sys
 import shutil
 
-import yaml
-
-from fabric.api import puts, sudo, env
+from fabric.api import env
 
 from burlap.shelf import Shelf
-from burlap.debug import shell
 from burlap.context import set_cwd
 from burlap.common import getoutput
-from burlap.deploy import run as deploy_run, preview as deploy_preview
+from burlap.deploy import preview as deploy_preview
 from burlap import load_role_handler
 
 def test_deploy():

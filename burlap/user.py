@@ -1,26 +1,20 @@
 from __future__ import print_function
 
 import os
-import re
-from pipes import quote
+    from pipes import quote
 import posixpath
 import random
 import string
 
 from fabric.api import (
     env,
-    require,
     settings,
-    cd,
     task,
 )
-from fabric.contrib import files
-from fabric.tasks import Task
 from fabric.api import hide, run, settings, sudo, local
 
 from burlap.constants import *
 from burlap import Satchel
-from burlap import common
 from burlap.common import (
     QueuedCommand,
 )

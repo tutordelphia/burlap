@@ -15,7 +15,7 @@ from burlap.files import watch
 
 from burlap import Satchel
 from burlap.constants import *
-from burlap.decorators import task, task_or_dryrun
+from burlap.decorators import task
 
 def harden(allow_root_login=False, allow_password_auth=False,
            sshd_config='/etc/ssh/sshd_config'):

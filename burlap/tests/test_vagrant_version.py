@@ -1,6 +1,6 @@
-import unittest
+# import unittest
 
-from mock import patch
+# from mock import patch
 
 
 class _Success(str):

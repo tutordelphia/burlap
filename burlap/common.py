@@ -14,12 +14,11 @@ import glob
 import pipes
 import json
 import getpass
-import inspect
 import subprocess
 import uuid
 from collections import namedtuple, OrderedDict
-from pprint import pprint
-from datetime import date
+#from pprint import pprint
+#from datetime import date
 
 import yaml
 import six
@@ -29,13 +28,11 @@ from fabric.api import (
     local,
     put as __put,
     get as __get,
-    require,
     run as _run,
     settings,
     sudo as _sudo,
-    cd,
     hide,
-    runs_once,
+#    runs_once,
     local as _local,
 )
 from fabric.contrib import files

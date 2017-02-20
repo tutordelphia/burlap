@@ -1,10 +1,6 @@
 from __future__ import print_function
 
-import sys
-
-from fabric.api import settings
-
-from burlap import Satchel, ServiceSatchel
+from burlap import Satchel
 from burlap.constants import *
 from burlap.decorators import task
 

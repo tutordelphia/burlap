@@ -1,15 +1,11 @@
 from __future__ import print_function
 
-import os
 import re
 import getpass
 
 from fabric.api import (
-    env,
     settings,
-    cd,
     runs_once,
-    execute,
 )
 
 from burlap import Satchel

@@ -1,5 +1,4 @@
 from pipes import quote
-import functools
 import posixpath
 
 import pytest

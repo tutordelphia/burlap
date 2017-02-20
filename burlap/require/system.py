@@ -5,7 +5,7 @@ System settings
 
 from re import escape
 
-from fabric.api import settings, warn
+from fabric.api import settings
 from fabric.contrib.files import append, uncomment
 
 from burlap.files import is_file, watch

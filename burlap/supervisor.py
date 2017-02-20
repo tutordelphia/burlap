@@ -11,7 +11,6 @@ processes using `supervisord`_.
 from __future__ import print_function
 
 import os
-import re
 import time
 
 from fabric.api import hide, settings
@@ -131,14 +130,16 @@ class SupervisorSatchel(ServiceSatchel):
                 UBUNTU: 'service supervisor restart; sleep 5',
             },
             STATUS:{
-                FEDORA: 'systemctl status supervisord.service',
-                UBUNTU: 'service supervisor status',
+                FEDORA: 'systemctl --no-pager status supervisord.service',
+                (UBUNTU, '14.04'): 'service supervisor status',
+                (UBUNTU, '16.04'): 'systemctl --no-pager status supervisor',
+                UBUNTU: 'systemctl --no-pager status supervisor',
             },
         }
     
     def render_paths(self):
-        from burlap.pip import render_paths as pip_render_paths
-        pip_render_paths()
+        #from burlap.pip import render_paths as pip_render_paths
+        #pip_render_paths()
         self.genv.supervisor_daemon_bin_path = self.genv.supervisor_daemon_bin_path_template % self.genv
         self.genv.supervisor_bin_path = self.genv.supervisor_bin_path_template % self.genv
         self.genv.supervisor_supervisorctl_path = self.genv.supervisor_supervisorctl_path_template % self.genv

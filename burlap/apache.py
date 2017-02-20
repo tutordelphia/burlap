@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import os
 import sys
-import datetime
 import warnings
 import posixpath
 from pprint import pprint
@@ -231,7 +230,11 @@ class ApacheSatchel(ServiceSatchel):
             FEDORA: ['httpd'],
             UBUNTU: ['apache2'],
             (UBUNTU, '12.04'): ['apache2', 'libapache2-mod-wsgi'],
+            (UBUNTU, '12.10'): ['apache2', 'libapache2-mod-wsgi'],
             (UBUNTU, '14.04'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'],
+            (UBUNTU, '14.10'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'],
+            (UBUNTU, '16.04'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'],
+            (UBUNTU, '16.10'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'],
         }
     
     def set_defaults(self):

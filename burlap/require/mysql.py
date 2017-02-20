@@ -15,7 +15,6 @@ from burlap.mysql import (
     create_database,
     create_user,
     database_exists,
-    query,
     user_exists,
 )
 from burlap.system import UnsupportedFamily, distrib_family

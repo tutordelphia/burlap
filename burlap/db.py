@@ -1,40 +1,22 @@
 from __future__ import print_function
 
 import os
-import re
 import sys
-import datetime
-import glob
-import tempfile
 import subprocess
-import warnings
-from collections import defaultdict
 
 from fabric.api import (
     env,
-    require,
-    execute,
-    settings,
-    cd,
     runs_once,
-    execute,
 )
-from fabric.contrib import files
 
 from burlap.constants import *
-from burlap import Satchel, ServiceSatchel
+from burlap import ServiceSatchel
 from burlap import common
 from burlap.common import (
     run_or_dryrun,
-    put_or_dryrun,
-    sudo_or_dryrun,
-    local_or_dryrun,
-    set_site,
     SITE,
     ROLE,
     ALL,
-    QueuedCommand,
-    get_dryrun,
     LocalRenderer,
 )
 from burlap.decorators import task

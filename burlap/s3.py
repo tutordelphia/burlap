@@ -6,7 +6,6 @@ import re
 import json
 
 from fabric.api import (
-    require,
     settings,
     runs_once,
 )
@@ -17,7 +16,7 @@ except ImportError:
     boto = None
 
 from burlap.constants import *
-from burlap import Satchel, ServiceSatchel
+from burlap import Satchel
 from burlap.decorators import task
 
 S3SYNC_PATH_PATTERN = r'(?:->)\s+([^\n]+)'

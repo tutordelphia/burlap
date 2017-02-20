@@ -12,9 +12,7 @@ from pprint import pprint
 
 from fabric.api import (
     env,
-    require,
     settings,
-    cd,
     runs_once,
 )
 
@@ -217,7 +215,10 @@ def shell(gui=0, command=''):
         
     _env.shell_check_host_key_str = '-o StrictHostKeyChecking=no'
     
-    _env.shell_default_dir = _env.shell_default_dir_template % _env
+    try:
+        _env.shell_default_dir = _env.shell_default_dir_template % _env
+    except KeyError:
+        _env.shell_default_dir = '~'
     if command:
         _env.shell_interactive_shell_str = command
     else:
@@ -233,6 +234,9 @@ def shell(gui=0, command=''):
         cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % _env
     elif _env.password:
         cmd = 'ssh -t %(shell_x_opt)s %(shell_check_host_key_str)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % _env
+    else:
+        # No explicit password or key file needed?
+        cmd = 'ssh -t %(shell_x_opt)s %(shell_host_string)s "%(shell_interactive_shell_str)s"' % _env
     local_or_dryrun(cmd)
 
 

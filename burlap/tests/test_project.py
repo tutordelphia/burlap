@@ -1,13 +1,13 @@
 from __future__ import print_function
 import os
 import sys
-import tempfile
+# import tempfile
 import shutil
 
-try:
-    import pytest
-except ImportError:
-    pass
+# try:
+#     import pytest
+# except ImportError:
+#     pass
 
 CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
 

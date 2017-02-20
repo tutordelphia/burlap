@@ -1,21 +1,14 @@
 from __future__ import print_function
 
-import os
 import sys
-import re
 import traceback
 
 from fabric.api import (
     env,
-    require,
     settings,
-    cd,
-    task,
     hide,
 )
 
-from fabric.contrib import files
-from fabric.tasks import Task
 
 from burlap import systemd
 from burlap.system import using_systemd, distrib_family
@@ -23,13 +16,7 @@ from burlap.utils import run_as_root
 
 from burlap import common
 from burlap.common import (
-    run_or_dryrun,
-    put_or_dryrun,
-    sudo_or_dryrun,
-    local_or_dryrun,
     get_dryrun,
-    SITE,
-    ROLE,
 )
 from burlap.decorators import task_or_dryrun
 
