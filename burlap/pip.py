@@ -52,8 +52,9 @@ class PIPSatchel(Satchel):
 
     @task
     def has_pip(self):
+        r = self.local_renderer
         with self.settings(warn_only=True):
-            ret = self.run('which pip').strip()
+            ret = (r.run('which pip') or '').strip()
             return bool(ret)
             
     @task
@@ -68,9 +69,9 @@ class PIPSatchel(Satchel):
         
         r = self.local_renderer
         
-        if r.env.bootstrap_method == PYTHON_PIP:
+        if r.env.bootstrap_method == GET_PIP:
             r.sudo('curl --silent --show-error --retry 5 https://bootstrap.pypa.io/get-pip.py | python')
-        if r.env.bootstrap_method == EZ_SETUP:
+        elif r.env.bootstrap_method == EZ_SETUP:
             r.run('wget http://peak.telecommunity.com/dist/ez_setup.py -O /tmp/ez_setup.py')
             with self.settings(warn_only=True):
                 r.sudo('python /tmp/ez_setup.py -U setuptools')
@@ -125,14 +126,14 @@ class PIPSatchel(Satchel):
         """
         r = self.local_renderer
         
-        if self.virtualenv_exists():
-            print('virtualenv exists')
-            return
+#         if self.virtualenv_exists():
+#             print('virtualenv exists')
+#             return
         
         print('Creating new virtual environment...')
         with self.settings(warn_only=True):
-            cmd = 'virtualenv --no-site-packages {virtualenv_dir}'
-            if r.env.is_local:
+            cmd = '[ ! -d {virtualenv_dir} ] && virtualenv --no-site-packages {virtualenv_dir} || true'
+            if r.genv.is_local:
                 r.run(cmd)
             else:
                 r.sudo(cmd)
@@ -140,30 +141,49 @@ class PIPSatchel(Satchel):
     @task
     def set_permissions(self):
         r = self.local_renderer
-        if not r.env.is_local and r.env.check_permissions:
+        if not r.genv.is_local and r.env.check_permissions:
             r.sudo('chown -R {pip_user}:{pip_group} {virtualenv_dir}')
             r.sudo('chmod -R {pip_chmod} {virtualenv_dir}')
     
-    def get_combined_requirements(self):
+    def get_combined_requirements(self, requirements=None):
         """
         Returns all requirements files combined into one string.
         """
-        content = []
-        if isinstance(self.env.requirements, (tuple, list)):
-            for path in self.env.requirements:
-                for line in open(path, 'r').readlines():
+        
+        requirements = requirements or self.env.requirements
+        
+        def iter_lines(fn):
+            with open(fn, 'r') as fin:
+                for line in fin.readlines():
                     line = line.strip()
                     if not line or line.startswith('#'):
                         continue
-                    content.append(line)
+                    yield line
+        
+        content = []
+        if isinstance(requirements, (tuple, list)):
+            for path in requirements:
+                content.extend(list(iter_lines(path)))
         else:
-            assert isinstance(self.env.requirements, basestring)
-            content.append(self.env.requirements)
+            assert isinstance(requirements, basestring)
+            f = self.find_template(requirements)
+            content.extend(list(iter_lines(f)))
         return '\n'.join(content)
     
     @task
-    def update_install(self):
+    def update_install(self, **kwargs):
         r = self.local_renderer
+        
+        options = [
+            'requirements',
+            'virtualenv_dir',
+            'user',
+            'group',
+            'perms',
+        ]
+        for option in options:
+            setattr(r.env, option, kwargs.pop(option, None) or getattr(r.env, option))
+        print('req:', r.env.requirements)
         
         # Make sure pip is installed.
         self.bootstrap()
@@ -172,7 +192,7 @@ class PIPSatchel(Satchel):
         self.init()
         
         # Collect all requirements.
-        tmp_fn = r.write_temp_file(self.get_combined_requirements())
+        tmp_fn = r.write_temp_file(self.get_combined_requirements(requirements=r.env.requirements))
         
         # Copy up our requirements.
         r.env.pip_remote_requirements_fn = '/tmp/pip-requirements.txt'
@@ -182,19 +202,19 @@ class PIPSatchel(Satchel):
         )
         
         # Ensure we're always using the latest pip.
-        if r.env.is_local:
+        if r.genv.is_local:
             r.run('{virtualenv_dir}/bin/pip install -U pip')
         else:
             r.sudo('{virtualenv_dir}/bin/pip install -U pip')
         
         cmd = "{virtualenv_dir}/bin/pip install -r {pip_remote_requirements_fn}"
-        if r.env.is_local:
+        if r.genv.is_local:
             r.run(cmd)
         else:
             r.sudo(cmd)
             
-        if not r.env.is_local and r.env.check_permissions:
-            self.set_virtualenv_permissions()
+        if not r.genv.is_local and r.env.check_permissions:
+            self.set_permissions()
 
     @task
     def record_manifest(self):

@@ -375,6 +375,11 @@ class MySQLClientSatchel(Satchel):
             (UBUNTU, '14.04'): ['libmysqlclient-dev', 'mysql-client'],
             (UBUNTU, '16.04'): ['libmysqlclient-dev', 'mysql-client'],
         }
+        
+    @task
+    def configure(self, *args, **kwargs):
+        super(MySQLClientSatchel, self).configure(*args, **kwargs)
+    configure.deploy_before = ['packager']
 
 mysql = MySQLSatchel()
 mysqlclient = MySQLClientSatchel()

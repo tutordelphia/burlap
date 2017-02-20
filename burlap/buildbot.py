@@ -14,11 +14,14 @@ class BuildBotSatchel(ServiceSatchel):
     
     required_system_packages = {
         UBUNTU: ['git'],
+        (UBUNTU, '14.04'): ['git'],
+        (UBUNTU, '16.04'): ['git'],
     }
     
     def set_defaults(self):
         
         self.env.project_dir = '/usr/local/myproject'
+        self.env.virtualenv_dir = '/usr/local/myproject/.env'
         
         # Must match the main user, or otherwise we get rsync errors.
         self.env.user = 'ubuntu'
@@ -31,7 +34,6 @@ class BuildBotSatchel(ServiceSatchel):
         self.env.manhole_port = 1234
         
         self.env.perms = '777'
-        self.env.virtualenv_dir = self.env.project_dir+'/.env'
         
         self.env.cron_path = '/etc/cron.d/buildbot_boot'
         self.env.cron_user = 'root'
@@ -44,6 +46,10 @@ class BuildBotSatchel(ServiceSatchel):
         self.env.check_ok_paths = {} # {branch: (url, text)}
         
         self.env.rsync_paths = [] # [[from_path, to_path, user, group]]
+        
+        self.env.enable_apache_site = True
+        
+        self.env.requirements = 'pip-requirements.txt'
         
         self.env.service_commands = {
 #             START:{
@@ -155,20 +161,20 @@ class BuildBotSatchel(ServiceSatchel):
     
     @task
     def setup_dir(self, clean=0):
-        from burlap import pip
+        pip = self.get_satchel('pip')
         clean = int(clean)
         r = self.local_renderer
         if clean:
             r.sudo('rm -Rf {virtualenv_dir} || true')
         r.sudo('mkdir -p {project_dir}')
         pip.update_install(
-            pip_requirements_fn='pip-requirements.txt',
+            requirements=self.env.requirements,
             virtualenv_dir=self.env.virtualenv_dir,
             user=self.env.user,
             group=self.env.group,
             perms=self.env.perms,
         )
-        r.sudo('{virtualenv_dir}/bin/pip install -U pip')
+        #r.sudo('{virtualenv_dir}/bin/pip install -U pip')
         r.sudo('chown -R {user}:{group} {project_dir}')
         r.sudo('chmod -R {perms} {project_dir}')
     
@@ -273,26 +279,29 @@ class BuildBotSatchel(ServiceSatchel):
     
     @task
     def setup_user(self):
-        r = self.local_renderer
-        r.sudo('adduser {user} {bb_group} || true')
-        r.sudo('groupadd --force {bb_group} || true')
-        r.sudo('adduser {bb_user} {bb_group} || true')
+        user = self.get_satchel('user')
+        group = self.get_satchel('group')
+        user.create(self.env.user, self.env.bb_group)
+        group.create(self.env.bb_group)
+        user.create(self.env.bb_user, self.env.bb_group)
     
     def deploy_pre_run(self):
         self.check_ok()
         
     @task
     def configure(self):
-        from burlap import pip
-        from burlap.packager import packager, umv
+        packager = self.get_satchel('packager')
+#         umv = self.get_satchel('ubuntumultiverse')
         
-        self.sudo('a2enmod proxy_http')
+        packager.configure()
+        
+        if self.env.enable_apache_site:
+            apache = self.get_satchel('apache')
+            apache.enable_mod('proxy_http')
         
         self.setup_user()
         
-        umv.configure()
-        
-        packager.configure()
+        #umv.configure()
         
         # Initialize base project directory and        
         # Setup Python virtual environment.

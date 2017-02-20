@@ -407,6 +407,14 @@ class ApacheSatchel(ServiceSatchel):
         return self.genv._apache_settings
     
     @task
+    def enable_mod(self, name):
+        self.sudo('a2enmod %s' % name)
+    
+    @task
+    def disable_mod(self, name):
+        self.sudo('a2dismod %s' % name)
+        
+    @task
     def enable_site(self, name):
         self.sudo_or_dryrun('a2ensite %s' % name)
         

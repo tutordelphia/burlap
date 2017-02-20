@@ -5,7 +5,7 @@ PostgreSQL users and databases
 
 from fabric.api import cd, hide, run, settings
 from burlap.files import is_file
-from burlap.postgres import (
+from burlap.postgresql import (
     create_database,
     create_user,
     database_exists,

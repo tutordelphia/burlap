@@ -5,3 +5,4 @@ services:
 -   buildbot
 
 buildbot_project_dir: /usr/local/burlap-buildbot
+buildbot_virtualenv_dir: /usr/local/burlap-buildbot/.env

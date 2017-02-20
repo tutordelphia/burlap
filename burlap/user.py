@@ -18,10 +18,10 @@ from burlap import Satchel
 from burlap.common import (
     QueuedCommand,
 )
-from burlap.group import (
-    exists as _group_exists,
-    create as _group_create,
-)
+# from burlap.group import (
+#     exists as _group_exists,
+#     create as _group_create,
+# )
 from burlap.files import uncommented_lines
 from burlap.utils import run_as_root
 from burlap.decorators import task
@@ -48,87 +48,87 @@ def _crypt_password(password):
     return crypted_password
 
 
-def create(name, comment=None, home=None, create_home=None, skeleton_dir=None,
-           group=None, create_group=True, extra_groups=None, password=None,
-           system=False, shell=None, uid=None, ssh_public_keys=None,
-           non_unique=False):
-    """
-    Create a new user and its home directory.
-
-    If *create_home* is ``None`` (the default), a home directory will be
-    created for normal users, but not for system users.
-    You can override the default behaviour by setting *create_home* to
-    ``True`` or ``False``.
-
-    If *system* is ``True``, the user will be a system account. Its UID
-    will be chosen in a specific range, and it will not have a home
-    directory, unless you explicitely set *create_home* to ``True``.
-
-    If *shell* is ``None``, the user's login shell will be the system's
-    default login shell (usually ``/bin/sh``).
-
-    *ssh_public_keys* can be a (local) filename or a list of (local)
-    filenames of public keys that should be added to the user's SSH
-    authorized keys (see :py:func:`burlap.user.add_ssh_public_keys`).
-
-    Example::
-
-        import burlap
-
-        if not burlap.user.exists('alice'):
-            burlap.user.create('alice')
-
-        with cd('/home/alice'):
-            # ...
-
-    """
-
-    # Note that we use useradd (and not adduser), as it is the most
-    # portable command to create users across various distributions:
-    # http://refspecs.linuxbase.org/LSB_4.1.0/LSB-Core-generic/LSB-Core-generic/useradd.html
-
-    args = []
-    if comment:
-        args.append('-c %s' % quote(comment))
-    if home:
-        args.append('-d %s' % quote(home))
-    if group:
-        args.append('-g %s' % quote(group))
-        if create_group:
-            if not _group_exists(group):
-                _group_create(group)
-    if extra_groups:
-        groups = ','.join(quote(group) for group in extra_groups)
-        args.append('-G %s' % groups)
-
-    if create_home is None:
-        create_home = not system
-    if create_home is True:
-        args.append('-m')
-    elif create_home is False:
-        args.append('-M')
-
-    if skeleton_dir:
-        args.append('-k %s' % quote(skeleton_dir))
-    if password:
-        crypted_password = _crypt_password(password)
-        args.append('-p %s' % quote(crypted_password))
-    if system:
-        args.append('-r')
-    if shell:
-        args.append('-s %s' % quote(shell))
-    if uid:
-        args.append('-u %s' % uid)
-        if non_unique:
-            args.append('-o')
-    args.append(name)
-    args = ' '.join(args)
-    run_as_root('useradd %s' % args)
-
-    if ssh_public_keys:
-        if isinstance(ssh_public_keys, basestring):
-            ssh_public_keys = [ssh_public_keys]
-        add_ssh_public_keys(name, ssh_public_keys)
+# def create(name, comment=None, home=None, create_home=None, skeleton_dir=None,
+#            group=None, create_group=True, extra_groups=None, password=None,
+#            system=False, shell=None, uid=None, ssh_public_keys=None,
+#            non_unique=False):
+#     """
+#     Create a new user and its home directory.
+# 
+#     If *create_home* is ``None`` (the default), a home directory will be
+#     created for normal users, but not for system users.
+#     You can override the default behaviour by setting *create_home* to
+#     ``True`` or ``False``.
+# 
+#     If *system* is ``True``, the user will be a system account. Its UID
+#     will be chosen in a specific range, and it will not have a home
+#     directory, unless you explicitely set *create_home* to ``True``.
+# 
+#     If *shell* is ``None``, the user's login shell will be the system's
+#     default login shell (usually ``/bin/sh``).
+# 
+#     *ssh_public_keys* can be a (local) filename or a list of (local)
+#     filenames of public keys that should be added to the user's SSH
+#     authorized keys (see :py:func:`burlap.user.add_ssh_public_keys`).
+# 
+#     Example::
+# 
+#         import burlap
+# 
+#         if not burlap.user.exists('alice'):
+#             burlap.user.create('alice')
+# 
+#         with cd('/home/alice'):
+#             # ...
+# 
+#     """
+# 
+#     # Note that we use useradd (and not adduser), as it is the most
+#     # portable command to create users across various distributions:
+#     # http://refspecs.linuxbase.org/LSB_4.1.0/LSB-Core-generic/LSB-Core-generic/useradd.html
+# 
+#     args = []
+#     if comment:
+#         args.append('-c %s' % quote(comment))
+#     if home:
+#         args.append('-d %s' % quote(home))
+#     if group:
+#         args.append('-g %s' % quote(group))
+#         if create_group:
+#             if not _group_exists(group):
+#                 _group_create(group)
+#     if extra_groups:
+#         groups = ','.join(quote(group) for group in extra_groups)
+#         args.append('-G %s' % groups)
+# 
+#     if create_home is None:
+#         create_home = not system
+#     if create_home is True:
+#         args.append('-m')
+#     elif create_home is False:
+#         args.append('-M')
+# 
+#     if skeleton_dir:
+#         args.append('-k %s' % quote(skeleton_dir))
+#     if password:
+#         crypted_password = _crypt_password(password)
+#         args.append('-p %s' % quote(crypted_password))
+#     if system:
+#         args.append('-r')
+#     if shell:
+#         args.append('-s %s' % quote(shell))
+#     if uid:
+#         args.append('-u %s' % uid)
+#         if non_unique:
+#             args.append('-o')
+#     args.append(name)
+#     args = ' '.join(args)
+#     run_as_root('useradd %s' % args)
+# 
+#     if ssh_public_keys:
+#         if isinstance(ssh_public_keys, basestring):
+#             ssh_public_keys = [ssh_public_keys]
+#         add_ssh_public_keys(name, ssh_public_keys)
 
 
 def modify(name, comment=None, home=None, move_current_home=False, group=None,
@@ -531,13 +531,14 @@ class UserSatchel(Satchel):
         return r.env.key_filename
     
     @task
-    def create(self, username):
+    def create(self, username, groups=None):
         """
         Creates a user with the given username.
         """
         r = self.local_renderer
         r.env.username = username
-        r.sudo('adduser {username}')
+        r.env.groups = groups
+        r.sudo('adduser {username} {groups} || true')
     
     @task
     def expire_password(self, username):

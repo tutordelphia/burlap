@@ -56,7 +56,7 @@ class TestPostgresCreateUser(unittest.TestCase):
 
     @mock.patch('burlap.postgres._run_as_pg')
     def test_create_user_with_no_options(self, _run_as_pg):
-        from burlap import postgres
+        from burlap import postgresql
         postgres.create_user('foo', 'bar')
         expected = (
             'psql -c "CREATE USER foo NOSUPERUSER NOCREATEDB NOCREATEROLE '
@@ -65,7 +65,7 @@ class TestPostgresCreateUser(unittest.TestCase):
 
     @mock.patch('burlap.postgres._run_as_pg')
     def test_create_user_with_no_connection_limit(self, _run_as_pg):
-        from burlap import postgres
+        from burlap import postgresql
         postgres.create_user('foo', 'bar', connection_limit=-1)
         expected = (
             'psql -c "CREATE USER foo NOSUPERUSER NOCREATEDB NOCREATEROLE '
@@ -74,7 +74,7 @@ class TestPostgresCreateUser(unittest.TestCase):
 
     @mock.patch('burlap.postgres._run_as_pg')
     def test_create_user_with_custom_options(self, _run_as_pg):
-        from burlap import postgres
+        from burlap import postgresql
         postgres.create_user('foo', 'bar', superuser=True, createdb=True,
                              createrole=True, inherit=False, login=False,
                              connection_limit=20, encrypted_password=True)

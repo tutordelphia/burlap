@@ -509,6 +509,8 @@ class Satchel(object):
         
         self.files = files
         
+        self._local_renderer = None
+        
         self.settings = settings
         
         _prefix = '%s_enabled' % self.name
@@ -593,7 +595,19 @@ class Satchel(object):
     
     @property
     def local_renderer(self):
-        return LocalRenderer(self)
+        """
+        Retrieves the cached local renderer.
+        """
+        if not self._local_renderer:
+            r = LocalRenderer(self)
+            self._local_renderer = r
+        return self._local_renderer
+    
+    def clear_local_renderer(self):
+        """
+        Deletes the cached local renderer.
+        """
+        self._local_renderer = None
     
     @property
     def global_renderer(self):
@@ -619,9 +633,14 @@ class Satchel(object):
 #         print('self.genv.services:', self.genv.services)
 #         print('self.name.lower():', self.name.lower())
         return self.name.lower() in self.genv.services
-    
-    def get_satchel(self, *args, **kwargs):
-        return get_satchel(*args, **kwargs)
+        
+    def get_satchel(self, name):
+#         try:
+        return get_satchel(name)
+#         except KeyError:
+#             module = importlib.import_module("burlap.%s" % name)
+#             if hasattr(module, name):
+#                 return getattr(module, name)
     
     def define_cron_job(self, template, script_path, command=None, name='default', perms='600'):
         if 'cron' not in self.env:
@@ -1914,7 +1933,7 @@ def find_template(template):
     final_fqfn = None
     for path in get_template_dirs():
         if verbose:
-            print('Checking: %s' % path)
+            print('Checking "%s" for "%s"...' % (path, template))
         fqfn = os.path.abspath(os.path.join(path, template))
         if os.path.isfile(fqfn):
             if verbose:
