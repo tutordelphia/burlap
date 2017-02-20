@@ -3,7 +3,7 @@ from __future__ import print_function
 import os
 import sys
  
-from setuptools import setup, find_packages, Command
+from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
 
 os.environ['BURLAP_NO_LOAD'] = '1'

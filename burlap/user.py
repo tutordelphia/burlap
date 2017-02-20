@@ -1,7 +1,7 @@
 from __future__ import print_function
 
 import os
-    from pipes import quote
+from pipes import quote
 import posixpath
 import random
 import string
