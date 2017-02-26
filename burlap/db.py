@@ -96,8 +96,9 @@ class DatabaseSatchel(ServiceSatchel):
             pass
         
         # Check the new password location.
-        key = r.env.db_host
-#         print('root login key:', key)
+        key = r.env.get('db_host')
+        if self.verbose:
+            print('root login key:', key)
 #         print('r.env.root_logins:', r.env.root_logins)
         if key in r.env.root_logins:
             data = r.env.root_logins[key]
@@ -109,8 +110,7 @@ class DatabaseSatchel(ServiceSatchel):
                 r.env.db_root_password = data['password']
                 r.genv.db_root_password = data['password']
         else:
-            msg = 'Warning: No root login entry found for host %s in role %s.' \
-                % (r.env.db_host, self.genv.ROLE)
+            msg = 'Warning: No root login entry found for host %s in role %s.' % (r.env.get('db_host'), self.genv.get('ROLE'))
             print(msg, file=sys.stderr)
             #warnings.warn(msg, UserWarning)
 
@@ -131,7 +131,7 @@ class DatabaseSatchel(ServiceSatchel):
             
             d = type(self.genv)(self.lenv)
             d.update(self.get_database_defaults())
-            d.update(self.env.databases[name])
+            d.update(self.env.databases.get(name, {}))
             d['db_name'] = name
             
             if d.connection_handler == CONNECTION_HANDLER_DJANGO:

@@ -20,6 +20,9 @@ from burlap.db import DatabaseSatchel
 from burlap.decorators import task
 from burlap.utils import run_as_root
 
+MYSQLD_SAFE = 'mysqld_safe'
+MYSQLADMIN = 'mysqladmin'
+DPKG = 'dpkg'
 
 class MySQLSatchel(DatabaseSatchel):
     
@@ -85,7 +88,11 @@ class MySQLSatchel(DatabaseSatchel):
         
     @task
     def execute(self, sql, name='default', site=None, **kwargs):
-        raise NotImplementedError
+        r = self.database_renderer(name=name, site=site)
+        r.env.user = kwargs.pop('user', r.env.db_root_username)
+        r.env.password = kwargs.pop('password', r.env.db_root_password)
+        r.env.sql = sql
+        r.run("mysql --user={user} -p'{db_root_password}' --execute='{sql}'")
         
     @task
     def set_collation(self, name=None, site=None):
@@ -114,7 +121,7 @@ class MySQLSatchel(DatabaseSatchel):
         self.prep_root_password()
         
     @task
-    def prep_root_password(self, **kwargs):
+    def prep_root_password(self, password=None, **kwargs):
         """
         Enters the root password prompt entries into the debconf cache
         so we can set them without user interaction.
@@ -124,9 +131,10 @@ class MySQLSatchel(DatabaseSatchel):
         for a root login.
         """
         r = self.database_renderer(**kwargs)
+        r.env.root_password = password or r.genv.db_root_password
         r.sudo("dpkg --configure -a")
-        r.sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password password {db_root_password}'")
-        r.sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password {db_root_password}'")
+        r.sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password password {root_password}'")
+        r.sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password {root_password}'")
     
     @task
     def get_mysql_version(self):
@@ -139,37 +147,64 @@ class MySQLSatchel(DatabaseSatchel):
         assert not ret
     
     @task
-    def set_root_password(self, **kwargs):
+    def set_root_password(self, password=None, method=None, **kwargs):
+        method = MYSQLD_SAFE#|'mysqladmin'#|'mysqld_safe'|'dpkg'
         v = self.get_mysql_version()
         v = tuple(map(int, v.split('.')))
         self.vprint('mysql version:', v)
-        if v < (5, 7):
+        if method == MYSQLADMIN:
+            r = self.database_renderer(**kwargs)
+            r.env.root_password = password or r.env.db_root_password
+            r.sudo('mysqladmin -u root password {root_password}')
+        elif method == DPKG:
             # This no longer prompts to set root password with >= 5.7.
             self.prep_root_password(**kwargs)
             r = self.database_renderer(**kwargs)
             r.sudo("dpkg-reconfigure -fnoninteractive `dpkg --list | egrep -o 'mysql-server-([0-9.]+)'`")
-        else:
+        elif method == MYSQLD_SAFE:
             #https://dev.mysql.com/doc/refman/5.7/en/resetting-permissions.html
             r = self.database_renderer(**kwargs)
+            r.env.root_password = password or r.env.db_root_password
             
             # Confirm server stopped.
             self.stop()
             self.assert_mysql_stopped()
-            r.sudo('rm -Rf /var/lib/mysql/mysqld_safe.pid')
+            #r.sudo('mysqladmin shutdown')
             
-            r.sudo('mkdir -p /var/run/mysqld; chown mysql /var/run/mysqld; mysqld_safe --skip-grant-tables &')
-            r.run('sleep 10')
-            r.run('mysql --execute="FLUSH PRIVILEGES; ALTER USER \'root\'@\'localhost\' IDENTIFIED BY \'{db_root_password}\'; FLUSH PRIVILEGES;"')
+            r.sudo('mkdir -p /var/run/mysqld')
+            r.sudo('chown mysql /var/run/mysqld')
+            
+            # Note we have to use pty=False here, otherwise, even with nohup, the process gets killed as soon as the sudo call exits.
+            # http://stackoverflow.com/a/27600071/247542
+            r.sudo('nohup mysqld_safe --skip-grant-tables &> /tmp/mysqld_safe.log < /dev/null &', pty=False)
+            
+            running = False
+            for _wait in range(10):
+                r.run('sleep 1')
+                with self.settings(warn_only=True):
+                    ret = (r.run('ps aux|grep -i mysql|grep -v grep|grep -v vagrant') or '').strip()
+                if len(ret):
+                    running = True
+                    break
+            if not running and not self.dryrun:
+                raise Exception('Could not launch mysqld_safe.')
+            r.run('sleep 5')
+            r.run("mysql -uroot --execute=\""
+                "use mysql; "
+                "update user set authentication_string=PASSWORD('{root_password}') where User='root'; "
+                "flush privileges;\"")
             
             # Signal server to stop.
-            r.sudo("kill `sudo cat /var/run/mysqld/mysqld.pid`")
+            # Note, `sudo service mysql stop` and `sudo /etc/init.d/mysql stop` and `mysqladmin shutdown` don't seem to work with mysqld_safe.
+            r.sudo("[ -f /var/run/mysqld/mysqld.pid ] && kill `sudo cat /var/run/mysqld/mysqld.pid` || true")
             
             # Confirm server stopped.
-            r.run('sleep 5')
+            r.run('sleep 10')
             self.assert_mysql_stopped()
-            r.sudo('rm -Rf /var/lib/mysql/mysqld_safe.pid')
             
             self.start()
+        else:
+            raise NotImplementedError('Unknowne method: %s' % method)
         
     @task
     def dumpload(self, site=None, role=None):

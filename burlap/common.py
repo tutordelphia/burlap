@@ -895,9 +895,9 @@ class Satchel(object):
         if package_list:
             package_list_str = ' '.join(package_list)
             if os_version.distro == UBUNTU:
-                self.sudo('apt-get update --fix-missing; apt-get install --yes %s' % package_list_str)
+                self.sudo('apt-get update --fix-missing; DEBIAN_FRONTEND=noninteractive apt-get install --yes %s' % package_list_str)
             elif os_version.distro == DEBIAN:
-                self.sudo('apt-get update --fix-missing; apt-get install --yes %s' % package_list_str)
+                self.sudo('apt-get update --fix-missing; DEBIAN_FRONTEND=noninteractive apt-get install --yes %s' % package_list_str)
             elif os_version.distro == FEDORA:
                 self.sudo('yum install --assumeyes %s' % package_list_str)
             else:

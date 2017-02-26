@@ -59,6 +59,7 @@ def setup_package():
             _stop_vagrant_machine()
         _fix_home_directory()
         _init_vagrant_machine(vagrant_box)
+#         with settings(warn_only=True):
         _start_vagrant_machine(vagrant_provider)
         _target_vagrant_machine()
         _set_optional_http_proxy()
@@ -89,7 +90,7 @@ def _allow_fabric_to_access_the_real_stdin():
 
 
 def _fix_home_directory():
-    local('sudo chown -R `whoami`:`whoami` ~/.vagrant.d')
+    local("[ `whoami` != `stat -c '%U' ~/.vagrant.d` ] && sudo chown -R `whoami`:`whoami` ~/.vagrant.d || true")
 
 
 def _init_vagrant_machine(base_box):
@@ -117,14 +118,21 @@ end
 
 
 def _start_vagrant_machine(provider):
+    print('Starting vagrant with provider %s.' % provider)
     if provider:
         options = ' --provider %s' % quote(provider)
     else:
         options = ''
     with lcd(HERE):
-#         with settings(hide('stdout')):
-#             local('vagrant up' + options)
-        local('vagrant up' + options)
+        with settings(warn_only=True):
+            ret = local('vagrant up' + options)
+            print('ret.return_code:', ret.return_code)
+            if ret.return_code:
+                # Vagrant is in an inconsistent state, probably because the VM was deleted outside of Vagrant
+                # but Vagrant still has the VM's config laying around.
+                # So destroy any existing config and re-try.
+                _stop_vagrant_machine()
+                local('vagrant up' + options)
         #local('export VAGRANT_LOG=DEBUG; vagrant up' + options)
 
 
