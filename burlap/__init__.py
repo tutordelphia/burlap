@@ -67,7 +67,7 @@ except (ImportError, NameError) as e:
     print('Unable to initialize debug: %s' % e, file=sys.stderr)
     debug = None
 
-VERSION = (0, 9, 3)
+VERSION = (0, 9, 4)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -145,7 +145,7 @@ def _get_environ_handler(name, d):
         # Dynamically retrieve hosts.
         if env.hosts_retriever:
             if verbose:
-                print('Building host list...')
+                print('Building host list with retriever %s...' % env.hosts_retriever)
             env.hosts = list(retriever(site=site))
             if verbose:
                 print('Found hosts:')

@@ -15,38 +15,9 @@ from burlap import Satchel, ServiceSatchel
 from burlap.constants import *
 from burlap.decorators import task
 
-RABBITMQ = 'rabbitmq'
-
-class RabbitMQBleedingSatchel(Satchel):
-
-    name = 'rabbitmqbleeding'
-    
-    @task
-    def configure(self):
-        """
-        Enables the repository for a most current version on Debian systems.
-        
-            https://www.rabbitmq.com/install-debian.html
-        """
-        r = self.local_renderer
-        
-#         r.sudo("echo 'deb http://www.rabbitmq.com/debian/ testing main' >> /etc/apt/sources.list")
-        r.append(
-            text='deb http://www.rabbitmq.com/debian/ testing main',
-            filename='/etc/apt/sources.list.d/rabbitmq.list',
-            use_sudo=True)
-        #r.sudo("echo 'deb http://www.rabbitmq.com/debian/ testing main' >> /etc/apt/sources.list.d/rabbitmq.list")
-#         r.sudo('cd /tmp; '
-#             'wget https://www.rabbitmq.com/rabbitmq-signing-key-public.asc; '
-#             'apt-key add rabbitmq-signing-key-public.asc')
-        r.sudo('cd /tmp; wget -O- https://www.rabbitmq.com/rabbitmq-release-signing-key.asc | sudo apt-key add -')
-        r.sudo('apt-get update')
-    
-    configure.deploy_before = ['packager', 'rabbitmq']
-    
 class RabbitMQSatchel(ServiceSatchel):
     
-    name = RABBITMQ
+    name = 'rabbitmq'
     
     ## Service options.
     
@@ -81,6 +52,9 @@ class RabbitMQSatchel(ServiceSatchel):
         self.env.management_enabled = False
         self.env.loopback_users = False
         self.env.admin_username = 'admin'
+        
+        # If true, enables a third-party reposistory to install the most recent version.
+        self.env.bleeding = False
             
         self.env.service_commands = {
             START:{
@@ -109,20 +83,34 @@ class RabbitMQSatchel(ServiceSatchel):
             },
         }
     
+    @task
+    def configure_bleeding(self):
+        """
+        Enables the repository for a most current version on Debian systems.
+        
+            https://www.rabbitmq.com/install-debian.html
+        """
+        lm = self.last_manifest
+        r = self.local_renderer
+        if self.env.bleeding and not lm.bleeding:
+            # Install.
+            r.append(
+                text='deb http://www.rabbitmq.com/debian/ testing main',
+                filename='/etc/apt/sources.list.d/rabbitmq.list',
+                use_sudo=True)
+            r.sudo('cd /tmp; wget -O- https://www.rabbitmq.com/rabbitmq-release-signing-key.asc | sudo apt-key add -')
+            r.sudo('apt-get update')
+            
+        elif not self.env.bleeding and lm.bleeding:
+            # Uninstall.
+            r.sudo('rm -f /etc/apt/sources.list.d/rabbitmq.list')
+            r.sudo('apt-get update')
+    
     def render_paths(self):
         from burlap.dj import render_remote_paths
         render_remote_paths()
         if self.env.erlang_cookie_template:
-            self.env.erlang_cookie = self.env.erlang_cookie_template % self.genv    
-    
-    def record_manifest(self):
-        """
-        Returns a dictionary representing a serialized state of the service.
-        """
-        data = super(RabbitMQSatchel, self).record_manifest()
-        vhosts = self.configure(only_data=1)
-        data['rabbitmq_all_site_vhosts'] = vhosts
-        return data
+            self.env.erlang_cookie = self.env.erlang_cookie_template % self.genv
     
     @task
     def list_vhosts(self):
@@ -144,9 +132,11 @@ class RabbitMQSatchel(ServiceSatchel):
         
     @task
     def create_user(self, username, password):
-        self.genv._rabbitmq_user = username
-        self.genv._rabbitmq_password = password
-        self.sudo('rabbitmqctl add_user %(_rabbitmq_user)s %(_rabbitmq_password)s' % self.genv)
+        r = self.local_renderer
+        r.env._user = username
+        r.env._password = password
+        with self.settings(warn_only=True):
+            r.sudo('rabbitmqctl add_user {_user} {_password}')
 
     @task
     def force_stop_and_purge(self):
@@ -167,7 +157,8 @@ class RabbitMQSatchel(ServiceSatchel):
     @task
     def add_admin_user(self):
         r = self.local_renderer
-        r.sudo('rabbitmqctl add_user {admin_username} {admin_password}')
+        with self.settings(warn_only=True):
+            r.sudo('rabbitmqctl add_user {admin_username} {admin_password}')
         r.sudo('rabbitmqctl set_user_tags {admin_username} administrator')
         r.sudo('rabbitmqctl set_permissions -p / {admin_username} ".*" ".*" ".*"')
 
@@ -175,7 +166,7 @@ class RabbitMQSatchel(ServiceSatchel):
     def enable_management_interface(self):
         r = self.local_renderer
         r.sudo('rabbitmq-plugins enable rabbitmq_management')
-        r.sudo('service rabbitmq-server restart')
+        r.sudo('service rabbitmq-server restart; sleep 3')
         self.add_admin_user()
         print('You should now be able to access the RabbitMQ web console from:')
         print('\n    http://%s:15672/' % self.genv.host_string)
@@ -184,14 +175,41 @@ class RabbitMQSatchel(ServiceSatchel):
     def set_loopback_users(self):
         # This allows guest to login through the management interface.
         self.sudo('touch /etc/rabbitmq/rabbitmq.config')
-        self.sudo("echo '[{rabbit, [{loopback_users, []}]}].' >> /etc/rabbitmq/rabbitmq.config")
-        self.sudo('service rabbitmq-server restart')
+        #self.sudo("echo '[{rabbit, [{loopback_users, []}]}].' >> /etc/rabbitmq/rabbitmq.config")
+        self.append(filename='/etc/rabbitmq/rabbitmq.config', text='[{rabbit, [{loopback_users, []}]}].', use_sudo=True)
+        with self.settings(warn_only=True):
+            self.sudo('service rabbitmq-server restart; sleep 3;')
+    
+    def get_user_vhosts(self, site=None):
+        #TODO:remove django hardcoding
+        from burlap.dj import get_settings
+        params = set() # [(user, password, vhost)]
+        for site, site_data in self.iter_sites(site=site, renderer=self.render_paths, no_secure=True):
+            if self.verbose:
+                print('!'*80, file=sys.stderr)
+                print('site:', site, file=sys.stderr)
+                
+            # Only load site configurations that are allowed for this host.
+#             if target_sites is not None:
+#                 assert isinstance(target_sites, (tuple, list))
+#                 if site not in target_sites:
+#                     continue
+                
+            _settings = get_settings(site=site)
+            if not _settings:
+                continue
+                
+            if hasattr(_settings, 'BROKER_USER') and hasattr(_settings, 'BROKER_VHOST'):
+                if self.verbose:
+                    print('RabbitMQ:', _settings.BROKER_USER, _settings.BROKER_VHOST)
+                params.add((_settings.BROKER_USER, _settings.BROKER_PASSWORD, _settings.BROKER_VHOST))
+                
+        return params
     
     def _configure(self, site=None, full=0, only_data=0):
         """
         Installs and configures RabbitMQ.
         """
-        from burlap.dj import get_settings
         from burlap import packager
         from burlap.common import get_current_hostname, iter_sites
         
@@ -203,33 +221,14 @@ class RabbitMQSatchel(ServiceSatchel):
         
         #render_paths()
         
-        hostname = get_current_hostname()
-        
-        target_sites = self.genv.available_sites_by_host.get(hostname, None)
+#         hostname = get_current_hostname()
+#         
+#         target_sites = self.genv.available_sites_by_host.get(hostname, None)
         
         r = self.local_renderer
         
-        params = set() # [(user,vhost)]
-        for site, site_data in iter_sites(site=site, renderer=self.render_paths, no_secure=True):
-            if self.verbose:
-                print('!'*80, file=sys.stderr)
-                print('site:', site, file=sys.stderr)
-                
-            # Only load site configurations that are allowed for this host.
-            if target_sites is not None:
-                assert isinstance(target_sites, (tuple, list))
-                if site not in target_sites:
-                    continue
-                
-            _settings = get_settings(site=site)
-            #print '_settings:',_settings
-            if not _settings:
-                continue
-            if hasattr(_settings, 'BROKER_USER') and hasattr(_settings, 'BROKER_VHOST'):
-                if self.verbose:
-                    print('RabbitMQ:', _settings.BROKER_USER, _settings.BROKER_VHOST)
-                params.add((_settings.BROKER_USER, _settings.BROKER_PASSWORD, _settings.BROKER_VHOST))
-        
+        params = self.get_user_vhosts(site=site) # [(user, password, vhost)]
+
         with settings(warn_only=True):
             self.add_admin_user()
         
@@ -245,35 +244,30 @@ class RabbitMQSatchel(ServiceSatchel):
                     r.sudo('rabbitmqctl set_permissions -p {broker_vhost} {broker_user} ".*" ".*" ".*"')
                     r.sudo('rabbitmqctl set_permissions -p {broker_vhost} {admin_username} ".*" ".*" ".*"')
                     
-        return params
+        return params    
     
-    @task
-    def configure(self, last=None, current=None, site=None, **kwargs):
-        
-        RABBITMQ = self.name.upper()
-        
-        print('install_packages')
-        self.install_packages()
-        
-        last = last or {}
-        if RABBITMQ in last:
-            last = last[RABBITMQ]
-        
-        current = current or {}
-        if RABBITMQ in current:
-            current = current[RABBITMQ]
-        
-        if last.get('rabbitmq_management_enabled') != current.get('rabbitmq_management_enabled'):
+    def record_manifest(self):
+        """
+        Returns a dictionary representing a serialized state of the service.
+        """
+        data = super(RabbitMQSatchel, self).record_manifest()
+        params = sorted(list(self.get_user_vhosts())) # [(user, password, vhost)]
+        data['rabbitmq_all_site_vhosts'] = params
+        return data
+    
+    @task(precursors=['packager', 'user'])
+    def configure(self, site=None, **kwargs):
+        lm = self.last_manifest
+
+        if self.env.management_enabled != lm.management_enabled:
             self.enable_management_interface()
         
-        if last.get('rabbitmq_loopback_users') != current.get('rabbitmq_loopback_users'):
+        if self.env.loopback_users != lm.loopback_users:
             self.set_loopback_users()
+        
+        self.configure_bleeding()
         
         kwargs['site'] = site or ALL
         return self._configure(**kwargs)
-    
-    configure.deploy_before = ['packager', 'user']
-    configure.takes_diff = True
-    
-RabbitMQSatchel()
-RabbitMQBleedingSatchel()
+
+rabbitmq = RabbitMQSatchel()

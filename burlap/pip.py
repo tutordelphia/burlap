@@ -46,7 +46,7 @@ class PIPSatchel(Satchel):
         self.env.check_permissions = True
         self.env.user = 'www-data'
         self.env.group = 'www-data'
-        self.env.chmod = '775'
+        self.env.perms = '775'
         self.env.virtualenv_dir = '.env'
         self.env.requirements = 'requirements.txt'
 
@@ -153,22 +153,23 @@ class PIPSatchel(Satchel):
         requirements = requirements or self.env.requirements
         
         def iter_lines(fn):
-            if fn:
-                with open(fn, 'r') as fin:
-                    for line in fin.readlines():
-                        line = line.strip()
-                        if not line or line.startswith('#'):
-                            continue
-                        yield line
+            with open(fn, 'r') as fin:
+                for line in fin.readlines():
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    yield line
         
         content = []
         if isinstance(requirements, (tuple, list)):
-            for path in requirements:
-                content.extend(list(iter_lines(path)))
+            for f in requirements:
+                f = self.find_template(f)
+                content.extend(list(iter_lines(f)))
         else:
             assert isinstance(requirements, basestring)
             f = self.find_template(requirements)
             content.extend(list(iter_lines(f)))
+        
         return '\n'.join(content)
     
     @task
@@ -184,7 +185,6 @@ class PIPSatchel(Satchel):
         ]
         for option in options:
             setattr(r.env, option, kwargs.pop(option, None) or getattr(r.env, option))
-        print('req:', r.env.requirements)
         
         # Make sure pip is installed.
         self.bootstrap()
@@ -224,13 +224,12 @@ class PIPSatchel(Satchel):
         for a future deployment.
         """
         manifest = super(PIPSatchel, self).record_manifest()
-        print('pip.manifest:', manifest)
         manifest['all-requirements'] = self.get_combined_requirements()
         if self.verbose:
             pprint(manifest, indent=4)
         return manifest
     
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self, *args, **kwargs):
         
         # Necessary to make warning message go away.
@@ -238,7 +237,5 @@ class PIPSatchel(Satchel):
         self.genv['sudo_prefix'] += '-H '
         
         self.update_install(*args, **kwargs)
-    
-    configure.deploy_before = ['packager', 'user']
         
 pip = PIPSatchel()

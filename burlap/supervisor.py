@@ -20,54 +20,54 @@ from burlap import ServiceSatchel
 from burlap.utils import run_as_root
 from burlap.decorators import task
 
-def reload_config():
-    """
-    Reload supervisor configuration.
-    """
-    run_as_root("supervisorctl reload")
-
-
-def update_config():
-    """
-    Reread and update supervisor job configurations.
-
-    Less heavy-handed than a full reload, as it doesn't restart the
-    backend supervisor process and all managed processes.
-    """
-    run_as_root("supervisorctl update")
-
-
-def process_status(name):
-    """
-    Get the status of a supervisor process.
-    """
-    with settings(hide('running', 'stdout', 'stderr', 'warnings'), warn_only=True):
-        res = run_as_root("supervisorctl status %(name)s" % locals())
-        if res.startswith("No such process"):
-            return None
-        else:
-            return res.split()[1]
-
-
-def start_process(name):
-    """
-    Start a supervisor process
-    """
-    run_as_root("supervisorctl start %(name)s" % locals())
-
-
-def stop_process(name):
-    """
-    Stop a supervisor process
-    """
-    run_as_root("supervisorctl stop %(name)s" % locals())
-
-
-def restart_process(name):
-    """
-    Restart a supervisor process
-    """
-    run_as_root("supervisorctl restart %(name)s" % locals())
+# def reload_config():
+#     """
+#     Reload supervisor configuration.
+#     """
+#     run_as_root("supervisorctl reload")
+# 
+# 
+# def update_config():
+#     """
+#     Reread and update supervisor job configurations.
+# 
+#     Less heavy-handed than a full reload, as it doesn't restart the
+#     backend supervisor process and all managed processes.
+#     """
+#     run_as_root("supervisorctl update")
+# 
+# 
+# def process_status(name):
+#     """
+#     Get the status of a supervisor process.
+#     """
+#     with settings(hide('running', 'stdout', 'stderr', 'warnings'), warn_only=True):
+#         res = run_as_root("supervisorctl status {name}" % locals())
+#         if res.startswith("No such process"):
+#             return None
+#         else:
+#             return res.split()[1]
+# 
+# 
+# def start_process(name):
+#     """
+#     Start a supervisor process
+#     """
+#     run_as_root("supervisorctl start {name}" % locals())
+# 
+# 
+# def stop_process(name):
+#     """
+#     Stop a supervisor process
+#     """
+#     run_as_root("supervisorctl stop {name}" % locals())
+# 
+# 
+# def restart_process(name):
+#     """
+#     Restart a supervisor process
+#     """
+#     run_as_root("supervisorctl restart {name}" % locals())
 
 
 class SupervisorSatchel(ServiceSatchel):
@@ -92,12 +92,12 @@ class SupervisorSatchel(ServiceSatchel):
         self.env.config_path = '/etc/supervisor/supervisord.conf'
         #/etc/supervisor/conf.d/celery_
         self.env.conf_dir = '/etc/supervisor/conf.d'
-        self.env.daemon_bin_path_template = '%(pip_virtual_env_dir)s/bin/supervisord'
+        self.env.daemon_bin_path_template = '{pip_virtualenv_dir}/bin/supervisord'
         self.env.daemon_path = '/etc/init.d/supervisord'
-        self.env.bin_path_template = '%(pip_virtual_env_dir)s/bin'
+        self.env.bin_path_template = '{pip_virtualenv_dir}/bin'
         self.env.daemon_pid = '/var/run/supervisord.pid'
         self.env.log_path = "/var/log/supervisord.log"
-        self.env.supervisorctl_path_template = '%(pip_virtual_env_dir)s/bin/supervisorctl'
+        self.env.supervisorctl_path_template = '{pip_virtualenv_dir}/bin/supervisorctl'
         self.env.kill_pattern = ''
         self.env.max_restart_wait_minutes = 5
         
@@ -138,11 +138,10 @@ class SupervisorSatchel(ServiceSatchel):
         }
     
     def render_paths(self):
-        #from burlap.pip import render_paths as pip_render_paths
-        #pip_render_paths()
-        self.genv.supervisor_daemon_bin_path = self.genv.supervisor_daemon_bin_path_template % self.genv
-        self.genv.supervisor_bin_path = self.genv.supervisor_bin_path_template % self.genv
-        self.genv.supervisor_supervisorctl_path = self.genv.supervisor_supervisorctl_path_template % self.genv
+        r = self.local_renderer
+        r.env.daemon_bin_path = r.format(r.env.daemon_bin_path_template)
+        r.env.bin_path = r.format(r.env.bin_path_template)
+        r.env.supervisorctl_path = r.format(r.env.supervisorctl_path_template)
     
     def register_callback(self, f):
         self.genv._supervisor_create_service_callbacks.append(f)
@@ -189,7 +188,6 @@ class SupervisorSatchel(ServiceSatchel):
 
     @task
     def write_configs(self, site=None):
-        from burlap.common import iter_sites
         
         verbose = self.verbose
         
@@ -199,11 +197,11 @@ class SupervisorSatchel(ServiceSatchel):
         process_groups = []
         
         #TODO:check available_sites_by_host and remove dead?
-        for site, site_data in iter_sites(site=site, renderer=self.render_paths):
+        for site, site_data in self.iter_sites(site=site, renderer=self.render_paths):
             if verbose:
-                print(site)
+                print('write_configs.site:', site)
             for cb in self.genv._supervisor_create_service_callbacks:
-                ret = cb()
+                ret = cb(site=site)
                 if isinstance(ret, basestring):
                     supervisor_services.append(ret)
                 elif isinstance(ret, tuple):
@@ -228,15 +226,12 @@ class SupervisorSatchel(ServiceSatchel):
         Collects the configurations for all registered services and writes
         the appropriate supervisord.conf file.
         """
-        from burlap.common import get_current_hostname, iter_sites
         
         verbose = self.verbose
         
         r = self.local_renderer
-        
-        hostname = get_current_hostname()
-        
-        target_sites = self.genv.available_sites_by_host.get(hostname, None)
+#         
+#         target_sites = self.genv.available_sites_by_host.get(hostname, None)
         
         self.render_paths()
         
@@ -248,26 +243,28 @@ class SupervisorSatchel(ServiceSatchel):
         
         #TODO:check available_sites_by_host and remove dead?
         self.write_configs(site=site)
-        for site, site_data in iter_sites(site=site, renderer=self.render_paths):
+        for site, site_data in self.iter_sites(site=site, renderer=self.render_paths):
             if verbose:
-                print(site)
+                print('deploy_services.site:', site)
                 
             # Only load site configurations that are allowed for this host.
-            if target_sites is not None:
-                assert isinstance(target_sites, (tuple, list))
-                if site not in target_sites:
-                    continue
+#             if target_sites is not None:
+#                 assert isinstance(target_sites, (tuple, list))
+#                 if site not in target_sites:
+#                     continue
                 
             for cb in self.genv._supervisor_create_service_callbacks:
-                print('cb:', cb)
-                ret = cb()
-                print('ret:', ret)
+                if self.verbose:
+                    print('cb:', cb)
+                ret = cb(site=site)
+                if self.verbose:
+                    print('ret:', ret)
                 if isinstance(ret, basestring):
                     supervisor_services.append(ret)
                 elif isinstance(ret, tuple):
                     assert len(ret) == 2
                     conf_name, conf_content = ret
-                    print('conf_name:', conf_name)
+#                     print('conf_name:', conf_name)
 #                     print('conf_content:', conf_content)
                     remote_fn = os.path.join(self.env.conf_dir, conf_name)
                     local_fn = self.write_to_file(conf_content)
@@ -277,7 +274,7 @@ class SupervisorSatchel(ServiceSatchel):
         self.env.services_rendered = '\n'.join(supervisor_services)
     
         fn = self.render_to_file(self.env.config_template)
-        self.put_or_dryrun(local_path=fn, remote_path=self.env.config_path, use_sudo=True)
+        r.put(local_path=fn, remote_path=self.env.config_path, use_sudo=True)
         
         # We use supervisorctl to configure supervisor, but this will throw a uselessly vague
         # error message is supervisor isn't running.
@@ -293,7 +290,7 @@ class SupervisorSatchel(ServiceSatchel):
         #r.sudo('supervisorctl update')
         r.sudo('supervisorctl restart all')
     
-    @task
+    @task(precursors=['packager', 'user', 'rabbitmq'])
     def configure(self, **kwargs):
         kwargs['site'] = ALL
         
@@ -302,7 +299,5 @@ class SupervisorSatchel(ServiceSatchel):
 #             configure()
         
         self.deploy_services(**kwargs)
-    
-    configure.deploy_before = ['packager', 'user', 'rabbitmq']
         
 supervisor = SupervisorSatchel()

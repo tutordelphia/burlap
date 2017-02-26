@@ -10,6 +10,9 @@ from burlap.decorators import task
 class UnattendedUpgradesSatchel(Satchel):
     """
     Enables various degrees of automatic package download and installation.
+    
+    If you enable this satchel, it's highly encouraged you also enable and configure the postfix
+    satchel, or some other way to receive email updates, so you'll be informed of upgrades and scheduled reboots.
     """
     
     name = 'unattendedupgrades'
@@ -20,6 +23,8 @@ class UnattendedUpgradesSatchel(Satchel):
             UBUNTU: ['unattended-upgrades'],
             (UBUNTU, '12.04'): ['unattended-upgrades'],
             (UBUNTU, '14.04'): ['unattended-upgrades'],
+            (UBUNTU, '16.04'): ['unattended-upgrades'],
+            (UBUNTU, '16.14'): ['unattended-upgrades'],
             DEBIAN: ['unattended-upgrades'],
             RASPBIAN: ['unattended-upgrades'],
         }
@@ -28,6 +33,8 @@ class UnattendedUpgradesSatchel(Satchel):
         
         self.env.mail_to = 'root@localhost'
         self.env.reboot = 'true'
+        # This is relative to the system's timezone.
+        # e.g. If system time is EST than 2:00 will be interpreted as 2am EST.
         self.env.reboot_time = '02:00'
         self.env.mailonlyonerror = "true"
         
@@ -41,8 +48,7 @@ class UnattendedUpgradesSatchel(Satchel):
         
         os_version = self.os_version
         
-        assert os_version.distro in (DEBIAN, RASPBIAN, UBUNTU), \
-            'Unsupported OS: %s' % os_version.distro
+        assert os_version.distro in (DEBIAN, RASPBIAN, UBUNTU), 'Unsupported OS: %s' % os_version.distro
         
         r = self.local_renderer
         
@@ -56,9 +62,7 @@ class UnattendedUpgradesSatchel(Satchel):
             r.put(local_path=fn, remote_path='/etc/apt/apt.conf.d/10periodic', use_sudo=True)
             
         else:
-            #TODO:disable
-            pass
-    
+            self.purge_packages()
     
     configure.deploy_before = ['packager', 'user']
         

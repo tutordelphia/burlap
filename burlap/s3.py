@@ -197,5 +197,9 @@ class S3Satchel(Satchel):
         for name in sorted(sizes):
             print('%s,%s' % (name, sizes[name]))
         print('all,%s' % total_size_bytes)
+    
+    @task(precursors=['packager'])
+    def configure(self, *args, **kwargs):
+        pass
         
 s3 = S3Satchel()

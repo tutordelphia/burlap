@@ -31,6 +31,7 @@ class MySQLSatchel(DatabaseSatchel):
             FEDORA: ['mysql-server'],
             (UBUNTU, '12.04'): ['mysql-server', 'libmysqlclient-dev'],
             (UBUNTU, '14.04'): ['mysql-server', 'libmysqlclient-dev'],
+            (UBUNTU, '16.04'): ['mysql-server', 'libmysqlclient-dev'],
         }
     
     def set_defaults(self):
@@ -376,10 +377,9 @@ class MySQLClientSatchel(Satchel):
             (UBUNTU, '16.04'): ['libmysqlclient-dev', 'mysql-client'],
         }
         
-    @task
+    @task(precursors=['packager'])
     def configure(self, *args, **kwargs):
-        super(MySQLClientSatchel, self).configure(*args, **kwargs)
-    configure.deploy_before = ['packager']
+        pass
 
 mysql = MySQLSatchel()
 mysqlclient = MySQLClientSatchel()

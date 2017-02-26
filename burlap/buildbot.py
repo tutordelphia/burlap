@@ -222,6 +222,7 @@ class BuildBotSatchel(ServiceSatchel):
                 r.env.tmp_path = path
                 r.env.tmp_remote_path = os.path.split(path)[0]
 
+            r.pc('Fixing permissions...')
             r.sudo('chown -R {bb_user}:{bb_group} {project_dir}')
             r.sudo('chmod -R {perms} {project_dir}')
             r.local('rsync '

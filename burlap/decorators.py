@@ -41,6 +41,33 @@ def task_or_dryrun(*args, **kwargs):
 
     return wrapper if invoked else wrapper(func)
 
-def task(meth):
+def _task(meth):
     meth.is_task = True
     return meth
+
+def task(*args, **kwargs):
+    """
+    Decorator for registering a satchel method as a Fabric task.
+    
+    Can be used like:
+    
+        @task
+        def my_method(self):
+            ...
+            
+        @task(precursors=['other_satchel'])
+        def my_method(self):
+            ...
+
+    """
+    precursors = kwargs.pop('precursors', None)
+    if args and callable(args[0]):
+        # direct decoration, @task
+        return _task(*args)
+    else:
+        # callable decoration, @task(precursors=['satchel'])
+        def wrapper(meth):
+            if precursors:
+                meth.deploy_before = list(precursors)
+            return _task(meth)
+        return wrapper

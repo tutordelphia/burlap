@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import os
+import tempfile
 # import unittest
 
 # try:
@@ -89,4 +90,106 @@ set_by_include3: 'some special setting'
     assert config['overriden_by_include'] == 'xyz'
     assert config['overridden_by_local'] == 'hello world'
     assert config['set_by_include3'] == 'some special setting'
+
+def test_renderer():
+    from burlap.common import env, LocalRenderer, Satchel
     
+    class TestSatchel(Satchel):
+        
+        name = 'test'
+        
+    test = TestSatchel()
+    
+    # Confirm renderer is cached.
+    r1 = test.local_renderer
+    r2 = test.local_renderer
+    assert r1 is r2
+    
+    # Confirm clear method.
+    test.clear_local_renderer()
+    r3 = test.local_renderer
+    assert r1 is not r3
+    
+    r = r3
+    env.clear()
+    assert r.genv is env
+    
+    # Confirm local env var gets renderered.
+    r.env.var1 = 'a'
+    assert r.format('{var1}') == 'a'
+    
+    # Confirm global env var in local namespace gets rendered.
+    env.test_var2 = 'b'
+    assert r.format('{var2}') == 'b'
+    
+    # Confirm global env var in global namespace gets rendered.
+    env.test_var2 = 'b2'
+    assert r.format('{test_var2}') == 'b2'
+    
+    # Confirm global env var overridden in local namespace get rendered.
+    env.apache_var3 = '0'
+    r.env.apache_var3 = 'c'
+    assert r.format('{apache_var3}') == 'c'
+    
+    # Confirm recursive template variables get rendered.
+    r.env.some_template = '{target_value}'
+    r.env.target_value = 'd'
+    assert r.format('{some_template}') == 'd'
+    
+    class ApacheSatchel(Satchel):
+        
+        name = 'apache'
+        
+    apache = ApacheSatchel()
+    r = apache.local_renderer
+    r.env.application_name = 'someappname'
+    r.env.site = 'sitename'
+    r.env.wsgi_path = '/usr/local/{apache_application_name}/src/wsgi/{apache_site}.wsgi'
+    assert r.format(r.env.wsgi_path) == '/usr/local/someappname/src/wsgi/sitename.wsgi'
+
+def test_iter_sites():
+    from burlap.common import Satchel, env
+    
+    class TestSatchel(Satchel):
+        
+        name = 'test'
+        
+    test = TestSatchel()
+    
+    env.sites = {
+        'site1': {'apache_ssl': False},
+        'site2': {'apache_ssl': True},
+    }
+    
+    lst = list(test.iter_sites())
+    print('lst:', lst)
+    assert len(lst) == 2
+    
+    lst = list(test.iter_sites(site='site2'))
+    print('lst:', lst)
+    assert len(lst) == 1
+
+def test_append():
+    from burlap.common import Satchel
+    
+    class TestSatchel(Satchel):
+        
+        name = 'test'
+        
+    test = TestSatchel()
+    test.genv.host_string = 'localhost'
+    
+    _, fn = tempfile.mkstemp()
+    
+    text = '[{rabbit, [{loopback_users, []}]}].'
+    
+    test.append(filename=fn, text=text)
+    content = open(fn).read()
+    print('content0:', content)
+    assert content.count(text) == 1
+    
+    # Confirm duplicate lines are appended.
+    test.append(filename=fn, text=text)
+    content = open(fn).read()
+    print('content1:', content)
+    assert content.count(text) == 1

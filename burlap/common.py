@@ -17,7 +17,7 @@ import getpass
 import subprocess
 import uuid
 from collections import namedtuple, OrderedDict
-#from pprint import pprint
+from pprint import pprint
 #from datetime import date
 
 import yaml
@@ -282,6 +282,9 @@ class _EnvProxy(object):
         k = (self.satchel.env_prefix + k)
         return k in env
     
+    def __getitem__(self, k):
+        return getattr(self, k)
+    
     def __getattr__(self, k):
         if k in ('satchel',):
             return super(_EnvProxy, self).__getattr__(k)
@@ -305,7 +308,7 @@ def assert_valid_satchel(name):
 CMD_VAR_REGEX = re.compile(r'(?:^|[^{\\]+){([^{}]+)}')
 CMD_ESCAPED_VAR_REGEX = re.compile(r'\{{2}[^\{\}]+\}{2}')
 
-def format(s, lenv, genv): # pylint: disable=redefined-builtin
+def format(s, lenv, genv, prefix=None): # pylint: disable=redefined-builtin
 
     # Resolve all variable names.
     cnt = 0
@@ -324,9 +327,17 @@ def format(s, lenv, genv): # pylint: disable=redefined-builtin
         var_values = {}
         for var_name in var_names:
             if var_name in lenv:
+                # Find local variable name in local namespace.
                 var_values[var_name] = lenv[var_name]
             elif var_name in genv:
+                # Find prefixed variable in global namespace.
                 var_values[var_name] = genv[var_name]
+            elif prefix and prefix+'_'+var_name in genv:
+                # Find unprefixed variable in global namespace.
+                var_values[var_name] = genv[prefix+'_'+var_name]
+            elif prefix and var_name.startswith(prefix+'_') and var_name[len(prefix+'_'):] in lenv:
+                # Find prefixed variable in local namespace.
+                var_values[var_name] = lenv[var_name[len(prefix+'_'):]]
             else:
                 raise Exception((
                     'Command references variable "%s" which is not found '
@@ -356,7 +367,7 @@ class Renderer(object):
     
     env_type = None
     
-    def __init__(self, obj, lenv=None):
+    def __init__(self, obj, lenv=None, set_default=False):
         from fabric.context_managers import env
         
         # Satchel instance.
@@ -366,9 +377,12 @@ class Renderer(object):
         self.lenv = type(env)(obj.lenv if lenv is None else lenv)
         
         self.genv = env#type(env)(obj.genv)
+        
+        # If true, getattr will return None if no attribute set.
+        self._set_default = set_default
     
     def format(self, s):
-        return format(s, lenv=self.lenv, genv=self.genv)
+        return format(s, lenv=self.lenv, genv=self.genv, prefix=self.obj.name.lower())
     
     def __getattr__(self, attrname):
         
@@ -376,7 +390,7 @@ class Renderer(object):
         if attrname == 'env':
             attrname = self.env_type
         
-        if attrname in ('obj', 'lenv', 'genv', 'env_type'):
+        if attrname in ('obj', 'lenv', 'genv', 'env_type', '_set_default'):
             return super(LocalRenderer, self).__getattribute__(attrname)
         
         def wrap(func):
@@ -433,8 +447,19 @@ class Renderer(object):
                 return func(*args, **kwargs)
             
             return _wrap
-            
-        ret = getattr(self.obj, attrname)
+        
+        try:
+            ret = getattr(self.obj, attrname)
+        except AttributeError:
+            try:
+                return getattr(self.lenv, attrname)
+            except AttributeError:    
+                try:
+                    return getattr(self.genv, attrname)
+                except AttributeError:
+                    if self._set_default:
+                        return
+                    raise
         
         # If we're calling a command executor, wrap it so that it automatically formats
         # the command string using our preferred environment dictionary when called.
@@ -513,6 +538,8 @@ class Satchel(object):
         
         self._local_renderer = None
         
+        self._last_manifest = None
+        
         self.settings = settings
         
         _prefix = '%s_enabled' % self.name
@@ -563,6 +590,10 @@ class Satchel(object):
                     after=deployer.after,
                     takes_diff=deployer.takes_diff)
     
+    @property
+    def current_hostname(self):
+        return get_current_hostname()
+    
     def get_tasks(self):
         """
         Returns an ordered list of all task names.
@@ -595,13 +626,21 @@ class Satchel(object):
         for _task in self.get_tasks():
             print(_task)
     
+    def create_local_renderer(self):
+        """
+        Instantiates a new local renderer.
+        Override this to do any additional initialization.
+        """
+        r = LocalRenderer(self)
+        return r
+    
     @property
     def local_renderer(self):
         """
         Retrieves the cached local renderer.
         """
         if not self._local_renderer:
-            r = LocalRenderer(self)
+            r = self.create_local_renderer()
             self._local_renderer = r
         return self._local_renderer
     
@@ -629,6 +668,9 @@ class Satchel(object):
             for name, satchel in self.all_satchels.items()
             if name != self.name.upper() and name.lower() in map(str.lower, self.genv.services)
         )
+    
+    def iter_sites(self, *args, **kwargs):
+        return iter_sites(*args, **kwargs)
     
     @property
     def is_selected(self):
@@ -770,7 +812,30 @@ class Satchel(object):
     
     def install_script(self, *args, **kwargs):
         return install_script(*args, **kwargs)
-    
+
+    def set_site_specifics(self, site):
+        """
+        Loads settings for the target site.
+        """
+        r = self.local_renderer
+        site_data = self.genv.sites[site].copy()
+        r.env.site = site
+        if self.verbose:
+            print('set_site_specifics.data:')
+            pprint(site_data, indent=4)
+        
+        # Remove local namespace settings from the global namespace
+        # by converting <satchel_name>_<variable_name> to <variable_name>.
+        local_ns = {}
+        for k, v in site_data.items():
+            if k.startswith(self.name + '_'):
+                _k = k[len(self.name + '_'):]
+                local_ns[_k] = v
+                del site_data[k]
+        
+        r.env.update(local_ns)
+        r.env.update(site_data)
+
     def vprint(self, *args, **kwargs):
         """
         When verbose is set, acts like the normal print() function.
@@ -778,11 +843,10 @@ class Satchel(object):
         """
         if self.verbose:
             print(*args, **kwargs)
-    
-    def install_packages(self):
+
+    def get_package_list(self):
         """
-        Installs all required packages listed for this satchel.
-        Normally called indirectly by running packager.configure().
+        Returns a list of all required packages.
         """
         os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
         self.vprint('os_version:', os_version)
@@ -819,14 +883,23 @@ class Satchel(object):
         if not found:
             print('Warning: No operating system pattern found for %s' % (os_version,))
         self.vprint('package_list:', package_list)
+        return package_list
+    
+    def install_packages(self):
+        """
+        Installs all required packages listed for this satchel.
+        Normally called indirectly by running packager.configure().
+        """
+        os_version = self.os_version
+        package_list = self.get_package_list()
         if package_list:
             package_list_str = ' '.join(package_list)
             if os_version.distro == UBUNTU:
-                self.sudo_or_dryrun('apt-get update --fix-missing; apt-get install --yes %s' % package_list_str)
+                self.sudo('apt-get update --fix-missing; apt-get install --yes %s' % package_list_str)
             elif os_version.distro == DEBIAN:
-                self.sudo_or_dryrun('apt-get update --fix-missing; apt-get install --yes %s' % package_list_str)
+                self.sudo('apt-get update --fix-missing; apt-get install --yes %s' % package_list_str)
             elif os_version.distro == FEDORA:
-                self.sudo_or_dryrun('yum install --assumeyes %s' % package_list_str)
+                self.sudo('yum install --assumeyes %s' % package_list_str)
             else:
                 raise NotImplementedError('Unknown distro: %s' % os_version.distro)
     
@@ -945,7 +1018,10 @@ class Satchel(object):
             # Dereference brace notation. e.g. convert '{var}' to `env[var]`.
             if template and template.startswith('{') and template.endswith('}'):
                 template = self.env[template[1:-1]]
-            fqfn = self.find_template('%s/%s' % (self.name, template))
+            if template.startswith('%s/' % self.name):
+                fqfn = self.find_template(template)
+            else:
+                fqfn = self.find_template('%s/%s' % (self.name, template))
             assert fqfn, 'Unable to find template: %s/%s' % (self.name, template)
             manifest['_%s' % template] = get_file_hash(fqfn)
         
@@ -955,7 +1031,7 @@ class Satchel(object):
         """
         The standard method called to apply functionality when the manifest changes.
         """
-        #raise NotImplementedError
+        raise NotImplementedError
 
     # List of satchels that should be run before this one during deployments.
     configure.deploy_before = []
@@ -976,7 +1052,9 @@ class Satchel(object):
     @property
     def last_manifest(self):
         from burlap import manifest
-        return manifest.get_last(name=self.name)
+        if not self._last_manifest:
+            self._last_manifest = LocalRenderer(self, lenv=manifest.get_last(name=self.name), set_default=True)
+        return self._last_manifest
         
     @property
     def verbose(self):
@@ -1857,7 +1935,7 @@ def save_env():
 try:
     from django.conf import settings as _settings
     _settings.configure(TEMPLATE_DIRS=env.template_dirs)
-except ImportError:
+except (ImportError, RuntimeError):
     warnings.warn('Unable to import Django settings.', ImportWarning)
 
 def _put(**kwargs):
@@ -1948,9 +2026,10 @@ def find_template(template):
                 print('Using template: %s' % (fqfn,))
             final_fqfn = fqfn
             break
-#         else:
-#             if verbose:
-#                 print('Template not found: %s' % (fqfn,))
+            
+    if not final_fqfn:
+        raise IOError('Template not found: %s' % template)
+         
     return final_fqfn
 
 def get_template_contents(template):
@@ -1998,6 +2077,7 @@ def render_to_file(template, fn=None, extra=None, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
 #     replace_homedir = kwargs.pop('replace_homedir', False)
     append_newline = kwargs.pop('append_newline', True)
+    style = kwargs.pop('style', 'cat') # |echo
     content = render_to_string(template, extra=extra)
     if append_newline and not content.endswith('\n'):
         content += '\n'
@@ -2018,7 +2098,13 @@ def render_to_file(template, fn=None, extra=None, **kwargs):
         fout.close()
     assert fn
     
-    cmd = 'echo -e %s > %s' % (shellquote(content), fn)
+    if style == 'cat':
+        cmd = 'cat <<EOF > %s\n%s\nEOF' % (fn, content)
+    elif style == 'echo':
+        cmd = 'echo -e %s > %s' % (shellquote(content), fn)
+    else:
+        raise NotImplementedError
+
     if BURLAP_COMMAND_PREFIX:
         print('%s run: %s' % (render_command_prefix(), cmd))
     else:
@@ -2066,7 +2152,12 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
     """
     Iterates over sites, safely setting environment variables for each site.
     """
-    from burlap.dj import render_remote_paths
+    #from burlap.dj import render_remote_paths
+    
+    hostname = get_current_hostname()
+    
+    target_sites = env.available_sites_by_host.get(hostname, None)
+            
     if sites is None:
         site = site or env.SITE or ALL
         if site == ALL:
@@ -2075,15 +2166,25 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
             sys.stderr.flush()
             sites = [(site, env.sites.get(site))]
     
-    renderer = renderer or render_remote_paths
+    renderer = renderer #or render_remote_paths
     env_default = save_env()
     for site, site_data in sites:
         if no_secure and site.endswith('_secure'):
             continue
+
+        # Only load site configurations that are allowed for this host.
+        if target_sites is None:
+            pass
+        else:
+            assert isinstance(target_sites, (tuple, list))
+            if site not in target_sites:
+                continue
+
         env.update(env_default)
         env.update(env.sites.get(site, {}))
         env.SITE = site
-        renderer()
+        if callable(renderer):
+            renderer()
         if setter:
             setter(site)
         yield site, site_data

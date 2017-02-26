@@ -421,7 +421,11 @@ class TimezoneSatchel(Satchel):
     name = 'timezone'
     
     def set_defaults(self):
-        self.env.timezone = 'Etc/UTC'
+        self.env.timezone = 'UTC'
+    
+    @task
+    def get_current_timezone(self):
+        return (self.run('date +%Z') or self.env.timezone).strip()
     
     @task
     def configure(self):

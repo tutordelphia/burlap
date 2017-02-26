@@ -446,7 +446,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         print(v)
         return v
 
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self, *args, **kwargs):
         #TODO:set postgres user password?
         #https://help.ubuntu.com/community/PostgreSQL
@@ -457,7 +457,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         #\password postgres
         r = self.local_renderer
 
-        self.install_packages()
+        #self.install_packages()
 
         if r.env.apt_repo_enabled:
             self.configure_apt_repository()
@@ -504,8 +504,6 @@ class PostgreSQLSatchel(DatabaseSatchel):
 #            'UPDATE pg_database SET datallowconn = FALSE WHERE datname = \'template1\';"')
 
         r.sudo('service postgresql restart')
-
-    configure.deploy_before = ['packager', 'user']
     
 class PostgreSQLClientSatchel(Satchel):
 
@@ -539,6 +537,10 @@ class PostgreSQLClientSatchel(Satchel):
                 #'postgresql-server-dev-9.3',
             ],
         }
+        
+    @task(precursors=['packager'])
+    def configure(self, *args, **kwargs):
+        pass
 
 postgresql = PostgreSQLSatchel()
 PostgreSQLClientSatchel()

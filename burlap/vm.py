@@ -132,20 +132,20 @@ def get_all_running_ec2_instances():
 
 @task_or_dryrun
 #@runs_once #breaks get_or_create()
-def list_instances(show=1, name=None, group=None, release=None, except_release=None, verbose=0):
+def list_instances(show=1, name=None, group=None, release=None, except_release=None):
     """
     Retrieves all virtual machines instances in the current environment.
     """
-    from burlap.common import shelf, OrderedDict
+    from burlap.common import shelf, OrderedDict, get_verbose
     
-    verbose = int(verbose)
+    verbose = get_verbose()
     require('vm_type', 'vm_group')
     assert env.vm_type, 'No VM type specified.'
     env.vm_type = (env.vm_type or '').lower()
     _name = name
     _group = group
     _release = release
-    if verbose:
+    if verbose or 1:
         print('name=%s, group=%s, release=%s' % (_name, _group, _release))
         
     env.vm_elastic_ip_mappings = shelf.get('vm_elastic_ip_mappings')
@@ -156,25 +156,25 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
             name = instance.tags.get(env.vm_name_tag)
             group = instance.tags.get(env.vm_group_tag)
             release = instance.tags.get(env.vm_release_tag)
-            if env.vm_group and group and env.vm_group != group:
+            if env.vm_group and env.vm_group != group:
                 if verbose:
                     print(('Skipping instance %s because its group "%s" '
                         'does not match env.vm_group "%s".') \
                             % (instance.public_dns_name, group, env.vm_group))
                 continue
-            if _group and group and group != _group:
+            if _group and group != _group:
                 if verbose:
                     print(('Skipping instance %s because its group "%s" '
                         'does not match local group "%s".') \
                             % (instance.public_dns_name, group, _group))
                 continue
-            if _name and name and name != _name:
+            if _name and name != _name:
                 if verbose:
                     print(('Skipping instance %s because its name "%s" '
                         'does not match name "%s".') \
                             % (instance.public_dns_name, name, _name))
                 continue
-            if _release and release and release != _release:
+            if _release and release != _release:
                 if verbose:
                     print(('Skipping instance %s because its release "%s" '
                         'does not match release "%s".') \

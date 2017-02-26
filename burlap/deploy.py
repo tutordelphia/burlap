@@ -721,7 +721,7 @@ def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None
 #     print('manifest_data:', manifest_data.keys())
 #     print('only_components:', only_components)
 #     raw_input('enter')
-    for component_name, func in common.manifest_recorder.iteritems():
+    for component_name, func in sorted(common.manifest_recorder.iteritems()):
         component_name = component_name.upper()
         #print('component_name:', component_name)
         
@@ -1085,8 +1085,10 @@ def run(*args, **kwargs):
     
         components := name of satchel to limit deployment to
     """
-    from burlap import service, notifier
-    from burlap.common import all_satchels
+    from burlap import notifier
+    from burlap.common import all_satchels, get_satchel
+    
+    service = get_satchel('service')
     
     assume_yes = int(kwargs.pop('assume_yes', 0)) or int(kwargs.pop('yes', 0))
     fake = int(kwargs.get('fake', 0))

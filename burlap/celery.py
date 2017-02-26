@@ -8,213 +8,156 @@ run several instances of Celery for multiple Apache sites.
 from __future__ import print_function
 
 import os
+from pprint import pprint
 
-from fabric.api import (
-    env,
-    settings,
-)
+from burlap.constants import *
+from burlap import ServiceSatchel
+from burlap.decorators import task
 
-from burlap.common import (
-    sudo_or_dryrun,
-)
-from burlap.decorators import task_or_dryrun
-from burlap import common
-
-env.celery_config_path = '/etc/sysconfig/celeryd'
-#env.celery_daemon_opts = '--concurrency=1 --beat' # don't use --beat because it results in N workers all trying to run celerybeat, just run celerybeat via cron
-env.celery_daemon_opts = '--concurrency=1 --loglevel=DEBUG'
-env.celery_daemon_path = '/etc/init.d/celeryd'
-env.celery_log_path_template = '/var/log/celeryd-%(SITE)s.log'
-env.celery_celerybeat_log_path_template = '/var/log/celerybeat-%(SITE)s.log'
-#env.celery_celeryd_command = 'celery worker' # doesn't support --beat or --concurrency?
-env.celery_celeryd_command = 'celeryd'
-env.celery_has_worker = False
-env.celery_daemon_user = 'www-data'
-env.celery_numprocs = 1
-env.celery_force_stop_command = 'pkill -9 -f celery'
-env.celery_celeryd_command_template = ('%(celery_supervisor_python)s %(celery_supervisor_django_manage)s '
-    '%(celery_celeryd_command)s %(celery_daemon_opts)s')
-env.celery_supervisor_django_manage_template = '%(remote_app_src_package_dir)s/manage.py'
-env.celery_supervisor_directory_template = '/usr/local/myproject'
-
-env.celery_has_celerybeat = False
-env.celery_celerybeat_command = 'celerybeat'
-env.celery_paths_owned = ['/tmp/celerybeat-schedule*', '/var/log/celery*']
-env.celery_celerybeat_opts_template = ('--schedule=/tmp/celerybeat-schedule-%(SITE)s --pidfile=/tmp/celerybeat-%(SITE)s.pid '
-    '--logfile=%(celery_celerybeat_log_path)s --loglevel=DEBUG')
-env.celery_celerybeat_command_template = ('%(celery_supervisor_python)s %(celery_supervisor_django_manage)s '
-    '%(celery_celerybeat_command)s %(celery_celerybeat_opts)s')
-
-env.celery_service_commands = {
-    common.START:{
-        common.FEDORA: 'systemctl start celeryd.service',
-        common.UBUNTU: 'service celeryd start',
-    },
-    common.STOP:{
-        common.FEDORA: 'systemctl stop celery.service',
-        common.UBUNTU: 'service celeryd stop',
-    },
-    common.DISABLE:{
-        common.FEDORA: 'systemctl disable httpd.service',
-        common.UBUNTU: 'chkconfig celeryd off',
-    },
-    common.ENABLE:{
-        common.FEDORA: 'systemctl enable httpd.service',
-        common.UBUNTU: 'chkconfig celeryd on',
-    },
-    common.RESTART:{
-        common.FEDORA: 'systemctl stop celeryd.service; pkill -9 -f celery; systemctl start celeryd.service',
-        common.UBUNTU: 'service celeryd stop; pkill -9 -f celery; service celeryd start',
-    },
-    common.STATUS:{
-        common.FEDORA: 'systemctl status celeryd.service',
-        common.UBUNTU: 'service celeryd status',
-    },
-}
-
-CELERY = 'CELERY'
-
-common.required_system_packages[CELERY] = {
-#    common.FEDORA: ['rabbitmq-server'],
-#    (common.UBUNTU, '12.04'): ['rabbitmq-server'],
-}
-
-common.required_python_packages[CELERY] = {
-    common.FEDORA: ['celery', 'django-celery'],
-    common.UBUNTU: ['celery', 'django-celery'],
-}
-
-def render_paths():
-    #from burlap.pip import render_paths as pip_render_paths
+class CelerySatchel(ServiceSatchel):
     
-    #pip_render_paths()
+    name = 'celery'
     
-    env.celery_supervisor_directory = env.celery_supervisor_directory_template % env
-    env.celery_supervisor_remote_app_src_package_dir = env.remote_app_src_package_dir
-    env.celery_supervisor_django_manage = env.celery_supervisor_django_manage_template % env
-    env.celery_supervisor_python = os.path.join(env.pip_virtual_env_dir, 'bin', 'python')
-    
-#    if env.is_local:
-#        env.celery_supervisor_django_manage = \
-#            os.path.abspath(env.celery_supervisor_django_manage)
-#        env.celery_supervisor_remote_app_src_package_dir = \
-#            os.path.abspath(env.celery_supervisor_remote_app_src_package_dir)
-    
-    env.celery_log_path = env.celery_log_path_template % env
-    env.celery_celerybeat_log_path = env.celery_celerybeat_log_path_template % env
-    env.celery_celerybeat_opts = env.celery_celerybeat_opts_template % env
-    
-    env.celery_celeryd_command = env.celery_celeryd_command_template % env
-    env.celery_celerybeat_command = env.celery_celerybeat_command_template % env
-
-def create_supervisor_services():
-    from burlap.common import get_current_hostname
-    #print 'create_supervisor_services:',env.celery_has_worker
-    if not env.celery_has_worker:
-        return
-
-    hostname = get_current_hostname()
-    target_sites = env.available_sites_by_host.get(hostname, None)
-    if target_sites and env.SITE and env.SITE not in target_sites:
-        return
-
-    if CELERY.lower() not in env.services:
-        return
+    @property
+    def packager_system_packages(self):
+        return {
+            FEDORA: ['celery', 'django-celery'],
+            UBUNTU: ['celery', 'django-celery']
+        }
         
-    render_paths()
+    def set_defaults(self):
     
-    conf_name = 'celery_%s.conf' % env.SITE
-    ret = common.render_to_string('celery/celery_supervisor.template.conf')
-    #print ret
-    return conf_name, ret
+        self.env.config_path = '/etc/sysconfig/celeryd'
+        self.env.daemon_opts = '--concurrency=1 --loglevel=DEBUG'
+        self.env.daemon_path = '/etc/init.d/celeryd'
+        self.env.log_path_template = '/var/log/celeryd-%(SITE)s.log'
+        self.env.celerybeat_log_path_template = '/var/log/celerybeat-%(SITE)s.log'
+        self.env.celeryd_command = 'celeryd'
+        self.env.has_worker = False
+        self.env.daemon_user = 'www-data'
+        self.env.numprocs = 1
+        self.env.force_stop_command = 'pkill -9 -f celery'
+        self.env.celeryd_command_template = None
+        self.env.supervisor_directory_template = None#'/usr/local/myproject'
+        
+        #DEPRECATED
+        self.env.has_celerybeat = False
+        self.env.celerybeat_command = 'celerybeat'
+        self.env.paths_owned = ['/tmp/celerybeat-schedule*', '/var/log/celery*']
+        self.env.celerybeat_opts_template = ('--schedule=/tmp/celerybeat-schedule-%(SITE)s --pidfile=/tmp/celerybeat-%(SITE)s.pid '
+            '--logfile=%(celery_celerybeat_log_path)s --loglevel=DEBUG')
+        self.env.celerybeat_command_template = ('%(celery_supervisor_python)s %(celery_supervisor_django_manage)s '
+            '%(celery_celerybeat_command)s %(celery_celerybeat_opts)s')
+        
+        self.env.service_commands = {
+            START:{
+                FEDORA: 'systemctl start celeryd.service',
+                UBUNTU: 'service celeryd start',
+            },
+            STOP:{
+                FEDORA: 'systemctl stop celery.service',
+                UBUNTU: 'service celeryd stop',
+            },
+            DISABLE:{
+                FEDORA: 'systemctl disable httpd.service',
+                UBUNTU: 'chkconfig celeryd off',
+            },
+            ENABLE:{
+                FEDORA: 'systemctl enable httpd.service',
+                UBUNTU: 'chkconfig celeryd on',
+            },
+            RESTART:{
+                FEDORA: 'systemctl stop celeryd.service; pkill -9 -f celery; systemctl start celeryd.service',
+                UBUNTU: 'service celeryd stop; pkill -9 -f celery; service celeryd start',
+            },
+            STATUS:{
+                FEDORA: 'systemctl status celeryd.service',
+                UBUNTU: 'service celeryd status',
+            },
+        }
 
-def register_callbacks():
-    from burlap.supervisor import supervisor
-    supervisor.register_callback(create_supervisor_services)
+    @task
+    def purge(self):
+        """
+        Clears all pending tasks in the Celery queue.
+        """
+        self.render_paths()
+        r = self.local_renderer
+        r.sudo('export SITE={SITE}; export ROLE={ROLE}; {celery_supervisor_django_manage} celeryctl purge')
+    
+    @task
+    def force_stop(self):
+        """
+        Forcibly terminates all Celery processes.
+        """
+        r = self.local_renderer
+        with self.settings(warn_only=True):
+            r.sudo('pkill -9 -f celery')
+        r.sudo('rm -f /tmp/celery*.pid')
+    
+    @task
+    def set_permissions(self):
+        """
+        Sets ownership and permissions for Celery-related files.
+        """
+        r = self.local_renderer
+        for path in r.env.paths_owned:
+            r.env.path_owned = path
+            r.sudo('chown {celery_daemon_user}:{celery_daemon_user} {celery_path_owned}')
 
-env.post_callbacks.append(register_callbacks)
+    @task
+    def render_paths(self):
+        r = self.local_renderer
+        r.env.supervisor_directory = r.format(r.env.supervisor_directory_template)
+        r.env.celeryd_command = r.format(r.env.celeryd_command_template)
+        r.env.log_path = r.format(r.env.log_path_template)
+        
+    @task
+    def create_supervisor_services(self, site):
+        """
+        This is called for each site to render a Celery config file.
+        """
+        
+        self.vprint('create_supervisor_services:', site)
+        
+        self.set_site_specifics(site=site)
+        
+        r = self.local_renderer
+        if self.verbose:
+            print('r.env:')
+            pprint(r.env, indent=4)
+            
+        self.vprint('r.env.has_worker:', r.env.has_worker)
+        if not r.env.has_worker:
+            self.vprint('skipping: no celery worker')
+            return
+    
+        if self.name.lower() not in self.genv.services:
+            self.vprint('skipping: celery not enabled')
+            return
+    
+        hostname = self.current_hostname
+        target_sites = self.genv.available_sites_by_host.get(hostname, None)
+        if target_sites and site not in target_sites:
+            self.vprint('skipping: site not supported on this server')
+            return
+            
+        self.render_paths()
+        
+        conf_name = 'celery_%s.conf' % site
+        ret = self.render_to_string('celery/celery_supervisor.template.conf')
+        return conf_name, ret
 
-def get_service_command(action):
-    os_version = common.get_os_version()
-    return env.celery_service_commands[action][os_version.distro]
+    @task
+    def register_callbacks(self):
+        from burlap.supervisor import supervisor
+        supervisor.register_callback(self.create_supervisor_services)
+        
+    @task(precursors=['packager'])
+    def configure(self):
+        pass
 
-@task_or_dryrun
-def enable():
-    cmd = get_service_command(common.ENABLE)
-    print('cmd:', cmd)
-    sudo_or_dryrun(cmd)
+celery = CelerySatchel()
+celery.genv.post_callbacks.append(celery.register_callbacks)
 
-@task_or_dryrun
-def disable():
-    cmd = get_service_command(common.DISABLE)
-    print('cmd:', cmd)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def start():
-    cmd = get_service_command(common.START)
-    print('cmd:', cmd)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def stop():
-    cmd = get_service_command(common.STOP)
-    print('cmd:', cmd)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def restart():
-    cmd = get_service_command(common.RESTART)
-    print('cmd:', cmd)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def status():
-    cmd = get_service_command(common.STATUS)
-    print('cmd:', cmd)
-    sudo_or_dryrun(cmd)
-
-@task_or_dryrun
-def purge():
-    """
-    Clears all pending tasks in the Celery queue.
-    """
-    render_paths()
-    sudo_or_dryrun('export SITE=%(SITE)s; export ROLE=%(ROLE)s; %(celery_supervisor_django_manage)s celeryctl purge' % env)
-
-@task_or_dryrun
-def force_stop():
-    """
-    Forcibly terminates all Celery processes.
-    """
-    with settings(warn_only=True):
-        #sudo_or_dryrun(env.celery_force_stop_command % env)#fails?
-        sudo_or_dryrun('pkill -9 -f celery')
-    sudo_or_dryrun('rm -f /tmp/celery*.pid')
-    #sudo_or_dryrun('rm -f /var/log/celery*.log')
-
-@task_or_dryrun
-def set_permissions():
-    """
-    Sets ownership and permissions for Celery-related files.
-    """
-    for path in env.celery_paths_owned:
-        env.celery_path_owned = path
-        sudo_or_dryrun('chown %(celery_daemon_user)s:%(celery_daemon_user)s %(celery_path_owned)s' % env)
-
-#@task_or_dryrun
-#def configure():
-#    """
-#    Installs Celery configuration and daemon.
-#    """
-#    todo
-#    with settings(**{MODE_SUDO: True}):
-#            
-#        content = env.server.render_template(open(env.server.get_template_fn('celeryd.template.config')).read())
-#        fn = '%(celery_config)s' % env
-#        file_write(fn, content, mode='0600', owner=env.user, group=env.group, sudo=True)
-#        
-#        # This is included in the django-celery package, place in <virtualenv>/bin?
-#        content = env.server.render_template(open(env.server.get_template_fn('celeryd.template.init')).read())
-#        fn = '%(celery_daemon)s' % env
-#        file_write(fn, content, mode='0755', owner=env.user, group=env.group, sudo=True)
+register_callbacks = celery.register_callbacks

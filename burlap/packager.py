@@ -342,11 +342,10 @@ class PackagerSatchel(Satchel):
         Installs system packages listed as required by services this host uses.
         """
         r = self.local_renderer
-        r.pc('Installing required packages.')
+#         r.pc('Installing required packages.')
         list_only = int(list_only)
         type = (type or '').lower().strip()
-        assert not type or type in PACKAGE_TYPES, \
-            'Unknown package type: %s' % (type,)
+        assert not type or type in PACKAGE_TYPES, 'Unknown package type: %s' % (type,)
         lst = []
         if type:
             types = [type]
@@ -354,7 +353,6 @@ class PackagerSatchel(Satchel):
             types = PACKAGE_TYPES
         for type in types:
             if type == SYSTEM:
-                print('system')
                 content = '\n'.join(self.list_required(type=type, service=service))
                 if list_only:
                     lst.extend(_ for _ in content.split('\n') if _.strip())
@@ -370,7 +368,7 @@ class PackagerSatchel(Satchel):
                 raise NotImplementedError
         return lst
 
-    @task
+    @task(precursors=['user', 'ubuntumultiverse'])
     def configure(self, **kwargs):
         
         initial_upgrade = int(kwargs.pop('initial_upgrade', 1))
@@ -399,29 +397,23 @@ class PackagerSatchel(Satchel):
         self.install_repositories(service=service, **kwargs)
         self.install_required(type=SYSTEM, service=service, **kwargs)
         self.install_custom(**kwargs)
-    
-    configure.deploy_before = ['user', 'ubuntumultiverse']
 
 class UbuntuMultiverseSatchel(Satchel):
      
     name = 'ubuntumultiverse'
-    
+
     @task
     def configure(self):
-        """
-        Returns one or more Deployer instances, representing tasks to run during a deployment.
-        """
         r = self.local_renderer
         if self.env.enabled:
             # Enable the multiverse so we can install select non-free packages.
+            r.sudo('which sed || apt-get install sed')
             r.sudo('sed -i "/^# deb.*multiverse/ s/^# //" /etc/apt/sources.list')
             r.sudo('apt-get update')
         else:
             # Disable the multiverse.
             r.sudo('sed -i "/^# // s/^# deb.*multiverse/" /etc/apt/sources.list')
             r.sudo('apt-get update')
-    
-    configure.deploy_before = []
 
 packager = PackagerSatchel()
 umv = UbuntuMultiverseSatchel()
