@@ -175,7 +175,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         self.env.pgpass_chmod = 600
         self.env.force_version = None
         self.env.version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
-        self.env.engine = 'postgresql' # 'postgresql' | 'postgis'
+        self.env.engine = POSTGRESQL # 'postgresql' | postgis
 
         self.env.apt_repo_enabled = False
         

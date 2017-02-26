@@ -36,7 +36,7 @@ class PIPSatchel(Satchel):
             (UBUNTU, '16.04'): [
                 'gcc', 'python-dev', 'build-essential', 'python-pip',
             ],
-            (UBUNTU, '16.16'): [
+            (UBUNTU, '16.10'): [
                 'gcc', 'python-dev', 'build-essential', 'python-pip',
             ],
         }

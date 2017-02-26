@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import os
 import tempfile
+from pprint import pprint
 
 from burlap import Satchel
 from burlap.constants import *
@@ -260,11 +261,17 @@ class PackagerSatchel(Satchel):
                     
                 try:
                     _pkgs = satchel.packager_system_packages
+                    if self.verbose:
+                        print('pkgs:')
+                        pprint(_pkgs, indent=4)
                     for _key in [(version.distro, version.release), version.distro]:
+                        if self.verbose:
+                            print('checking key:', _key)
                         if _key in _pkgs:
                             if self.verbose:
                                 print('satchel %s requires:' % satchel, _pkgs[_key])
                             _new.extend(_pkgs[_key])
+                            break
                 except AttributeError:
                     pass
                     
