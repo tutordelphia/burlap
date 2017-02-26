@@ -59,6 +59,8 @@ class MySQLSatchel(DatabaseSatchel):
         self.env.root_username = 'root'
         self.env.root_password = None
         self.env.custom_mycnf = False
+        
+        self.env.assumed_version = '5.7'
 
         self.env.service_commands = {
             START:{
@@ -127,10 +129,47 @@ class MySQLSatchel(DatabaseSatchel):
         r.sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password {db_root_password}'")
     
     @task
+    def get_mysql_version(self):
+        return (self.run("dpkg --list | grep -oP '(?<=mysql-server-)([0-9.]+)'") or self.env.assumed_version).split('\n')[0].strip()
+    
+    @task
+    def assert_mysql_stopped(self):
+        with self.settings(warn_only=True):
+            ret = (self.run('ps aux |grep -i mysql|grep -v grep|grep -v vagrant') or '').strip()
+        assert not ret
+    
+    @task
     def set_root_password(self, **kwargs):
-        self.prep_root_password(**kwargs)
-        r = self.database_renderer(**kwargs)
-        r.sudo("dpkg-reconfigure -fnoninteractive `dpkg --list | egrep -o 'mysql-server-([0-9.]+)'`")
+        v = self.get_mysql_version()
+        v = tuple(map(int, v.split('.')))
+        self.vprint('mysql version:', v)
+        if v < (5, 7):
+            # This no longer prompts to set root password with >= 5.7.
+            self.prep_root_password(**kwargs)
+            r = self.database_renderer(**kwargs)
+            r.sudo("dpkg-reconfigure -fnoninteractive `dpkg --list | egrep -o 'mysql-server-([0-9.]+)'`")
+        else:
+            #https://dev.mysql.com/doc/refman/5.7/en/resetting-permissions.html
+            r = self.database_renderer(**kwargs)
+            
+            # Confirm server stopped.
+            self.stop()
+            self.assert_mysql_stopped()
+            r.sudo('rm -Rf /var/lib/mysql/mysqld_safe.pid')
+            
+            r.sudo('mkdir -p /var/run/mysqld; chown mysql /var/run/mysqld; mysqld_safe --skip-grant-tables &')
+            r.run('sleep 10')
+            r.run('mysql --execute="FLUSH PRIVILEGES; ALTER USER \'root\'@\'localhost\' IDENTIFIED BY \'{db_root_password}\'; FLUSH PRIVILEGES;"')
+            
+            # Signal server to stop.
+            r.sudo("kill `sudo cat /var/run/mysqld/mysqld.pid`")
+            
+            # Confirm server stopped.
+            r.run('sleep 5')
+            self.assert_mysql_stopped()
+            r.sudo('rm -Rf /var/lib/mysql/mysqld_safe.pid')
+            
+            self.start()
         
     @task
     def dumpload(self, site=None, role=None):
