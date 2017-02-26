@@ -104,12 +104,12 @@ from burlap.decorators import task
 #         restart('ssh')
 
 
-def _append(filename, regex, use_sudo):
-    """
-    Less verbose append
-    """
-    with hide('stdout', 'warnings'):
-        return append(filename, regex, use_sudo=use_sudo)
+# def _append(filename, regex, use_sudo):
+#     """
+#     Less verbose append
+#     """
+#     with hide('stdout', 'warnings'):
+#         return append(filename, regex, use_sudo=use_sudo)
 
 class SSHNiceSatchel(Satchel):
 
@@ -128,7 +128,7 @@ class SSHNiceSatchel(Satchel):
         self.env.cron_script_path = '/etc/cron.d/sshnice'
         self.env.cron_perms = '600'
     
-    @task
+    @task(precursors=['packager'])
     def configure(self):
         r = self.local_renderer
         if self.env.enabled:
@@ -145,6 +145,5 @@ class SSHNiceSatchel(Satchel):
         else:
             r.sudo('rm -f {cron_script_path}')
             r.sudo('service cron restart')
-    configure.deploy_before = ['packager']
 
 sshnice = SSHNiceSatchel()

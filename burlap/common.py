@@ -1185,7 +1185,12 @@ class Service(object):
         return ret
 
 class ServiceSatchel(Satchel, Service):
-    pass
+
+    def configure(self):
+        """
+        The standard method called to apply functionality when the manifest changes.
+        """
+        raise NotImplementedError
 
 env.hosts_retriever = None
 env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,

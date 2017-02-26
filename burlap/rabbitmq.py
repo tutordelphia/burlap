@@ -11,7 +11,7 @@ import sys
 
 from fabric.api import settings
 
-from burlap import Satchel, ServiceSatchel
+from burlap import ServiceSatchel
 from burlap.constants import *
 from burlap.decorators import task
 
@@ -217,7 +217,7 @@ class RabbitMQSatchel(ServiceSatchel):
         
     #    assert self.env.erlang_cookie
         if full and not only_data:
-            packager.install_required(type=SYSTEM, service=RABBITMQ)
+            packager.install_required(type=SYSTEM, service=self.name)
         
         #render_paths()
         

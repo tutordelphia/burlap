@@ -11,7 +11,7 @@ import pytz
 from burlap import ServiceSatchel
 from burlap.constants import *
 from burlap.decorators import task
-from burlap import common
+#from burlap import common
 
 # import dateutil.parser
 # import pytz
@@ -62,8 +62,6 @@ class SSLSatchel(ServiceSatchel):
         Note, the provider may say the CSR must be created on the target server,
         but this is not necessary.
         """
-        from burlap.apache import set_apache_site_specifics
-        
         r = r or self.local_renderer
         r.env.domain = domain or r.env.domain
         role = self.genv.ROLE or ALL
@@ -74,7 +72,7 @@ class SSLSatchel(ServiceSatchel):
         print('ssl_dst:', ssl_dst)
         if not os.path.isdir(ssl_dst):
             os.makedirs(ssl_dst)
-        for site, site_data in common.iter_sites(setter=set_apache_site_specifics):
+        for site, site_data in self.iter_sites():
             print('site.csr1:', site, file=sys.stderr)
             assert self.env.domain, 'No SSL domain defined.'
             r.env.ssl_base_dst = '%s/%s' % (ssl_dst, self.env.domain.replace('*.', ''))
@@ -161,5 +159,9 @@ class SSLSatchel(ServiceSatchel):
         else:
             print_fail('Files no not match!')
             raise Exception('Files no not match!')
+
+    @task
+    def configure(self):
+        pass
 
 ssl = SSLSatchel()

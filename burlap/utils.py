@@ -52,8 +52,8 @@ def abspath(path, local=False):
 
 
 def download(url, retry=10):
-    from burlap.require.curl import command as require_curl
-    require_curl()
+#     from burlap.require.curl import command as require_curl
+#     require_curl()
     run('curl --silent --retry %s -O %s' % (retry, url))
 
 

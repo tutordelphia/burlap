@@ -7,7 +7,6 @@ run several instances of Celery for multiple Apache sites.
 """
 from __future__ import print_function
 
-import os
 from pprint import pprint
 
 from burlap.constants import *

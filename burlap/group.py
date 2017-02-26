@@ -43,4 +43,8 @@ class GroupSatchel(Satchel):
         args = ' '.join(args)
         self.sudo('groupadd --force %s || true' % args)
 
+    @task
+    def configure(self):
+        pass
+
 group = GroupSatchel()

@@ -65,8 +65,8 @@ class CronSatchel(ServiceSatchel):
         
     def render_paths(self):
         r = self.local_renderer
-        r.env.cron_stdout_log = self.env.stdout_log_template % env
-        r.env.cron_stderr_log = self.env.stderr_log_template % env
+        r.env.cron_stdout_log = r.format(r.env.stdout_log_template)
+        r.env.cron_stderr_log = r.format(r.env.stderr_log_template)
     
     def deploy(self, site=None):
         """
@@ -75,8 +75,8 @@ class CronSatchel(ServiceSatchel):
         r = self.local_renderer
         
         cron_crontabs = []
-        if self.verbose:
-            print('hostname: "%s"' % (hostname,), file=sys.stderr) 
+#         if self.verbose:
+#             print('hostname: "%s"' % (hostname,), file=sys.stderr) 
         for site, site_data in self.iter_sites(site=site):
             if self.verbose:
                 print('site:', site, file=sys.stderr)
@@ -87,7 +87,7 @@ class CronSatchel(ServiceSatchel):
                 if self.verbose:
                     print('lines:', lines, file=sys.stderr)
                 for line in lines:
-                    cron_crontabs.append(line % env)
+                    cron_crontabs.append(r.format(line))
         
         if not cron_crontabs:
             return
@@ -96,8 +96,6 @@ class CronSatchel(ServiceSatchel):
         cron_crontabs.append('\n')
         r.env.crontabs_rendered = '\n'.join(cron_crontabs)
         fn = self.write_to_file(content=r.env.crontabs_rendered)
-        if self.dryrun:
-            print('echo %s > %s' % (env.crontabs_rendered, fn))
         r.env.put_remote_path = r.put(local_path=fn)
         r.sudo('crontab -u {cron_user} {put_remote_path}')
     

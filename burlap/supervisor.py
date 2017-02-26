@@ -13,11 +13,11 @@ from __future__ import print_function
 import os
 import time
 
-from fabric.api import hide, settings
+#from fabric.api import hide, settings
 
 from burlap.constants import *
 from burlap import ServiceSatchel
-from burlap.utils import run_as_root
+#from burlap.utils import run_as_root
 from burlap.decorators import task
 
 # def reload_config():

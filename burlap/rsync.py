@@ -45,5 +45,9 @@ class RsyncSatchel(Satchel):
         
         r.local(r.env.rsync_command)
         r.sudo('chown -R {rsync_chown_user}:{rsync_chown_group} {rsync_dst_dir}')
-            
+
+    @task
+    def configure(self):
+        pass
+
 rsync_satchel = RsyncSatchel()

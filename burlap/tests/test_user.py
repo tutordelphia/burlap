@@ -1,16 +1,11 @@
 import unittest
 
-import mock
-
+from burlap.user import user
 
 class CreateUserTestCase(unittest.TestCase):
 
-    @mock.patch('burlap.user.run_as_root')
-    def test_uid_str(self, mock_run_as_root):
-        from burlap.user import create
-        create('alice', uid='421')
+    def test_uid_str(self):
+        user.create('alice', uid='421')
 
-    @mock.patch('burlap.user.run_as_root')
-    def test_uid_int(self, mock_run_as_root):
-        from burlap.user import create
-        create('alice', uid=421)
+    def test_uid_int(self):
+        user.create('alice', uid=421)

@@ -52,4 +52,8 @@ class CloudfrontSatchel(Satchel):
         else:
             print('boto.connect_cloudfront().create_distribution(%s)' % repr(origin_dns))
 
+    @task
+    def configure(self):
+        pass
+
 cloudfront = CloudfrontSatchel()

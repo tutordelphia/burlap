@@ -9,8 +9,22 @@ import tempfile
 # except ImportError:
 #     pass
 
+from burlap import load_yaml_settings
+from burlap.common import CMD_VAR_REGEX, CMD_ESCAPED_VAR_REGEX
+from burlap.common import shellquote
+from burlap.common import Satchel, env
+#from burlap.common import LocalRenderer
+    
+class TestSatchel(Satchel):
+    
+    name = 'test'
+    
+    def configure(self):
+        pass
+    
+test = TestSatchel()
+
 def test_shellquote():
-    from burlap.common import shellquote
     
     s = """# /etc/cron.d/anacron: crontab entries for the anacron package
 
@@ -25,13 +39,6 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
     s = shellquote(s)
     
 def test_regex():
-    from burlap.common import CMD_VAR_REGEX, CMD_ESCAPED_VAR_REGEX, Satchel
-    
-    class TestSatchel(Satchel):
-        
-        name = 'test'
-        
-    test = TestSatchel()
     
     assert CMD_VAR_REGEX.findall('{cmd} {host}') == ['cmd', 'host']
     
@@ -44,8 +51,6 @@ def test_regex():
     r.local("getent {host} | awk '{{ print $1 }}'", dryrun=1)
 
 def test_settings_include():
-    from burlap import load_yaml_settings
-    
     try:
         os.makedirs('/tmp/burlap_test/roles/all')
     except OSError:
@@ -92,13 +97,6 @@ set_by_include3: 'some special setting'
     assert config['set_by_include3'] == 'some special setting'
 
 def test_renderer():
-    from burlap.common import env, LocalRenderer, Satchel
-    
-    class TestSatchel(Satchel):
-        
-        name = 'test'
-        
-    test = TestSatchel()
     
     # Confirm renderer is cached.
     r1 = test.local_renderer
@@ -140,6 +138,9 @@ def test_renderer():
         
         name = 'apache'
         
+        def configure(self):
+            pass
+        
     apache = ApacheSatchel()
     r = apache.local_renderer
     r.env.application_name = 'someappname'
@@ -148,13 +149,6 @@ def test_renderer():
     assert r.format(r.env.wsgi_path) == '/usr/local/someappname/src/wsgi/sitename.wsgi'
 
 def test_iter_sites():
-    from burlap.common import Satchel, env
-    
-    class TestSatchel(Satchel):
-        
-        name = 'test'
-        
-    test = TestSatchel()
     
     env.sites = {
         'site1': {'apache_ssl': False},
@@ -170,13 +164,7 @@ def test_iter_sites():
     assert len(lst) == 1
 
 def test_append():
-    from burlap.common import Satchel
     
-    class TestSatchel(Satchel):
-        
-        name = 'test'
-        
-    test = TestSatchel()
     test.genv.host_string = 'localhost'
     
     _, fn = tempfile.mkstemp()

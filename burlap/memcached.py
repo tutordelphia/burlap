@@ -2,7 +2,7 @@ from __future__ import print_function
 
 from burlap import ServiceSatchel
 from burlap.constants import *
-#from burlap.decorators import task
+from burlap.decorators import task
 
 class MemcachedSatchel(ServiceSatchel):
     
@@ -50,3 +50,7 @@ class MemcachedSatchel(ServiceSatchel):
                 UBUNTU: 'service memcached restart; sleep 3',
             },
         }
+        
+    @task(precursors=['packager'])
+    def configure(self):
+        pass

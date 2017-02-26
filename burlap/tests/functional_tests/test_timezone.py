@@ -1,9 +1,6 @@
+from burlap.host import TimezoneSatchel
 
-import pytest
-
-def test_timezone():
-    from burlap.host import TimezoneSatchel
-    
+def test_timezone():    
     ts = TimezoneSatchel()
     
     current_tz = ts.get_current_timezone()

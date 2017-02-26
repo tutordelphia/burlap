@@ -69,7 +69,11 @@ class DeploymentNotifierSatchel(Satchel):
                 subject=subject,
                 message=message,
                 recipient_list=self.env.email_recipient_list)
-                
+
+    @task
+    def configure(self):
+        pass
+
 class LoginNotifierSatchel(Satchel):
     
     name = 'loginnotifier'
@@ -82,25 +86,19 @@ class LoginNotifierSatchel(Satchel):
         self.env.script_group = 'root'
         self.env.script_chmod = 'u+rx,g+rx'
     
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self):
-        
+        r = self.local_renderer
         if self.env.enabled:
             fn = self.render_to_file(self.env.script_template)
-            self.put_or_dryrun(
+            r.put(
                 local_path=fn,
                 remote_path=self.env.script_installation_path, use_sudo=True)
-                
-            cmd = 'chown {script_user}:{script_group} {script_installation_path}'.format(**self.lenv)
-            self.sudo_or_dryrun(cmd)
-            
-            cmd = 'chmod {script_chmod} {script_installation_path}'.format(**self.lenv)
-            self.sudo_or_dryrun(cmd)
-            
+            r.sudo('chown {script_user}:{script_group} {script_installation_path}')
+            r.sudo('chmod {script_chmod} {script_installation_path}')
         else:
-            self.sudo_or_dryrun('rm {script_installation_path}')
-    
-    configure.deploy_before = ['packager', 'user']
+            r.sudo('rm {script_installation_path}')
+
 
 deployment_notifier = DeploymentNotifierSatchel()
 notify_post_deployment = deployment_notifier.notify_post_deployment

@@ -3,7 +3,7 @@ from __future__ import print_function
 import sys
 import traceback
 
-from burlap import Satchel, ServiceSatchel
+from burlap import Satchel
 from burlap.constants import *
 from burlap.decorators import task
 
