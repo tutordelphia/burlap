@@ -2,6 +2,7 @@ from __future__ import print_function
 
 from burlap import ServiceSatchel
 from burlap.constants import *
+from burlap.decorators import task
 
 class ElasticSearchSatchel(ServiceSatchel):
     

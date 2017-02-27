@@ -39,7 +39,7 @@ class PackagerSatchel(Satchel):
         """
         packager = self.packager
         if packager == APT:
-            self.sudo('apt-get update')
+            self.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq update')
         elif packager == YUM:
             self.sudo('yum update')
         else:
@@ -72,8 +72,8 @@ class PackagerSatchel(Satchel):
         if not self.genv.is_local:
             r.put(local_path=tmp_fn, remote_path=tmp_fn)
             apt_req_fqfn = self.genv.put_remote_path
-        r.sudo('apt-get update -y --fix-missing')
-        r.sudo('apt-get install -y `cat "%s" | tr "\\n" " "`' % apt_req_fqfn)
+        r.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq update --fix-missing')
+        r.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq install `cat "%s" | tr "\\n" " "`' % apt_req_fqfn)
 
     @task
     def install_yum(self, fn=None, package_name=None, update=0, list_only=0):
@@ -120,7 +120,7 @@ class PackagerSatchel(Satchel):
     def kill_apt_get(self):
         r = self.local_renderer
         r.sudo('killall apt-get')
-        r.sudo('dpkg --configure -a')
+        r.sudo('DEBIAN_FRONTEND=noninteractive dpkg --configure -a')
     
     @task
     def refresh(self, *args, **kwargs):
@@ -130,7 +130,7 @@ class PackagerSatchel(Satchel):
         r = self.local_renderer
         packager = self.packager
         if packager == APT:
-            r.sudo('apt-get update -y --fix-missing')
+            r.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq update --fix-missing')
         elif packager == YUM:
             raise NotImplementedError
             #return upgrade_yum(*args, **kwargs)
@@ -145,8 +145,8 @@ class PackagerSatchel(Satchel):
         r = self.local_renderer
         packager = self.packager
         if packager == APT:
-            r.sudo('apt-get upgrade -y')
-            r.sudo('apt-get dist-upgrade -y')
+            r.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq upgrade')
+            r.sudo('DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -yq')
         elif packager == YUM:
             raise NotImplementedError
         else:
@@ -222,7 +222,7 @@ class PackagerSatchel(Satchel):
                 for repo_name in repo_lst:
                     r.env.repo_name = repo_name
                     r.sudo('add-apt-repository -y {repo_name}')
-                r.sudo('apt-get update -y')
+                r.sudo('DEBIAN_FRONTEND=noninteractive apt-get update -yq')
             else:
                 raise NotImplementedError, 'Unsupported repository type: %s' % repo_type
 
@@ -414,13 +414,13 @@ class UbuntuMultiverseSatchel(Satchel):
         r = self.local_renderer
         if self.env.enabled:
             # Enable the multiverse so we can install select non-free packages.
-            r.sudo('which sed || apt-get install sed')
+            r.sudo('which sed || apt-get -yq install sed')
             r.sudo('sed -i "/^# deb.*multiverse/ s/^# //" /etc/apt/sources.list')
             r.sudo('apt-get update')
         else:
             # Disable the multiverse.
             r.sudo('sed -i "/^# // s/^# deb.*multiverse/" /etc/apt/sources.list')
-            r.sudo('apt-get update')
+            r.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq update')
 
 packager = PackagerSatchel()
 umv = UbuntuMultiverseSatchel()

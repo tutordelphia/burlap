@@ -139,8 +139,8 @@ class MySQLSatchel(DatabaseSatchel):
         for a root login.
         """
         r = self.database_renderer(**kwargs)
-        r.env.root_password = password or r.genv.db_root_password
-        r.sudo("dpkg --configure -a")
+        r.env.root_password = password or r.genv.get('db_root_password')
+        r.sudo("DEBIAN_FRONTEND=noninteractive dpkg --configure -a")
         r.sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password password {root_password}'")
         r.sudo("debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password {root_password}'")
     
