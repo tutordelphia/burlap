@@ -93,7 +93,15 @@ class MySQLSatchel(DatabaseSatchel):
         r.env.password = kwargs.pop('password', r.env.db_root_password)
         r.env.sql = sql
         r.run("mysql --user={user} -p'{db_root_password}' --execute='{sql}'")
-        
+
+    @task
+    def execute_file(self, filename, name='default', site=None, **kwargs):
+        r = self.database_renderer(name=name, site=site)
+        r.env.user = kwargs.pop('user', r.env.db_root_username)
+        r.env.password = kwargs.pop('password', r.env.db_root_password)
+        r.env.filename = filename
+        r.run("mysql --user={user} -p'{db_root_password}' {db_name} < {filename}")
+
     @task
     def set_collation(self, name=None, site=None):
         r = self.database_renderer(name=name, site=site)

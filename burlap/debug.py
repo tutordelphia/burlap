@@ -14,6 +14,9 @@ from fabric.api import (
     env,
     settings,
     runs_once,
+    local as _local,
+    run as _run,
+    sudo as _sudo,
 )
 
 from burlap.common import (
@@ -262,3 +265,15 @@ def tunnel(local_port, remote_port):
     env.tunnel_local_port = local_port
     env.tunnel_remote_port = remote_port
     local_or_dryrun(' ssh -i %(key_filename)s -L %(tunnel_local_port)s:localhost:%(tunnel_remote_port)s %(user)s@%(host_string)s -N' % env)
+
+@task_or_dryrun
+def test_local():
+    _local("echo hello")
+
+@task_or_dryrun
+def test_run():
+    _run("echo hello")
+
+@task_or_dryrun
+def test_sudo():
+    _sudo("echo hello")

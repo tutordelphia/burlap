@@ -71,6 +71,9 @@ class DatabaseSatchel(ServiceSatchel):
     @task
     def execute(self, sql, name='default', site=None, **kwargs):
         raise NotImplementedError
+    @task
+    def execute_file(self, filename, name='default', site=None, **kwargs):
+        raise NotImplementedError
 
     @task
     def set_root_login(self, r):
