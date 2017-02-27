@@ -48,10 +48,9 @@ class GPSDSatchel(ServiceSatchel):
     def launch(self):
         self.run('gpsd /dev/ttyUSB0 -F /var/run/gpsd.sock')
         
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self):
         self.install_packages()
     configure.is_deployer = True
-    configure.deploy_before = ['packager', 'user']
 
 gpsd = GPSDSatchel()

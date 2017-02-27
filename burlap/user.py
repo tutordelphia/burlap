@@ -604,7 +604,5 @@ class UserSatchel(Satchel):
         # Set groups.
         for username, groups in r.env.groups.items():
             self.togroups(username, groups)
-    
-    configure.deploy_before = []
 
 user = UserSatchel()

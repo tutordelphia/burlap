@@ -110,9 +110,8 @@ class SoftwareRaidSatchel(Satchel):
         
 #         print('ret:', ret)
     
+    @task(precursors=['package'])
     def configure(self):
         pass
-    
-    configure.deploy_before = ['user', 'packager']
 
 softwareraid = SoftwareRaidSatchel()

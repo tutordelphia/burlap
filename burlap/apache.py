@@ -629,11 +629,9 @@ class ApacheMediaSatchel(Satchel):
             print('date:', data)
         return data
     
-    @task
+    @task(precursors=['packager', 'apache', 'apache2', 'pip', 'tarball'])
     def configure(self):
         self.sync_media()
-    
-    configure.deploy_before = ['packager', 'apache', 'apache2', 'pip', 'tarball']
             
 apache = ApacheSatchel()
 # 

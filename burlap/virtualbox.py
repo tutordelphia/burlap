@@ -9,7 +9,7 @@ class VirtualboxSatchel(Satchel):
     
     name = 'virtualbox'
 
-    @task
+    @task(precursors=['packager'])
     def configure(self):
         """
         Enables the repository for a most current version on Debian systems.
@@ -27,7 +27,5 @@ class VirtualboxSatchel(Satchel):
         r.sudo('apt-add-repository "deb http://download.virtualbox.org/virtualbox/debian {codename} contrib"')
         r.sudo('cd /tmp; wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -')
         r.sudo('apt-get update')
-    
-    configure.deploy_before = ['packager']
 
 virtualbox = VirtualboxSatchel()

@@ -90,14 +90,12 @@ class EC2MonitorSatchel(Satchel):
         #todo
         pass
     
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self):
         """
         Executed when your settings have changed since the last deployment.
         Run commands to apply changes here.
         """
-        self.install()
-
-    configure.deploy_before = ['packager', 'user']
+        self.install() 
                 
 ec2monitor = EC2MonitorSatchel()

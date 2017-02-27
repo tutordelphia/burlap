@@ -243,15 +243,12 @@ class TarballSatchel(Satchel):
         if self.env.set_permissions:
             self.set_permissions(genv)
     
-    @task
+    @task(precursors=['gitchecker', 'packager', 'apache2', 'pip', 'user'])
     def configure(self, *args, **kwargs):
         if self.env.method == TARBALL:
             self.deploy_tarball(*args, **kwargs)
         elif self.env.method == RSYNC:
             self.deploy_rsync(*args, **kwargs)
-        
-    
-    configure.deploy_before = ['gitchecker', 'packager', 'apache2', 'pip', 'user']
             
 tarball_satchel = TarballSatchel()
 

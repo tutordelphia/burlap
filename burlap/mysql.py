@@ -413,7 +413,7 @@ class MySQLSatchel(DatabaseSatchel):
         r = self.database_renderer(name=name, site=site)
         r.run('/bin/bash -i -c "mysql -u {db_user} -p\'{db_password}\' -h {db_host} {db_name}"')
 
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self, do_packages=0, name='default', site=None):
 
         r = self.database_renderer(name=name, site=site)
@@ -444,8 +444,6 @@ class MySQLSatchel(DatabaseSatchel):
                 'FLUSH PRIVILEGES;"')
             
             self.restart()
-    
-    configure.deploy_before = ['packager', 'user']
 
 class MySQLClientSatchel(Satchel):
 

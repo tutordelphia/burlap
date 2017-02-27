@@ -406,8 +406,6 @@ class HostnameSatchel(Satchel):
                 #r.sudo('service hostname restart; sleep 3')
                 r.sudo('hostname {hostname}')
                 r.reboot()#new_hostname=hostname)
-    
-    configure.deploy_before = []
 
 class TimezoneSatchel(Satchel):
     """
@@ -427,7 +425,7 @@ class TimezoneSatchel(Satchel):
     def get_current_timezone(self):
         return (self.run('date +%Z') or self.env.timezone).strip()
     
-    @task
+    @task(precursors=['packager'])
     def configure(self):
         r = self.local_renderer
         os_ver = self.os_version
@@ -437,7 +435,6 @@ class TimezoneSatchel(Satchel):
             # Old way in Ubuntu <= 14.04.
             r.sudo("sudo sh -c 'echo \"{timezone}\" > /etc/timezone'")
             r.sudo('dpkg-reconfigure -f noninteractive tzdata')
-    configure.deploy_before = ['packager']
 
 host = HostSatchel()
 hostname = HostnameSatchel()

@@ -617,7 +617,7 @@ class RaspberryPiSatchel(Satchel):
         else:
             pass
             
-    @task
+    @task(precursors=['packager', 'user', 'timezone', 'arduino', 'avahi', 'nm', 'ntpclient', 'sshnice'])
     def configure(self):
         self.update_firmware()
         self.configure_i2c()
@@ -625,7 +625,5 @@ class RaspberryPiSatchel(Satchel):
         self.configure_gpio()
         self.configure_serial()
         self.configure_sound()
-        
-    configure.deploy_before = ['packager', 'user', 'timezone', 'arduino', 'avahi', 'nm', 'ntpclient', 'sshnice']
 
 RaspberryPiSatchel()

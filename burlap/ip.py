@@ -64,7 +64,7 @@ class IPSatchel(ServiceSatchel):
         r = self.local_renderer
         r.put(local_path=fn, remote_path=r.env.interfaces_fn, use_sudo=True)
     
-    @task
+    @task(precursors=['packager', 'user', 'hostname'])
     def configure(self):
         if self.env.type == STATIC:
             self.static()
@@ -73,7 +73,5 @@ class IPSatchel(ServiceSatchel):
         else:
             raise NotImplementedError('Unknown type: %s' % self.env.type)
         self.restart()
-    
-    configure.deploy_before = ['packager', 'user', 'hostname']
     
 ip = IPSatchel()

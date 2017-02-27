@@ -48,7 +48,7 @@ class AvahiSatchel(ServiceSatchel):
             UBUNTU: ['avahi-daemon'],
         }
         
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self):
         if self.env.enabled:
             self.enable()
@@ -56,7 +56,5 @@ class AvahiSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-    
-    configure.deploy_before = ['packager', 'user']
     
 AvahiSatchel()

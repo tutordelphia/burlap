@@ -8,8 +8,7 @@ class SnortSatchel(ServiceSatchel):
     name = 'snort'
     
     def set_defaults(self):
-    
-        pass
+        super(SnortSatchel, self).set_defaults()
 
     @property
     def packager_system_packages(self):
@@ -21,11 +20,9 @@ class SnortSatchel(ServiceSatchel):
                 'snort',
             ],
         }
-        
-    def configure(self):
-        r = self.local_renderer
-        self.install_packages()
     
-    configure.deploy_before = ['packager', 'user', 'cron']
+    @task(precursors=['packager'])
+    def configure(self):
+        pass
 
 snort = SnortSatchel()

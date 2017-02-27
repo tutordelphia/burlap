@@ -26,6 +26,7 @@ class BluetoothSatchel(ServiceSatchel):
         r = self.local_renderer
         r.sudo('hciconfig hci0 name "%s"' % name)
     
+    @task(precursors=['packager', 'user'])
     def configure(self):
         if self.env.enabled:
             self.install_packages()
@@ -41,7 +42,5 @@ class BluetoothSatchel(ServiceSatchel):
             #sudo sdptool add SP
             
             self.reboot()
-            
-    configure.deploy_before = ['packager', 'user']
 
 BluetoothSatchel()

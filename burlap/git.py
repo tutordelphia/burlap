@@ -307,12 +307,10 @@ class GitTrackerSatchel(Satchel):
         }
         return data
     
-    @task
+    @task(precursors=['packager', 'pip', 'tarball', 'djangomedia', 'djangomigrations'])
     def configure(self):
         from burlap.jirahelp import update_tickets_from_git
         update_tickets_from_git()
-    
-    configure.deploy_before = ['packager', 'pip', 'tarball', 'djangomedia', 'djangomigrations']
 
 
 gitchecker = GitCheckerSatchel()

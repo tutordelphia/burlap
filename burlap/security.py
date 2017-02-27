@@ -43,7 +43,7 @@ class UnattendedUpgradesSatchel(Satchel):
         self.env.autoclean_interval = 7
         self.env.unattended_upgrade = 1
 
-    @task
+    @task(precursors=['packager'])
     def configure(self):
         
         os_version = self.os_version
@@ -63,7 +63,5 @@ class UnattendedUpgradesSatchel(Satchel):
             
         else:
             self.purge_packages()
-    
-    configure.deploy_before = ['packager', 'user']
         
 UnattendedUpgradesSatchel()

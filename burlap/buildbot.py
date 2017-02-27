@@ -289,7 +289,7 @@ class BuildBotSatchel(ServiceSatchel):
     def deploy_pre_run(self):
         self.check_ok()
         
-    @task
+    @task(precursors=['packager', 'user', 'apache'])
     def configure(self):
         packager = self.get_satchel('packager')
 #         umv = self.get_satchel('ubuntumultiverse')
@@ -312,7 +312,5 @@ class BuildBotSatchel(ServiceSatchel):
         self.deploy_code()
         
         self.install_cron()
-    
-    configure.deploy_before = ['apache', 'packager', 'user']
         
 buildbot = BuildBotSatchel()

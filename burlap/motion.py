@@ -49,9 +49,8 @@ class MotionSatchel(ServiceSatchel):
             },
         }    
     
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self):
         pass
-    configure.deploy_before = ['packager', 'user']
     
 motion = MotionSatchel()

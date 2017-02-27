@@ -785,7 +785,7 @@ class DjangoMigrations(Satchel):
 #         )
         r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; ./manage migrate {app} --fake')
     
-    @task    
+    @task(precursors=['packager', 'apache', 'pip', 'tarball', 'djangomedia', 'postgresql', 'mysql'])
     def configure(self):
         last = self.last_manifest or {}
         current = self.current_manifest or {}
@@ -802,18 +802,6 @@ class DjangoMigrations(Satchel):
             # with all options, so we run it separately for each app.
             for app in migrate_apps:
                 update_all(apps=app, ignore_errors=self.env.ignore_errors)
-    
-    configure.deploy_before = [
-        'packager',
-        'apache',
-        'apache2',
-        'pip',
-        'tarball',
-        'djangomedia',
-        'postgresql',
-        'mysql',
-    ]
-    #configure.takes_diff = True
 
 
 class DjangoMediaSatchel(Satchel):
@@ -836,11 +824,9 @@ class DjangoMediaSatchel(Satchel):
             print('latest_timestamp:', latest_timestamp)
         return latest_timestamp
     
-    @task
+    @task(precursors=['packager', 'apache', 'pip', 'user'])
     def configure(self, *args, **kwargs):
         self.local_or_dryrun('cd %(manage_dir)s; ./manage collectstatic --noinput' % self.lenv)
-    
-    configure.deploy_before = ['packager', 'apache2', 'pip', 'user']
 
 DjangoMigrations()
 DjangoMediaSatchel()

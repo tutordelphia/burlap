@@ -46,7 +46,7 @@ class PostfixSatchel(ServiceSatchel):
         self.env.enabled = False
         self.env.mailrc_fn = '~/.mailrc'
     
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self):
         r = self.local_renderer
         
@@ -86,8 +86,5 @@ class PostfixSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-    
-    configure.deploy_before = ['packager', 'user']
-    configure.deploy_after = []
     
 PostfixSatchel()

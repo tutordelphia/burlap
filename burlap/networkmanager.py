@@ -113,7 +113,7 @@ class NetworkManagerSatchel(ServiceSatchel):
             r.sudo('rm -f {cron_script_path}'.format(**self.lenv))
             r.sudo('service cron restart')
     
-    @task
+    @task(precursors=['packager', 'user', 'cron'])
     def configure(self):
         
         r = self.local_renderer
@@ -159,7 +159,5 @@ class NetworkManagerSatchel(ServiceSatchel):
             with settings(warn_only=True):
                 # This may through an error code, but on reboot, the connection will appear and be connected.
                 self.add_wifi_connection(ssid, passphrase)
-    
-    configure.deploy_before = ['packager', 'user', 'cron']
 
 nm = NetworkManagerSatchel()

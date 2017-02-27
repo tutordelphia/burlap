@@ -29,9 +29,8 @@ class SeleniumSatchel(Satchel):
             'tar -xvzf geckodriver-v{geckodriver_version}-{geckodriver_arch}.tar.gz')
         r.sudo('mv /tmp/geckodriver /usr/local/bin') 
     
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self):
-        pass
-    configure.deploy_before = ['packager', 'user']
+        pass 
     
 selenium = SeleniumSatchel()

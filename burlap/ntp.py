@@ -64,7 +64,7 @@ class NTPClientSatchel(ServiceSatchel):
         r.sudo('ntpdate {default_server}')
         r.sudo('service ntp start')
 
-    @task
+    @task(precursors=['packager', 'user'])
     def configure(self):
         if self.env.enabled:
             self.install_packages()
@@ -73,7 +73,5 @@ class NTPClientSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-    
-    configure.deploy_before = ['packager', 'user']
     
 ntpclient = NTPClientSatchel()

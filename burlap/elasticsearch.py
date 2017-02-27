@@ -41,7 +41,8 @@ class ElasticSearchSatchel(ServiceSatchel):
             DEBIAN: ['elasticsearch'],
             UBUNTU: ['elasticsearch'],
         }
-        
+    
+    @task(precursors=['packager', 'user', 'cron'])
     def configure(self):
         r = self.local_renderer
         
@@ -84,7 +85,5 @@ class ElasticSearchSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-    
-    configure.deploy_before = ['packager', 'user', 'cron']
 
 elasticsearch = ElasticSearchSatchel()
