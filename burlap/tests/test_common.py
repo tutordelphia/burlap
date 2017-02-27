@@ -98,55 +98,60 @@ set_by_include3: 'some special setting'
 
 def test_renderer():
     
-    # Confirm renderer is cached.
-    r1 = test.local_renderer
-    r2 = test.local_renderer
-    assert r1 is r2
-    
-    # Confirm clear method.
-    test.clear_local_renderer()
-    r3 = test.local_renderer
-    assert r1 is not r3
-    
-    r = r3
-    env.clear()
-    assert r.genv is env
-    
-    # Confirm local env var gets renderered.
-    r.env.var1 = 'a'
-    assert r.format('{var1}') == 'a'
-    
-    # Confirm global env var in local namespace gets rendered.
-    env.test_var2 = 'b'
-    assert r.format('{var2}') == 'b'
-    
-    # Confirm global env var in global namespace gets rendered.
-    env.test_var2 = 'b2'
-    assert r.format('{test_var2}') == 'b2'
-    
-    # Confirm global env var overridden in local namespace get rendered.
-    env.apache_var3 = '0'
-    r.env.apache_var3 = 'c'
-    assert r.format('{apache_var3}') == 'c'
-    
-    # Confirm recursive template variables get rendered.
-    r.env.some_template = '{target_value}'
-    r.env.target_value = 'd'
-    assert r.format('{some_template}') == 'd'
-    
-    class ApacheSatchel(Satchel):
+    _env = env.copy()
+    try:
         
-        name = 'apache'
+        # Confirm renderer is cached.
+        r1 = test.local_renderer
+        r2 = test.local_renderer
+        assert r1 is r2
         
-        def configure(self):
-            pass
+        # Confirm clear method.
+        test.clear_local_renderer()
+        r3 = test.local_renderer
+        assert r1 is not r3
         
-    apache = ApacheSatchel()
-    r = apache.local_renderer
-    r.env.application_name = 'someappname'
-    r.env.site = 'sitename'
-    r.env.wsgi_path = '/usr/local/{apache_application_name}/src/wsgi/{apache_site}.wsgi'
-    assert r.format(r.env.wsgi_path) == '/usr/local/someappname/src/wsgi/sitename.wsgi'
+        r = r3
+        env.clear()
+        assert r.genv is env
+        
+        # Confirm local env var gets renderered.
+        r.env.var1 = 'a'
+        assert r.format('{var1}') == 'a'
+        
+        # Confirm global env var in local namespace gets rendered.
+        env.test_var2 = 'b'
+        assert r.format('{var2}') == 'b'
+        
+        # Confirm global env var in global namespace gets rendered.
+        env.test_var2 = 'b2'
+        assert r.format('{test_var2}') == 'b2'
+        
+        # Confirm global env var overridden in local namespace get rendered.
+        env.apache_var3 = '0'
+        r.env.apache_var3 = 'c'
+        assert r.format('{apache_var3}') == 'c'
+        
+        # Confirm recursive template variables get rendered.
+        r.env.some_template = '{target_value}'
+        r.env.target_value = 'd'
+        assert r.format('{some_template}') == 'd'
+        
+        class ApacheSatchel(Satchel):
+            
+            name = 'apache'
+            
+            def configure(self):
+                pass
+            
+        apache = ApacheSatchel()
+        r = apache.local_renderer
+        r.env.application_name = 'someappname'
+        r.env.site = 'sitename'
+        r.env.wsgi_path = '/usr/local/{apache_application_name}/src/wsgi/{apache_site}.wsgi'
+        assert r.format(r.env.wsgi_path) == '/usr/local/someappname/src/wsgi/sitename.wsgi'
+    finally:
+        env.update(_env)
 
 def test_iter_sites():
     
