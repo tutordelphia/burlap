@@ -27,10 +27,10 @@ class DatabaseSatchel(ServiceSatchel):
     
     name = 'db'
     
-    # Local cache for renderers.
-    _database_renderers = {} # {(name, site): renderer}
-    
     def set_defaults(self):
+            
+        # Local cache for renderers.
+        self._database_renderers = {} # {(name, site): renderer}
                 
         # If set, allows remote users to connect to the database.
         # This shouldn't be necessary if the webserver and database
@@ -137,9 +137,11 @@ class DatabaseSatchel(ServiceSatchel):
             if d.connection_handler == CONNECTION_HANDLER_DJANGO:
                 from burlap.dj import set_db
                 _d = type(self.genv)()
-                print('Loading Django DB settings for site {} and role {}.'.format(site, role), file=sys.stderr)
+                if self.verbose:
+                    print('Loading Django DB settings for site {} and role {}.'.format(site, role), file=sys.stderr)
                 set_db(name=name, site=site, role=role, e=_d)
-                print('Loaded:', _d, file=sys.stderr)
+                if self.verbose:
+                    print('Loaded:', _d, file=sys.stderr)
                 d.update(_d)
             
             r = LocalRenderer(self, lenv=d)
