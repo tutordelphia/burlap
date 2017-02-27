@@ -414,9 +414,9 @@ class UbuntuMultiverseSatchel(Satchel):
         r = self.local_renderer
         if self.env.enabled:
             # Enable the multiverse so we can install select non-free packages.
-            r.sudo('which sed || apt-get -yq install sed')
+            r.sudo('which sed || DEBIAN_FRONTEND=noninteractive apt-get -yq install sed')
             r.sudo('sed -i "/^# deb.*multiverse/ s/^# //" /etc/apt/sources.list')
-            r.sudo('apt-get update')
+            r.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq update')
         else:
             # Disable the multiverse.
             r.sudo('sed -i "/^# // s/^# deb.*multiverse/" /etc/apt/sources.list')

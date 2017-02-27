@@ -55,11 +55,11 @@ class PostfixSatchel(ServiceSatchel):
             # Ensure any previous mail setups are wiped clean.
             # Note, this configuration is not compatible with mailx or sendmail.
             r.sudo('if [ -e "{mailrc_fn}" ]; then rm "{mailrc_fn}"; fi')
-            r.sudo('apt-get purge --yes postfix mailutils mailx sendmail')
+            r.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq purge postfix mailutils mailx sendmail')
             
             r.sudo('debconf-set-selections <<< "postfix postfix/mailname string {domain}"')
             r.sudo('debconf-set-selections <<< "postfix postfix/main_mailer_type string \'Internet Site\'"')
-            r.sudo('apt-get install --yes postfix mailutils libsasl2-2 ca-certificates libsasl2-modules nano')
+            r.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq install postfix mailutils libsasl2-2 ca-certificates libsasl2-modules nano')
             
             remote_path = r.put(
                 local_path='etc_postfix_main.cf',
