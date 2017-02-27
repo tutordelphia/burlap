@@ -47,34 +47,4 @@ before_script:
 
 script:
 -  ./pep8.sh
-#-  tox
-##-   "tox -e py27 -- -s burlap/tests/test_project.py::test_project"
--   "tox -e py27 -- -s burlap/tests/test_apache.py"
--   "tox -e py27 -- -s burlap/tests/test_files.py"
--   "tox -e py27 -- -s burlap/tests/test_group.py"
--   "tox -e py27 -- -s burlap/tests/test_oracle_jdk.py"
--   "tox -e py27 -- -s burlap/tests/test_postgres.py"
--   "tox -e py27 -- -s burlap/tests/test_project.py"
--   "tox -e py27 -- -s burlap/tests/test_python.py"
--   "tox -e py27 -- -s burlap/tests/test_redis.py"
--   "tox -e py27 -- -s burlap/tests/test_system.py"
--   "tox -e py27 -- -s burlap/tests/test_user.py"
-##-   "tox -e py27 -- -s burlap/tests/functional_tests/test_apache.py::test_require_module_disabled"
--   "tox -e py27 -- -s burlap/tests/functional_tests/test_apache.py"
--   "tox -e py27 -- -s burlap/tests/functional_tests/test_apt_key.py"
-#-   "tox -e py27 -- -s burlap/tests/functional_tests/test_deploy.py"
--   "tox -e py27 -- -s burlap/tests/functional_tests/test_disk.py"
--   "tox -e py27 -- -s burlap/tests/functional_tests/test_files.py"
-#-   "tox -e py27 -- -s burlap/tests/functional_tests/test_git.py"
--   "tox -e py27 -- -s burlap/tests/functional_tests/test_md5.py"
-#-   "tox -e py27 -- -s burlap/tests/functional_tests/test_mysql.py"
--   "tox -e py27 -- -s burlap/tests/functional_tests/test_network.py"
--   "tox -e py27 -- -s burlap/tests/functional_tests/test_nginx.py"
-#-   "tox -e py27 -- -s burlap/tests/functional_tests/test_nodejs.py" # times out, tries to compile openssl
-#-   "tox -e py27 -- -s burlap/tests/functional_tests/test_oracle_jdk.py"
-#-   "tox -e py27 -- -s burlap/tests/functional_tests/test_postgres.py"
-#-   "tox -e py27 -- -s burlap/tests/functional_tests/test_redis.py"
-#-   "tox -e py27 -- -s burlap/tests/functional_tests/test_ssh.py"
--   "tox -e py27 -- -s burlap/tests/functional_tests/test_system.py"
-#-   "tox -e py27 -- -s burlap/tests/functional_tests/test_tomcat.py"
--   "tox -e py27 -- -s burlap/tests/functional_tests/test_users.py"
+-  tox -c tox-travis.ini -e py27
