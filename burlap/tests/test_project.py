@@ -31,7 +31,7 @@ def test_project():
         cmd = (
             '. {bin_dir}/activate; '
             'cd {project_dir}; '
-            'burlap add-role prod dev'
+            'burlap-admin.py add-role prod dev'
         ).format(**locals())
         print(cmd)
         os.system(cmd)

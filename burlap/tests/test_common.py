@@ -15,14 +15,14 @@ from burlap.common import shellquote
 from burlap.common import Satchel, env
 #from burlap.common import LocalRenderer
     
-class TestSatchel(Satchel):
+class _TestSatchel(Satchel):
     
     name = 'test'
     
     def configure(self):
         pass
     
-test = TestSatchel()
+test = _TestSatchel()
 
 def test_shellquote():
     
