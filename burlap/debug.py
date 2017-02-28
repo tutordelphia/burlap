@@ -211,6 +211,13 @@ def shell(gui=0, command=''):
     _env.SITE = _env.SITE or _env.default_site
     _env.shell_x_opt = '-X' if int(gui) else ''
     
+    #_env.host_string = _env.get('host_string') or ''
+    if 'host_string' not in _env or not _env.host_string:
+        if 'available_sites' in _env and _env.SITE not in _env.available_sites:
+            raise Exception('No host_string set. Unknown site %s.' % _env.SITE)
+        else:
+            raise Exception('No host_string set.')
+    
     if '@' in _env.host_string:
         _env.shell_host_string = _env.host_string
     else:

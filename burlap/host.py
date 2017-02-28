@@ -11,7 +11,7 @@ from fabric.api import (
 from burlap import Satchel
 from burlap.constants import *
 from burlap.decorators import task, task_or_dryrun
-
+from burlap.common import str_to_callable
 
 def iter_hostnames():
     from burlap.common import get_hosts_retriever, get_verbose
@@ -407,6 +407,44 @@ class HostnameSatchel(Satchel):
                 r.sudo('hostname {hostname}')
                 r.reboot()#new_hostname=hostname)
 
+class HostsSatchel(Satchel):
+    """
+    Manages customizations to /etc/hosts.
+    """
+    
+    name = 'hosts'
+    
+    def set_defaults(self):
+        self.env.ipdomains = [] # [[ip, domain]]
+        self.env.ipdomain_retriever = None
+    
+    @task(precursors=['packager'])
+    def configure(self):
+        last_hosts = set(tuple(_) for _ in (self.last_manifest.ipdomains or []))
+        ipdomains = list(self.env.ipdomains or [])
+        
+        current_hosts = set(tuple(_) for _ in ipdomains)
+        if self.env.ipdomain_retriever:
+            current_hosts.update(str_to_callable(self.env.ipdomain_retriever)(role=self.genv.ROLE) or [])
+
+        added_hosts = current_hosts.difference(last_hosts)
+        removed_hosts = last_hosts.difference(current_hosts)
+        r = self.local_renderer
+        if self.verbose:
+            print('ipdomains:', ipdomains)
+            print('added_hosts:', added_hosts)
+            print('removed_hosts:', removed_hosts)
+            
+        for _ip, _domain in sorted(added_hosts):
+            r.env.ip = _ip
+            r.env.domain = _domain
+            r.append(filename='/etc/hosts', text='%s %s' % (_ip, _domain), use_sudo=True)
+
+        for _ip, _domain in sorted(removed_hosts):
+            r.env.ip = _ip
+            r.env.domain = _domain
+            r.sed(filename='/etc/hosts', before='%s %s' % (_ip, _domain), after='', use_sudo=True)
+
 class TimezoneSatchel(Satchel):
     """
     Manages setting the system-wide timezone.
@@ -438,4 +476,5 @@ class TimezoneSatchel(Satchel):
 
 host = HostSatchel()
 hostname = HostnameSatchel()
+hosts = HostsSatchel()
 timezone = TimezoneSatchel()
