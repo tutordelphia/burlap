@@ -6,9 +6,10 @@ from __future__ import print_function
 
 from fabric.api import hide, run, settings
 
-from burlap.files import is_file
+from burlap.files import file # pylint: disable=redefined-builtin
 from burlap.utils import read_lines, run_as_root
 
+is_file = file.is_file
 
 class UnsupportedFamily(Exception):
     """

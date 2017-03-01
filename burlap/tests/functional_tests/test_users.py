@@ -1,6 +1,8 @@
  
-from burlap.files import is_dir
+from burlap.files import file # pylint: disable=redefined-builtin
 from burlap.user import user
+
+is_dir = file.is_dir
 
 def test_create_user():
     try:

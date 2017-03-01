@@ -4,10 +4,7 @@ import os
 import sys
 import subprocess
 
-from fabric.api import (
-    env,
-    runs_once,
-)
+from fabric.api import env#, runs_once
 
 from burlap.constants import *
 from burlap import ServiceSatchel
@@ -19,7 +16,7 @@ from burlap.common import (
     ALL,
     LocalRenderer,
 )
-from burlap.decorators import task
+from burlap.decorators import task, runs_once
 
 CONNECTION_HANDLER_DJANGO = 'django'
 
@@ -27,6 +24,8 @@ class DatabaseSatchel(ServiceSatchel):
     
     name = 'db'
     
+    _database_renderers = {} # {(name, site): renderer}
+        
     def set_defaults(self):
             
         # Local cache for renderers.
@@ -285,9 +284,8 @@ class DatabaseSatchel(ServiceSatchel):
         Exports the target database to a single transportable file on the localhost,
         appropriate for loading using load().
         """
-        
         r = self.database_renderer(name=name, site=site)
-        
+
         use_sudo = int(use_sudo)
         
         from_local = int(from_local)

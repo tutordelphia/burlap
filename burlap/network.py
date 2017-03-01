@@ -5,7 +5,9 @@ Network
 
 from fabric.api import hide, run, settings, sudo
 
-from burlap.files import is_file
+from burlap.files import file # pylint: disable=redefined-builtin
+
+is_file = file.is_file
 
 
 def interfaces():

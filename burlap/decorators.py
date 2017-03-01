@@ -6,6 +6,8 @@ from __future__ import with_statement
 #from Crypto import Random
 
 #from fabric import tasks
+from fabric.api import runs_once as _runs_once
+
 #from .context_managers import settings
 from burlap.tasks import WrappedCallableTask
 
@@ -71,3 +73,14 @@ def task(*args, **kwargs):
                 meth.deploy_before = list(precursors)
             return _task(meth)
         return wrapper
+
+def runs_once(meth):
+    """
+    A wrapper around Fabric's run_once() to support our dryrun feature.
+    """
+    from burlap.common import get_dryrun
+    if get_dryrun():
+        pass
+    else:
+        _runs_once(meth)
+    return meth

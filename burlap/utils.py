@@ -11,10 +11,9 @@ import hashlib
 
 import six
 
-from fabric.api import env, hide, run, sudo
+from fabric.api import env, hide, run
 
 
-#TODO: replace with sudo_or_dryrun?
 def run_as_root(command, *args, **kwargs):
     """
     Run a remote command as the root user.
@@ -22,10 +21,11 @@ def run_as_root(command, *args, **kwargs):
     When connecting as root to the remote system, this will use Fabric's
     ``run`` function. In other cases, it will use ``sudo``.
     """
+    from burlap.common import run_or_dryrun, sudo_or_dryrun
     if env.user == 'root':
-        func = run
+        func = run_or_dryrun
     else:
-        func = sudo
+        func = sudo_or_dryrun
     return func(command, *args, **kwargs)
 
 
