@@ -19,13 +19,19 @@ class CelerySatchel(ServiceSatchel):
     
     @property
     def packager_system_packages(self):
-        return {
-            FEDORA: ['celery', 'django-celery'],
-            UBUNTU: ['celery', 'django-celery']
-        }
+        d = {}
+        if self.env.use_system_packages:
+            d.update({
+                FEDORA: ['celery', 'django-celery'],
+                UBUNTU: ['celery', 'django-celery'],
+            })
+        return d
         
     def set_defaults(self):
     
+        # Better versions are available in PyPI, so don't use system packages by default.
+        self.env.use_system_packages = False
+        
         self.env.config_path = '/etc/sysconfig/celeryd'
         self.env.daemon_opts = '--concurrency=1 --loglevel=DEBUG'
         self.env.daemon_path = '/etc/init.d/celeryd'

@@ -56,6 +56,7 @@ class ApacheSatchel(ServiceSatchel):
             mod_lst.append('libapache2-mod-rpaf')
             
         if self.env.visitors_enabled:
+            #TODO:fix? package removed in Ubuntu 16?
             mod_lst.append('visitors')
             
         return {
@@ -147,8 +148,8 @@ class ApacheSatchel(ServiceSatchel):
         self.env.ssl_secure_paths_enforce = True
         self.env.ssl_secure_paths = ['/admin/(.*)']
         
-        self.env.user = 'www-data'
-        self.env.group = 'www-data'
+        self.env.web_user = 'www-data'
+        self.env.web_group = 'www-data'
         self.env.wsgi_user = 'www-data'
         self.env.wsgi_group = 'www-data'
         self.env.chmod = 775
@@ -336,7 +337,7 @@ class ApacheSatchel(ServiceSatchel):
 #                         use_sudo=True)
 #         
 #         self.sudo_or_dryrun('mkdir -p %(apache_ssl_dir)s' % self.genv)
-#         self.sudo_or_dryrun('chown -R %(apache_user)s:%(apache_group)s %(apache_ssl_dir)s' % self.genv)
+#         self.sudo_or_dryrun('chown -R %(apache_web_user)s:%(apache_web_group)s %(apache_ssl_dir)s' % self.genv)
 #         self.sudo_or_dryrun('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s' % self.genv)
     
     @task
@@ -383,7 +384,79 @@ class ApacheSatchel(ServiceSatchel):
     @task
     def view_error_log(self):
         self.run('tail -f {apache_error_log}')
-    
+
+    @task
+    def sync_media(self, sync_set=None, clean=0, iter_local_paths=0):
+        """
+        Uploads select media to an Apache accessible directory.
+        """
+        
+        #from burlap.dj import render_remote_paths
+        
+        # Ensure a site is selected.
+        self.genv.SITE = self.genv.SITE or self.genv.default_site
+        
+#         apache.get_apache_settings()
+        
+        #render_remote_paths()
+        
+        r = self.local_renderer
+        
+        clean = int(clean)
+        print('Getting site data for %s...' % self.genv.SITE)
+        
+        self.set_site_specifics(self.genv.SITE)
+        #site_data = self.genv.sites[self.genv.SITE]
+        #self.genv.update(site_data)
+        
+        sync_sets = r.env.sync_sets
+        if sync_set:
+            sync_sets = [sync_set]
+        
+        ret_paths = []
+        for sync_set in sync_sets:
+            for paths in r.env.sync_sets[sync_set]:
+                #print 'paths:',paths
+                r.env.sync_local_path = os.path.abspath(paths['local_path'] % self.genv)
+                if paths['local_path'].endswith('/') and not r.env.sync_local_path.endswith('/'):
+                    r.env.sync_local_path += '/'
+                    
+                if iter_local_paths:
+                    ret_paths.append(r.env.sync_local_path)
+                    continue
+                    
+                r.env.sync_remote_path = paths['remote_path'] % self.genv
+                
+                if clean:
+                    r.sudo('rm -Rf {apache_sync_remote_path}') 
+                
+                print('Syncing %s to %s...' % (r.env.sync_local_path, r.env.sync_remote_path))
+                
+                r.env.tmp_chmod = paths.get('chmod', r.env.chmod)
+                #with settings(warn_only=True):
+                r.sudo('mkdir -p {apache_sync_remote_path}')
+                r.sudo('chmod -R {apache_tmp_chmod} {apache_sync_remote_path}')
+                r.local('rsync -rvz --progress --recursive --no-p --no-g '
+                    '--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {apache_sync_local_path} {user}@{host_string}:{apache_sync_remote_path}')
+                r.sudo('chown -R {apache_web_user}:{apache_web_group} {apache_sync_remote_path}')
+                
+        if iter_local_paths:
+            return ret_paths
+
+    def get_media_timestamp(self):
+        """
+        Called after a deployment to record any data necessary to detect changes
+        for a future deployment.
+        """
+        from burlap.common import get_last_modified_timestamp
+        data = 0
+        for path in self.sync_media(iter_local_paths=1):
+            data = min(data, get_last_modified_timestamp(path) or data)
+        #TODO:hash media names and content
+        if self.verbose:
+            print('date:', data)
+        return data
+
     @task
     def record_manifest(self):
         """
@@ -393,6 +466,7 @@ class ApacheSatchel(ServiceSatchel):
         manifest = super(ApacheSatchel, self).record_manifest()
         manifest['available_sites'] = self.genv.available_sites
         manifest['available_sites_by_host'] = self.genv.available_sites_by_host
+        manifest['media_timestamp'] = self.get_media_timestamp()
         return manifest
 
     @task
@@ -477,7 +551,7 @@ class ApacheSatchel(ServiceSatchel):
         r = self.local_renderer
         if r.env.modrpaf_enabled:
             self.install_packages()
-            self.enable_mod('mod_rpaf')
+            self.enable_mod('rpaf')
         else:
             if self.last_manifest.modrpaf_enabled:
                 self.disable_mod('mod_rpaf')
@@ -542,7 +616,7 @@ class ApacheSatchel(ServiceSatchel):
             fn = self.render_to_file('apache/apache_ports.template.conf')
             r.put(local_path=fn, remote_path=r.env.ports_path, use_sudo=True)
             
-        r.sudo('chown -R {apache_user}:{apache_group} {apache_root}')
+        r.sudo('chown -R {apache_web_user}:{apache_web_group} {apache_root}')
 
     @task(precursors=['packager', 'user', 'hostname', 'ip'])
     def configure(self):
@@ -551,94 +625,7 @@ class ApacheSatchel(ServiceSatchel):
         self.configure_modrpaf()
         self.configure_site(full=1, site=ALL, delete_old=1)
         self.install_auth_basic_user_file(site=ALL)
-        #self.install_ssl(site=ALL)
-
-        
-#DEPRECATED:remove
-class ApacheMediaSatchel(Satchel):
-    
-    name = 'apachemedia'
-    
-    def sync_media(self, sync_set=None, clean=0, iter_local_paths=0):
-        """
-        Uploads select media to an Apache accessible directory.
-        """
-        
-        from burlap.dj import render_remote_paths
-        
-        # Ensure a site is selected.
-        self.genv.SITE = self.genv.SITE or self.genv.default_site
-        
-#         apache.get_apache_settings()
-        
-        
-        render_remote_paths()
-        
-        r = self.local_renderer
-        
-        clean = int(clean)
-        print('Getting site data for %s...' % self.genv.SITE)
-        site_data = self.genv.sites[self.genv.SITE]
-        self.genv.update(site_data)
-        
-        sync_sets = r.env.sync_sets
-        if sync_set:
-            sync_sets = [sync_set]
-        
-        ret_paths = []
-        for sync_set in sync_sets:
-            for paths in r.env.sync_sets[sync_set]:
-                #print 'paths:',paths
-                r.env.sync_local_path = os.path.abspath(paths['local_path'] % self.genv)
-                if paths['local_path'].endswith('/') and not r.env.sync_local_path.endswith('/'):
-                    r.env.sync_local_path += '/'
-                    
-                if iter_local_paths:
-                    ret_paths.append(r.env.sync_local_path)
-                    continue
-                    
-                r.env.sync_remote_path = paths['remote_path'] % self.genv
-                
-                if clean:
-                    r.sudo('rm -Rf {apache_sync_remote_path}') 
-                
-                print('Syncing %s to %s...' % (r.env.sync_local_path, r.env.sync_remote_path))
-                
-                r.env.tmp_chmod = paths.get('chmod', r.env.chmod)
-                #with settings(warn_only=True):
-                r.sudo('mkdir -p {apache_sync_remote_path}', user=r.env.user)
-                r.sudo('chmod -R {apache_tmp_chmod} {apache_sync_remote_path}', user=r.env.user)
-                r.local('rsync -rvz --progress --recursive --no-p --no-g '
-                    '--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {apache_sync_local_path} {user}@{host_string}:{apache_sync_remote_path}')
-                r.sudo('chown -R {apache_user}:{apache_group} {apache_sync_remote_path}')
-                
-        if iter_local_paths:
-            return ret_paths
-
-    def record_manifest(self):
-        """
-        Called after a deployment to record any data necessary to detect changes
-        for a future deployment.
-        """
-        from burlap.common import get_last_modified_timestamp
-        data = 0
-        for path in self.sync_media(iter_local_paths=1):
-            data = min(data, get_last_modified_timestamp(path) or data)
-        #TODO:hash media names and content
-        if self.verbose:
-            print('date:', data)
-        return data
-    
-    @task(precursors=['packager', 'apache', 'apache2', 'pip', 'tarball'])
-    def configure(self):
         self.sync_media()
+        #self.install_ssl(site=ALL)
             
 apache = ApacheSatchel()
-# 
-apachemedia = ApacheMediaSatchel()
-apachemedia.requires_satchel(apache)
-
-# __all__ = [
-#     'is_module_enabled', 'enable_module', 'disable_module',
-#     'is_site_enabled', 'enable_site', 'disable_site',
-# ]

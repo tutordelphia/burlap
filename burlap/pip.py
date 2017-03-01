@@ -143,7 +143,7 @@ class PIPSatchel(Satchel):
         r = self.local_renderer
         if not r.genv.is_local and r.env.check_permissions:
             r.sudo('chown -R {pip_user}:{pip_group} {virtualenv_dir}')
-            r.sudo('chmod -R {pip_chmod} {virtualenv_dir}')
+            r.sudo('chmod -R {pip_perms} {virtualenv_dir}')
     
     def get_combined_requirements(self, requirements=None):
         """
