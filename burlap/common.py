@@ -362,7 +362,7 @@ def format(s, lenv, genv, prefix=None): # pylint: disable=redefined-builtin
         for k, v in escaped_var_names.iteritems():
             s = s.replace(k, v)
         
-        if verbose or 1:
+        if verbose:
             print('var_values:')
             pprint(var_values, indent=4)
         s = s.format(**var_values)
