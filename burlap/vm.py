@@ -92,7 +92,6 @@ def retrieve_ec2_hosts(extended=0, site=None):
                     print('skipping because site %s is not set for this host' % site)
                 continue
         
-        print('host_name:', host_name)
         if extended:
             yield (host_name, data)
         elif data.public_dns_name:
@@ -145,7 +144,7 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
     _name = name
     _group = group
     _release = release
-    if verbose or 1:
+    if verbose:
         print('name=%s, group=%s, release=%s' % (_name, _group, _release))
         
     env.vm_elastic_ip_mappings = shelf.get('vm_elastic_ip_mappings')

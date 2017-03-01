@@ -305,10 +305,13 @@ def assert_valid_satchel(name):
     return name
 
 # CMD_VAR_REGEX = re.compile(r'(?:^|[^{]+)(?<!\\){([^{}]+)}')
-CMD_VAR_REGEX = re.compile(r'(?:^|[^{\\]+){([^{}]+)}')
+#CMD_VAR_REGEX = re.compile(r'(?:^|[^{\\]+){([^{}]+)}')
+CMD_VAR_REGEX = re.compile(r'(?<!\{){([^\{\}]+)}')
 CMD_ESCAPED_VAR_REGEX = re.compile(r'\{{2}[^\{\}]+\}{2}')
 
 def format(s, lenv, genv, prefix=None): # pylint: disable=redefined-builtin
+
+    verbose = get_verbose()
 
     # Resolve all variable names.
     cnt = 0
@@ -318,8 +321,9 @@ def format(s, lenv, genv, prefix=None): # pylint: disable=redefined-builtin
             raise Exception('Too many variables containing variables.')
         
         var_names = CMD_VAR_REGEX.findall(s)
-#         print('s:', s)
-#         print('var_names:', var_names)
+        if verbose:
+            print('format.s:', s)
+            print('found var_names:', var_names)
         if not var_names:
             break
         
@@ -328,15 +332,23 @@ def format(s, lenv, genv, prefix=None): # pylint: disable=redefined-builtin
         for var_name in var_names:
             if var_name in lenv:
                 # Find local variable name in local namespace.
+                if verbose:
+                    print('Found %s in lenv.' % var_name)
                 var_values[var_name] = lenv[var_name]
             elif var_name in genv:
                 # Find prefixed variable in global namespace.
+                if verbose:
+                    print('Found %s in genv.' % var_name)
                 var_values[var_name] = genv[var_name]
             elif prefix and prefix+'_'+var_name in genv:
                 # Find unprefixed variable in global namespace.
+                if verbose:
+                    print('Found prefix+%s in genv.' % var_name)
                 var_values[var_name] = genv[prefix+'_'+var_name]
             elif prefix and var_name.startswith(prefix+'_') and var_name[len(prefix+'_'):] in lenv:
                 # Find prefixed variable in local namespace.
+                if verbose:
+                    print('Found prefix-%s in genv.' % var_name)
                 var_values[var_name] = lenv[var_name[len(prefix+'_'):]]
             else:
                 raise Exception((
@@ -350,6 +362,9 @@ def format(s, lenv, genv, prefix=None): # pylint: disable=redefined-builtin
         for k, v in escaped_var_names.iteritems():
             s = s.replace(k, v)
         
+        if verbose or 1:
+            print('var_values:')
+            pprint(var_values, indent=4)
         s = s.format(**var_values)
         
         for k, v in escaped_var_names.iteritems():

@@ -1,3 +1,5 @@
+"""
+"""
 from __future__ import print_function
 
 import os
@@ -38,7 +40,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
     s = shellquote(s)
     
-def test_regex():
+def test_format_regex():
     
     assert CMD_VAR_REGEX.findall('{cmd} {host}') == ['cmd', 'host']
     
@@ -49,6 +51,9 @@ def test_regex():
     r = test.local_renderer
     r.env.host = 'myhost'
     r.local("getent {host} | awk '{{ print $1 }}'", dryrun=1)
+    
+    s = "rsync --recursive --verbose --perms --times --links --compress --copy-links {exclude_str}  --delete --delete-before --force {rsync_auth} {rsync_source_dir} {rsync_target_host}{rsync_target_dir}"
+    assert CMD_VAR_REGEX.findall(s) == ['exclude_str', 'rsync_auth', 'rsync_source_dir', 'rsync_target_host', 'rsync_target_dir']
 
 def test_settings_include():
     try:

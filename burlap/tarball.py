@@ -11,6 +11,7 @@ from burlap.common import only_hostname
 TARBALL = 'tarball'
 RSYNC = 'rsync'
 
+#DEPRECATED: TODO: remove tarball functionality, and rename to CodeSatchel
 class TarballSatchel(Satchel):
     
     name = 'tarball'
@@ -29,18 +30,18 @@ class TarballSatchel(Satchel):
         
         self.env.rsync_target_dir = None
         
-        self.env.rsync_target_host = '%(user)s@%(host_string)s:'
+        self.env.rsync_target_host = '{user}@{host_string}:'
         
-        self.env.rsync_auth = '--rsh "ssh -t -o StrictHostKeyChecking=no -i %(key_filename)s"'
+        self.env.rsync_auth = '--rsh "ssh -t -o StrictHostKeyChecking=no -i {key_filename}"'
          
         self.env.rsync_command_template = (
             'rsync '
             '--recursive --verbose --perms --times --links '
-            '--compress --copy-links %(tarball_exclude_str)s '
+            '--compress --copy-links {exclude_str} '
             '--delete --delete-before --force '
-            '%(tarball_rsync_auth)s '
-            '%(tarball_rsync_source_dir)s '
-            '%(tarball_rsync_target_host)s%(tarball_rsync_target_dir)s'
+            '{rsync_auth} '
+            '{rsync_source_dir} '
+            '{rsync_target_host}{rsync_target_dir}'
         )
             
         self.env.exclusions = [
@@ -57,25 +58,13 @@ class TarballSatchel(Satchel):
         
         self.env.extra_dirs = []
         
-        self.env.user = 'www-data'
+        self.env.perm_user = 'www-data'
         
-        self.env.group = 'www-data'
+        self.env.perm_group = 'www-data'
+        
+        self.env.perm_chmod = None
         
         self.env.set_permissions = True
-    
-    def render_template_paths(self, d=None):
-        
-        d = d or self.genv
-        genv = type(self.genv)(d)
-        
-        genv.remote_app_dir = \
-            genv.remote_app_dir_template % genv
-        genv.remote_app_src_dir = \
-            genv.remote_app_src_dir_template % genv
-        genv.remote_app_src_package_dir = \
-            genv.remote_app_src_package_dir_template % genv
-            
-        return genv
     
     def record_manifest(self):
         """
@@ -139,46 +128,32 @@ class TarballSatchel(Satchel):
         return tarball_hash
     
     @task
-    def set_permissions(self, d=None):
-        
-        genv = self.render_template_paths(d)
-        
-        # Mark executables.
-        print('Marking source files as executable...')
-        self.sudo_or_dryrun(
-            'chmod +x %(remote_app_src_package_dir)s/*' % genv)
-        self.sudo_or_dryrun(
-            'chmod -R %(apache_chmod)s %(remote_app_src_package_dir)s' % genv)
-        self.sudo_or_dryrun(
-            'chown -R %(apache_user)s:%(apache_group)s %(remote_app_dir)s' % genv)
+    def set_permissions(self):
+        r = self.local_renderer
+        r.sudo('chmod -R {perm_chmod} {target_dir}')
+        r.sudo('chown -R {perm_user}:{perm_group} {target_dir}')
     
-    def _run_rsync(self, src, dst, genv):
+    def _run_rsync(self, src, dst):
         print('rsync %s -> %s' % (src, dst))
+        r = self.local_renderer
         
-        genv.hostname = only_hostname(genv.host_string)
+        r.env.hostname = only_hostname(r.genv.host_string)
         
         # Rsync to a temporary directory where we'll have full permissions.
-        #tmp_dir = (self.run_or_dryrun('mktemp -d') or '').strip() or '/tmp/sometempdir'
-        tmp_dir = '/tmp/tmp_%s_%s' % (
-            self.env.rsync_target_dir.replace('/', '_'),
-            src.replace('/', '_'))
-        genv.tarball_rsync_target_dir = tmp_dir
-        genv.tarball_rsync_source_dir = src
-        tmp_rsync_command = (self.env.rsync_command_template % genv) % genv
-        self.local(tmp_rsync_command)
+        tmp_dir = '/tmp/tmp_%s_%s' % (self.env.rsync_target_dir.replace('/', '_'), src.replace('/', '_'))
+        r.env.rsync_target_dir = tmp_dir
+        r.env.rsync_source_dir = src
+        r.local(self.env.rsync_command_template)
         
         # Then rsync from the temp directory as sudo to complete the operation.
-        genv.tarball_rsync_tmp_dir = tmp_dir
-        genv.tarball_rsync_target_host = ''
-        genv.tarball_rsync_auth = ''
-        #genv.tarball_rsync_source_dir = '%(user)s@%(host_string)s:%(tarball_rsync_tmp_dir)s' % genv
-        genv.tarball_rsync_source_dir = '%(tarball_rsync_tmp_dir)s/*' % genv
-        genv.tarball_rsync_target_dir = self.env.rsync_target_dir
-        final_rsync_command = self.env.rsync_command_template % genv
-        self.sudo_or_dryrun(final_rsync_command)
+        r.env.rsync_tmp_dir = tmp_dir
+        r.env.rsync_target_host = ''
+        r.env.rsync_auth = ''
+        r.sudo(self.env.rsync_command_template)
         
     @task
     def deploy_rsync(self, *args, **kwargs):
+        r = self.local_renderer
         
         # Confirm source directories.
         src_dirs = list(self.env.rsync_source_dirs)
@@ -188,15 +163,13 @@ class TarballSatchel(Satchel):
         # Confirm target directories.
         assert self.env.rsync_target_dir
         
-        genv = self.render_template_paths()
-        genv.tarball_exclude_str = ' '.join('--exclude=%s' % _ for _ in self.env.exclusions)
+        r.env.exclude_str = ' '.join('--exclude=%s' % _ for _ in self.env.exclusions)
         
         for src_dir in src_dirs:
-            _genv = type(genv)(genv)
-            self._run_rsync(src=src_dir, dst=self.env.rsync_target_dir, genv=_genv)
+            self._run_rsync(src=src_dir, dst=self.env.rsync_target_dir)
         
         if self.env.set_permissions:
-            self.set_permissions(genv)
+            self.set_permissions()
     
     @task
     def deploy_tarball(self, clean=None, refresh=1):
@@ -220,7 +193,6 @@ class TarballSatchel(Satchel):
             'No tarball found. Ensure you ran create() first.'
         self.put_or_dryrun(local_path=self.env.path)
         
-        genv = self.render_template_paths()
         
         if int(clean):
             print('Deleting old remote source...')
