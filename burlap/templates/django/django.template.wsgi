@@ -3,7 +3,7 @@ import sys
 
 os.environ['DJANGO_SETTINGS_MODULE'] = '{{ django_settings_module }}'
 os.environ['CELERY_LOADER'] = 'django'
-os.environ['SITE'] = '{{ apache_site }}'
+os.environ['SITE'] = '{{ SITE }}'
 os.environ['ROLE'] = '{{ ROLE }}'
 
 #This is where the python stuff will be deployed

@@ -172,8 +172,9 @@ class ApacheSatchel(ServiceSatchel):
         self.env.domain_without_sub = None
         
         self.env.wsgi_enabled = False
-        self.env.wsgi_template = None
-        self.env.wsgi_path = '/usr/local/{apache_application_name}/src/wsgi/{apache_site}.wsgi'
+        self.env.wsgi_template = 'django/django.template.wsgi'
+        self.env.wsgi_python_path = None
+        self.env.wsgi_scriptalias = None
         self.env.wsgi_server_memory_gb = 8
         self.env.wsgi_processes = 5
         self.env.wsgi_threads = 15
@@ -220,6 +221,14 @@ class ApacheSatchel(ServiceSatchel):
         
         self.env.ssl_certificates = None
         self.env.ssl_certificates_templates = []
+        
+        self.env.ignored_template_variables = [
+            'APACHE_LOG_DIR',
+            'GLOBAL',
+            'DOCUMENT_ROOT',
+            'SCRIPT_FILENAME',
+            'GROUP',
+        ]
         
         # The local and remote relative directory where the SSL certificates are stored.
         self.env.ssl_dir_local = 'ssl'
@@ -344,12 +353,10 @@ class ApacheSatchel(ServiceSatchel):
     def install_auth_basic_user_file(self, site=None):
         """
         Installs users for basic httpd auth.
-        """
-        from burlap.common import get_current_hostname, iter_sites
-        
+        """        
         r = self.local_renderer
                 
-        hostname = get_current_hostname()
+        hostname = self.current_hostname
         
         target_sites = self.genv.available_sites_by_host.get(hostname, None)
         
@@ -561,7 +568,6 @@ class ApacheSatchel(ServiceSatchel):
         """
         Configures Apache to host one or more websites.
         """
-        from burlap.common import get_current_hostname
         from burlap import service
         
         r = self.local_renderer
@@ -576,31 +582,43 @@ class ApacheSatchel(ServiceSatchel):
             r.sudo('rm -f {sites_enabled}/*')
         
         for site, site_data in self.iter_sites(site=site, setter=self.set_site_specifics):
+            r = self.local_renderer
+
             #r.env.site = site
             if self.verbose:
                 print('-'*80, file=sys.stderr)
                 print('Site:', site, file=sys.stderr)
                 print('-'*80, file=sys.stderr)
             
+            r.env.server_name = r.format(r.env.domain_template)
+            print('r.env.server_name:', r.env.server_name)
+            
             # Write WSGI template
             if r.env.wsgi_enabled:
                 r.pc('Writing WSGI template for site %s...' % site)
-                r.env.wsgi_path = r.format(r.env.wsgi_path)
+                r.env.wsgi_scriptalias = r.format(r.env.wsgi_scriptalias)
                 fn = self.render_to_file(r.env.wsgi_template)
-                r.env.remote_dir = os.path.split(r.env.wsgi_path)[0]
+                r.env.wsgi_dir = r.env.remote_dir = os.path.split(r.env.wsgi_scriptalias)[0]
                 r.sudo('mkdir -p {remote_dir}')
-                r.put(local_path=fn, remote_path=r.env.wsgi_path, use_sudo=True)
+                r.put(local_path=fn, remote_path=r.env.wsgi_scriptalias, use_sudo=True)
             
             # Write site configuration.
             r.pc('Writing site configuration for site %s...' % site)
-            fn = self.render_to_file(self.env.site_template)
-            if self.verbose:
-                print(open(fn).read())
+            from functools import partial
+            genv = r.collect_genv()
+            print('*'*80)
+            print('apache_wsgi_scriptalias:', genv.apache_wsgi_scriptalias)
+            fn = self.render_to_file(
+                self.env.site_template,
+                extra=genv,
+                formatter=partial(r.format, ignored_variables=self.env.ignored_template_variables))
             r.env.site_conf = site+'.conf'
             r.env.site_conf_fqfn = os.path.join(r.env.sites_available, r.env.site_conf)
             r.put(local_path=fn, remote_path=r.env.site_conf_fqfn, use_sudo=True)
             
             self.enable_site(site)
+            
+            self.clear_local_renderer()
         
         # Enable modules.
         for mod_name in r.env.mods_enabled:

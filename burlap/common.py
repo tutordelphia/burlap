@@ -309,9 +309,11 @@ def assert_valid_satchel(name):
 CMD_VAR_REGEX = re.compile(r'(?<!\{){([^\{\}]+)}')
 CMD_ESCAPED_VAR_REGEX = re.compile(r'\{{2}[^\{\}]+\}{2}')
 
-def format(s, lenv, genv, prefix=None): # pylint: disable=redefined-builtin
+def format(s, lenv, genv, prefix=None, ignored_variables=None): # pylint: disable=redefined-builtin
 
     verbose = get_verbose()
+
+    ignored_variables = set(ignored_variables or [])
 
     # Resolve all variable names.
     cnt = 0
@@ -321,16 +323,21 @@ def format(s, lenv, genv, prefix=None): # pylint: disable=redefined-builtin
             raise Exception('Too many variables containing variables.')
         
         var_names = CMD_VAR_REGEX.findall(s)
-        if verbose:
-            print('format.s:', s)
-            print('found var_names:', var_names)
+#         if verbose:
+#             print('format.s:', s)
+#             print('found var_names:', var_names)
+            
         if not var_names:
+            break
+        elif set(var_names).issubset(ignored_variables):
             break
         
         # Lookup local and global variable values.
         var_values = {}
         for var_name in var_names:
-            if var_name in lenv:
+            if var_name in ignored_variables:
+                continue
+            elif var_name in lenv:
                 # Find local variable name in local namespace.
                 if verbose:
                     print('Found %s in lenv.' % var_name)
@@ -362,9 +369,12 @@ def format(s, lenv, genv, prefix=None): # pylint: disable=redefined-builtin
         for k, v in escaped_var_names.iteritems():
             s = s.replace(k, v)
         
-        if verbose:
-            print('var_values:')
-            pprint(var_values, indent=4)
+#         if verbose:
+#             print('var_values:')
+#             pprint(var_values, indent=4)
+            
+        for _vn in ignored_variables:
+            var_values[_vn] = '{%s}' % _vn
         s = s.format(**var_values)
         
         for k, v in escaped_var_names.iteritems():
@@ -396,8 +406,17 @@ class Renderer(object):
         # If true, getattr will return None if no attribute set.
         self._set_default = set_default
     
-    def format(self, s):
-        return format(s, lenv=self.lenv, genv=self.genv, prefix=self.obj.name.lower())
+    def format(self, s, **kwargs):
+        return format(s, lenv=self.lenv, genv=self.genv, prefix=self.obj.name.lower(), **kwargs)
+    
+    def collect_genv(self):
+        """
+        Returns a copy of the global environment with all the local variables copied back into it.
+        """
+        e = type(self.genv)(self.genv)
+        for k, v in self.lenv.items():
+            e['%s_%s' % (self.obj.name.lower(), k)] = v
+        return e
     
     def __getattr__(self, attrname):
         
@@ -608,6 +627,9 @@ class Satchel(object):
     @property
     def current_hostname(self):
         return get_current_hostname()
+    
+    def set_site(self, site):
+        set_site(site)
     
     def get_tasks(self):
         """
@@ -2107,11 +2129,16 @@ def render_to_file(template, fn=None, extra=None, **kwargs):
 #     replace_homedir = kwargs.pop('replace_homedir', False)
     append_newline = kwargs.pop('append_newline', True)
     style = kwargs.pop('style', 'cat') # |echo
+    formatter = kwargs.pop('formatter', None)
     content = render_to_string(template, extra=extra)
     if append_newline and not content.endswith('\n'):
         content += '\n'
 #     if env.user:
 #         content = content.replace('~', '/home/%s' % env.user)
+
+    if formatter and callable(formatter):
+        content = formatter(content)
+
     if dryrun:
         if not fn:
             fd, fn = tempfile.mkstemp()

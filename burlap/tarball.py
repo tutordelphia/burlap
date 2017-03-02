@@ -130,26 +130,31 @@ class TarballSatchel(Satchel):
     @task
     def set_permissions(self):
         r = self.local_renderer
-        r.sudo('chmod -R {perm_chmod} {target_dir}')
-        r.sudo('chown -R {perm_user}:{perm_group} {target_dir}')
+        if r.env.rsync_target_dir:
+            if r.env.perm_chmod:
+                r.sudo('chmod -R {perm_chmod} {rsync_target_dir}')
+            r.sudo('chown -R {perm_user}:{perm_group} {rsync_target_dir}')
     
     def _run_rsync(self, src, dst):
         print('rsync %s -> %s' % (src, dst))
         r = self.local_renderer
-        
         r.env.hostname = only_hostname(r.genv.host_string)
-        
-        # Rsync to a temporary directory where we'll have full permissions.
-        tmp_dir = '/tmp/tmp_%s_%s' % (self.env.rsync_target_dir.replace('/', '_'), src.replace('/', '_'))
-        r.env.rsync_target_dir = tmp_dir
-        r.env.rsync_source_dir = src
-        r.local(self.env.rsync_command_template)
-        
-        # Then rsync from the temp directory as sudo to complete the operation.
-        r.env.rsync_tmp_dir = tmp_dir
-        r.env.rsync_target_host = ''
-        r.env.rsync_auth = ''
-        r.sudo(self.env.rsync_command_template)
+        real_rsync_target_dir = r.env.rsync_target_dir
+        try:
+            # Rsync to a temporary directory where we'll have full permissions.
+            tmp_dir = '/tmp/tmp_%s_%s' % (self.env.rsync_target_dir.replace('/', '_'), src.replace('/', '_'))
+            r.env.rsync_target_dir = tmp_dir
+            r.env.rsync_source_dir = src
+            r.local(self.env.rsync_command_template)
+            
+            # Then rsync from the temp directory as sudo to complete the operation.
+            r.env.rsync_source_dir = tmp_dir
+            r.env.rsync_target_dir = real_rsync_target_dir
+            r.env.rsync_target_host = ''
+            r.env.rsync_auth = ''
+            r.sudo(self.env.rsync_command_template)
+        finally:
+            r.env.rsync_target_dir = real_rsync_target_dir
         
     @task
     def deploy_rsync(self, *args, **kwargs):

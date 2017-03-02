@@ -1,5 +1,6 @@
 from burlap.constants import *
-from burlap import Satchel, ServiceSatchel
+from burlap import Satchel
+from burlap.decorators import task
 
 class {{ name_camelcase }}Satchel(Satchel):
     """
@@ -7,26 +8,22 @@ class {{ name_camelcase }}Satchel(Satchel):
     """
     
     name = '{{ name_simple }}'
-
-    tasks = (
-        # Enter additional method names here that should be executable from Fabric.
-        #'mytask'
-    )
     
     def set_defaults(self):
         # Enter custom settings here.
-        #self.env.mysetting = 123
-        pass
+        self.env.helloworld_text = 'helloworld'
     
-#    def mytask(self):
-#        self.sudo_or_dryrun('echo "hello world"')
+    @task
+    def helloworld(self):
+        if self.verbose:
+            print("We're going to do something now.")
+        self.run('echo "{helloworld_text}"')
     
+    @task(precursors=['packager'])
     def configure(self):
         """
         Executed when your settings have changed since the last deployment.
         Run commands to apply changes here.
         """
-
-    configure.deploy_before = ['packager', 'user']
                 
 {{ name_camelcase }}Satchel()
