@@ -6,9 +6,9 @@ from __future__ import print_function
 import os
 import re
 import sys
-import importlib
 import traceback
 import glob
+from importlib import import_module
 from collections import defaultdict
 from pprint import pprint
 
@@ -35,6 +35,9 @@ class DjangoSatchel(Satchel):
         # This is the import path to your Django settings file.
         self.env.settings_module_template = '{app_name}.settings'
         
+        # The folder containing manage.py.
+        self.env.project_dir = None
+        
         self.env.shell_template = 'cd {project_dir}; /bin/bash -i -c \"{manage_cmd} shell;\"'
         
         # These apps will be migrated on a specific database, while faked
@@ -45,19 +48,25 @@ class DjangoSatchel(Satchel):
         #./manage migrate --database=<database> <app>
         self.env.migrate_fakeouts = [] # [{database:<database>, app:<app>}]
         
-        self.env.install_sql_path_template = '%(src_dir)s/%(app_name)s/*/sql/*'
+        self.env.install_sql_path_template = '{src_dir}/{app_name}/*/sql/*'
         
         # The target version of Django to assume.
         self.env.version = (1, 6, 0)
         
         self.env.media_dirs = ['static']
         
+        # The path relative to fab where the code resides.
+        self.env.src_dir = 'src'
+        
         self.env.manage_dir = 'src'
         
         self.env.ignore_errors = 0
+        
+        # Modules whose name start with one of these values will be deleted before settings are imported.
+        self.env.delete_module_with_prefixes = []
 
     def has_database(self, name, site=None, role=None):
-        settings = self.get_settings(site=site, role=role, verbose=0)
+        settings = self.get_settings(site=site, role=role)
         return name in settings.DATABASES
 
     @task
@@ -65,64 +74,73 @@ class DjangoSatchel(Satchel):
         """
         Retrieves the Django settings dictionary.
         """
-        from burlap.common import get_verbose
-        stdout = sys.stdout
-        stderr = sys.stderr
-        verbose = get_verbose()
-        if not verbose:
+        r = self.local_renderer
+        _stdout = sys.stdout
+        _stderr = sys.stderr
+        if not self.verbose:
             sys.stdout = StringIO()
             sys.stderr = StringIO()
         try:
-            sys.path.insert(0, self.env.src_dir)
+            sys.path.insert(0, r.env.src_dir)
+            
+            # Temporarily override SITE.
+            tmp_site = self.genv.SITE
             if site and site.endswith('_secure'):
                 site = site[:-7]
-            site = site or self.env.SITE or self.env.default_site
-    #         if verbose:
-    #             print('get_settings.site:',env.SITE)
-    #             print('get_settings.role:',env.ROLE)
+            site = site or self.genv.SITE or self.genv.default_site
             self.set_site(site)
-            tmp_role = self.env.ROLE
+            
+            # Temporarily override ROLE.
+            tmp_role = self.genv.ROLE
             if role:
-                self.env.ROLE = os.environ[ROLE] = role
+                self.set_role(role)
 
-            self.env.settings_module = self.env.settings_module_template
+            r.env.settings_module = r.format(self.env.settings_module_template)
             try:
-                os.environ['SITE'] = self.env.SITE
-                os.environ['ROLE'] = self.env.ROLE
+#                 os.environ['SITE'] = site
+#                 os.environ['ROLE'] = self.genv.ROLE
                 
                 # We need to explicitly delete sub-modules from sys.modules. Otherwise, reload() skips
                 # them and they'll continue to contain obsolete settings.
-                for name in sorted(sys.modules):
-                    if name.startswith('alphabuyer.settings.role_') \
-                    or name.startswith('alphabuyer.settings.site_'):
-                        del sys.modules[name]
-                if self.env.settings_module in sys.modules:
-                    del sys.modules[self.env.settings_module]
-                module = importlib.import_module(self.env.settings_module)
-    #             print('module:', module)
+                if r.env.delete_module_with_prefixes:
+                    for name in sorted(sys.modules):
+                        for prefix in r.env.delete_module_with_prefixes:
+                            if name.startswith(prefix):
+                                if self.verbose:
+                                    print('Deleting module %s prior to re-import.' % name)
+                                del sys.modules[name]
+                                break
+                        
+                if r.env.settings_module in sys.modules:
+                    del sys.modules[r.env.settings_module]
+                module = import_module(r.env.settings_module)
         
                 # Works as long as settings.py doesn't also reload anything.
                 import imp
                 imp.reload(module)
                 
             except ImportError as e:
-                print('Warning: Could not import settings for site "%s": %s' % (site, e))
-                traceback.print_exc(file=sys.stdout)
+                print('Warning: Could not import settings for site "%s": %s' % (site, e), file=_stdout)
+                traceback.print_exc(file=_stdout)
                 #raise # breaks *_secure pseudo sites
                 return
             finally:
-                self.env.ROLE = os.environ[ROLE] = tmp_role
+                if tmp_site:
+                    self.set_site(tmp_site)
+                if tmp_role:
+                    self.set_role(tmp_role)
         finally:
-            sys.stdout = stdout
-            sys.stderr = stderr
+            sys.stdout = _stdout
+            sys.stderr = _stderr
+            sys.path.remove(r.env.src_dir)
         return module
 
-    def set_db(self, name=None, site=None, role=None, verbose=0):
+    def set_db(self, name=None, site=None, role=None):
         r = self.local_renderer
         name = name or 'default'
-        site = site or r.env.SITE
-        role = role or r.env.ROLE
-        settings = self.get_settings(site=site, role=role, verbose=verbose)
+        site = site or r.env.get('SITE') or r.genv.SITE
+        role = role or r.env.get('ROLE') or r.genv.SITE
+        settings = self.get_settings(site=site, role=role)
         assert settings, 'Unable to load Django settings for site %s.' % (site,)
         r.env.django_settings = settings
         default_db = settings.DATABASES[name]
@@ -141,22 +159,31 @@ class DjangoSatchel(Satchel):
         else:
             r.env.db_type = r.env.db_engine
         
+        for k, v in r.genv.iteritems():
+            if not k.startswith(self.name.lower()+'_db_'):
+                continue
+            print('db.kv:', k, v)
+        
         return default_db
 
     @task
-    def install_sql(self, site=None, database='default', apps=None):
+    def install_sql(self, site=None, database='default', apps=None, stop_on_error=0):
         """
         Installs all custom SQL.
         """
         #from burlap.db import load_db_set
         
+        stop_on_error = int(stop_on_error)
+        
         name = database
         self.set_db(name=name, site=site)
-        #load_db_set(name=name)
-        paths = glob.glob(self.env.install_sql_path_template)
-        #paths = glob.glob('%(src_dir)s/%(app_name)s/*/sql/*')
+
+        r = self.local_renderer
+        paths = glob.glob(r.format(r.env.install_sql_path_template))
         
-        apps = (apps or '').split(',')
+        apps = [_ for _ in (apps or '').split(',') if _.strip()]
+        if self.verbose:
+            print('install_sql.apps:', apps)
         
         def cmp_paths(d0, d1):
             if d0[1] and d0[1] in d1[2]:
@@ -189,18 +216,31 @@ class DjangoSatchel(Satchel):
         
         def run_paths(paths, cmd_template, max_retries=3):
             r = self.local_renderer
-            paths = list(paths)
+            paths = list(sorted(paths))
             error_counts = defaultdict(int) # {path:count}
             terminal = set()
+            if self.verbose:
+                print('Checking %i paths.' % len(paths))
             while paths:
                 path = paths.pop(0)
+                if self.verbose:
+                    print('path:', path)
                 app_name = re.findall(r'/([^/]+)/sql/', path)[0]
                 if apps and app_name not in apps:
+                    self.vprint('skipping because app_name %s not in apps' % app_name)
                     continue
                 with self.settings(warn_only=True):
-                    r.put(local_path=path)
-                    error_code = r.run(cmd_template)
-                    if error_code:
+                    if r.genv.is_local:
+                        r.env.sql_path = path
+                    else:
+                        r.env.sql_path = '/tmp/%s' % os.path.split(path)[-1]
+                        r.put(local_path=path, remote_path=r.env.sql_path)
+                    ret = r.run_or_local(cmd_template)
+                    if ret and ret.return_code:
+                        
+                        if stop_on_error:
+                            raise Exception('Unable to execute file %s' % path)
+                            
                         error_counts[path] += 1
                         if error_counts[path] < max_retries:
                             paths.append(path)
@@ -212,15 +252,18 @@ class DjangoSatchel(Satchel):
                     print(path, file=sys.stderr)
                 print(file=sys.stderr)
         
-        if 'postgres' in self.env.db_engine or 'postgis' in self.env.db_engine:
+        if self.verbose:
+            print('install_sql.db_engine:', r.env.db_engine)
+        
+        if 'postgres' in r.env.db_engine or 'postgis' in r.env.db_engine:
             run_paths(
                 paths=get_paths('postgresql'),
-                cmd_template="psql --host=%(db_host)s --user=%(db_user)s -d %(db_name)s -f %(put_remote_path)s")
+                cmd_template="psql --host={db_host} --user={db_user} -d {db_name} -f {sql_path}")
                         
-        elif 'mysql' in self.env.db_engine:
+        elif 'mysql' in r.env.db_engine:
             run_paths(
                 paths=get_paths('mysql'),
-                cmd_template="mysql -v -h %(db_host)s -u %(db_user)s -p'%(db_password)s' %(db_name)s < %(put_remote_path)s")
+                cmd_template="mysql -v -h {db_host} -u {db_user} -p'{db_password}' {db_name} < {sql_path}")
                 
         else:
             raise NotImplementedError
@@ -277,29 +320,22 @@ class DjangoSatchel(Satchel):
             ('--%s' % _k if _v in (True, 'True') else '--%s=%s' % (_k, _v))
             for _k, _v in kwargs.iteritems())
         r.env.environs = environs
-        cmd = 'export SITE={SITE}; export ROLE={ROLE};{environs} cd {project_dir}; {manage_cmd} {cmd} {args} {kwargs}'
-        if r.genv.is_local:
-            r.local(cmd)
-        else:
-            r.run(cmd)
+        r.run_or_local('export SITE={SITE}; export ROLE={ROLE};{environs} cd {project_dir}; {manage_cmd} {cmd} {args} {kwargs}')
 
     @task
     def manage_all(self, *args, **kwargs):
         """
         Runs manage() across all unique site default databases.
         """
-        
         for site, site_data in self.iter_unique_databases(site='all'):
             print('-'*80, file=sys.stderr)
             print('site:', site, file=sys.stderr)
-            
             if self.env.available_sites_by_host:
                 hostname = self.current_hostname
                 sites_on_host = self.env.available_sites_by_host.get(hostname, [])
                 if sites_on_host and site not in sites_on_host:
                     print('skipping site:', site, sites_on_host, file=sys.stderr)
                     continue
-                
             self.manage(*args, **kwargs)
 
     def load_django_settings(self):
@@ -341,8 +377,6 @@ class DjangoSatchel(Satchel):
                 yield _s.location
     
     def iter_app_directories(self, ignore_import_error=False):
-        from importlib import import_module
-        
         settings = self.load_django_settings()
         if not settings:
             return
@@ -391,18 +425,17 @@ class DjangoSatchel(Satchel):
         Opens a Django focussed Python shell.
         Essentially the equivalent of running `manage.py shell`.
         """
-        if '@' in self.env.host_string:
-            self.env.shell_host_string = self.env.host_string
+        r = self.local_renderer
+        if '@' in self.genv.host_string:
+            r.env.shell_host_string = self.genv.host_string
         else:
-            self.env.shell_host_string = '%(user)s@%(host_string)s'
-        self.env.shell_default_dir = self.env.shell_default_dir_template
-        self.env.shell_interactive_djshell_str = self.env.interactive_shell_template
-        if self.env.is_local:
-            cmd = '%(shell_interactive_djshell_str)s'
+            r.env.shell_host_string = '{user}@{host_string}'
+        r.env.shell_default_dir = self.genv.shell_default_dir_template
+        r.env.shell_interactive_djshell_str = self.genv.interactive_shell_template
+        if self.genv.is_local:
+            r.local('{shell_interactive_djshell_str}')
         else:
-            cmd = 'ssh -t -i %(key_filename)s %(shell_host_string)s "%(shell_interactive_djshell_str)s"'
-        #print cmd
-        os.system(cmd)
+            r.run('ssh -t -i {key_filename} {shell_host_string} "{shell_interactive_djshell_str}"')
         
     @task
     def syncdb(self, site=None, all=0, database=None, ignore_errors=1): # pylint: disable=redefined-builtin
@@ -548,7 +581,7 @@ class DjangoSatchel(Satchel):
             r.env.name = name.format(**r.genv)
             r.run(
                 'screen -dmS {name} bash -c "export SITE={SITE}; '\
-                'export ROLE={ROLE}; cd /usr/local/alphabuyer/src/alphabuyer; '\
+                'export ROLE={ROLE}; cd {project_dir}; '\
                 './manage {command} --traceback; {end_email_command}"; sleep 3;')
 
     def record_manifest(self):

@@ -281,7 +281,7 @@ class _EnvProxy(object):
 #             return k in super(_EnvProxy, self).__contains__(k)
         k = (self.satchel.env_prefix + k)
         return k in env
-    
+
     def __getitem__(self, k):
         return getattr(self, k)
     
@@ -503,10 +503,12 @@ class Renderer(object):
         if attrname.startswith('local') \
         or attrname.startswith('_local') \
         or attrname.startswith('run') \
+        or attrname.startswith('run_or_local') \
         or attrname.startswith('_run') \
         or attrname.startswith('comment') \
         or attrname.startswith('pc') \
-        or attrname.startswith('sudo'):
+        or attrname.startswith('sudo') \
+        or attrname.startswith('sudo_or_local'):
             ret = wrap(ret)
         elif attrname.startswith('reboot'):
             ret = wrap2(ret)
@@ -634,6 +636,9 @@ class Satchel(object):
     def set_site(self, site):
         set_site(site)
     
+    def set_role(self, role):
+        set_role(role)
+        
     def get_tasks(self):
         """
         Returns an ordered list of all task names.
@@ -1035,6 +1040,12 @@ class Satchel(object):
     
     def sudo(self, *args, **kwargs):
         return sudo_or_dryrun(*args, **kwargs)
+    
+    def sudo_or_local(self, *args, **kwargs):
+        if self.genv.is_local:
+            return local_or_dryrun(*args, **kwargs)
+        else:
+            return sudo_or_dryrun(*args, **kwargs)
     
     def sudo_if_missing(self, fn, cmd, **kwargs):
         _cmd = "[ ! -f '%s' ] && %s || true" % (fn, cmd)
@@ -2265,6 +2276,11 @@ def set_site(site):
         return
     env[SITE] = os.environ[SITE] = site
 
+def set_role(role):
+    if role is None:
+        return
+    env[ROLE] = os.environ[ROLE] = role
+    
 def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=False, verbose=False):
     """
     Iterates over sites, safely setting environment variables for each site.
