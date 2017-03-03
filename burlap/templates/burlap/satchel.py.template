@@ -6,13 +6,23 @@ class {{ name_camelcase }}Satchel(Satchel):
     """
     Enter description here.
     """
-    
+
     name = '{{ name_simple }}'
-    
+
+    templates = []
+
     def set_defaults(self):
         # Enter custom settings here.
         self.env.helloworld_text = 'helloworld'
-    
+
+    @property
+    def packager_system_packages(self):   
+        return {
+            #UBUNTU: ['somepackage'],
+            #(UBUNTU, '14.04'): ['somepackage'],
+            #(UBUNTU, '16.04'): ['somepackage'],
+        }
+
     @task
     def helloworld(self):
         if self.verbose:
@@ -25,5 +35,8 @@ class {{ name_camelcase }}Satchel(Satchel):
         Executed when your settings have changed since the last deployment.
         Run commands to apply changes here.
         """
-                
+        #lm = self.last_manifest
+        #if self.env.helloworld_text != lm.helloworld_text:
+        #    self.helloworld()
+
 {{ name_camelcase }}Satchel()

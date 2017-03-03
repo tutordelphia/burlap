@@ -56,6 +56,7 @@ try:
     from . import common
     Satchel = common.Satchel
     ServiceSatchel = common.ServiceSatchel
+    ContainerSatchel = common.ContainerSatchel
     env_default = common.save_env()
 except (ImportError, NameError) as e:
     print('Unable to initialize common: %s' % e, file=sys.stderr)

@@ -8,14 +8,7 @@ from fabric.api import env#, runs_once
 
 from burlap.constants import *
 from burlap import ServiceSatchel
-from burlap import common
-from burlap.common import (
-    run_or_dryrun,
-    SITE,
-    ROLE,
-    ALL,
-    LocalRenderer,
-)
+from burlap.common import LocalRenderer, pretty_bytes
 from burlap.decorators import task, runs_once
 
 CONNECTION_HANDLER_DJANGO = 'django'
@@ -137,11 +130,12 @@ class DatabaseSatchel(ServiceSatchel):
             d['db_name'] = name
             
             if d.connection_handler == CONNECTION_HANDLER_DJANGO:
-                from burlap.dj import set_db
-                _d = type(self.genv)()
+                dj = self.get_satchel('dj')
+#                 _d = type(self.genv)()
                 if self.verbose:
                     print('Loading Django DB settings for site {} and role {}.'.format(site, role), file=sys.stderr)
-                set_db(name=name, site=site, role=role, e=_d)
+                dj.set_db(name=name, site=site, role=role)
+                _d = dj.local_renderer.collect_genv(include_local=True, include_global=False)
                 if self.verbose:
                     print('Loaded:', _d, file=sys.stderr)
                 d.update(_d)
@@ -165,7 +159,7 @@ class DatabaseSatchel(ServiceSatchel):
         Return free space in bytes.
         """
         cmd = "df -k | grep -vE '^Filesystem|tmpfs|cdrom|none|udev|cgroup' | awk '{ print($1 \" \" $4 }'"
-        lines = [_ for _ in run_or_dryrun(cmd).strip().split('\n') if _.startswith('/')]
+        lines = [_ for _ in self.run(cmd).strip().split('\n') if _.startswith('/')]
         assert len(lines) == 1, 'Ambiguous devices: %s' % str(lines)
         device, kb = lines[0].split(' ')
         free_space = int(kb) * 1024
@@ -177,18 +171,18 @@ class DatabaseSatchel(ServiceSatchel):
         """
         Retrieves the size of the database in bytes.
         """
-        from burlap.dj import set_db
-        set_db(site=env.SITE, role=env.ROLE)
-        if 'postgres' in env.db_engine or 'postgis' in env.db_engine:
-            #cmd = 'psql --user=%(db_postgresql_postgres_user)s --tuples-only -c "SELECT pg_size_pretty(pg_database_size(\'%(db_name)s\'));"' % env
-            cmd = 'psql --user=%(db_postgresql_postgres_user)s --tuples-only -c "SELECT pg_database_size(\'%(db_name)s\');"' % env
-            #print cmd
-            output = run_or_dryrun(cmd)
-            output = int(output.strip().split('\n')[-1].strip())
-            self.vprint('database size (bytes):', output)
-            return output
-        else:
-            raise NotImplementedError
+        #TODO:remove django hardcoding
+#         dj = self.get_satchel('dj')
+#         dj.set_db(site=env.SITE, role=env.ROLE)
+#         r = self.local_renderer
+#         if 'postgres' in self.genv.db_engine or 'postgis' in self.genv.db_engine:
+#             output = r.run('psql --user=%(db_postgresql_postgres_user)s --tuples-only -c "SELECT pg_database_size(\'%(db_name)s\');"')
+#             output = self.run(cmd)
+#             output = int(output.strip().split('\n')[-1].strip())
+#             self.vprint('database size (bytes):', output)
+#             return output
+#         else:
+        raise NotImplementedError
 
     @task
     def load_db_set(self, name, r=None):
@@ -231,13 +225,13 @@ class DatabaseSatchel(ServiceSatchel):
         
         # Deduct existing database size, because we'll be deleting it.
         balance_bytes = free_space_bytes + dst_size_bytes - src_size_bytes
-        balance_bytes_scaled, units = common.pretty_bytes(balance_bytes)
+        balance_bytes_scaled, units = pretty_bytes(balance_bytes)
         
         viable = balance_bytes >= 0
         if self.verbose:
-            print('src_db_size:', common.pretty_bytes(src_size_bytes))
-            print('dst_db_size:', common.pretty_bytes(dst_size_bytes))
-            print('dst_free_space:', common.pretty_bytes(free_space_bytes))
+            print('src_db_size:', pretty_bytes(src_size_bytes))
+            print('dst_db_size:', pretty_bytes(dst_size_bytes))
+            print('dst_free_space:', pretty_bytes(free_space_bytes))
             print
             if viable:
                 print('Viable! There will be %.02f %s of disk space left.' % (balance_bytes_scaled, units))

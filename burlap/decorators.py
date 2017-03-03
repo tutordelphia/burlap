@@ -76,7 +76,7 @@ def task(*args, **kwargs):
 
 def runs_once(meth):
     """
-    A wrapper around Fabric's run_once() to support our dryrun feature.
+    A wrapper around Fabric's runs_once() to support our dryrun feature.
     """
     from burlap.common import get_dryrun
     if get_dryrun():

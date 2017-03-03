@@ -43,20 +43,18 @@ class S3Satchel(Satchel):
             pip install s3cmd
             
         """
-        from burlap.dj import get_settings, render_remote_paths
+        from burlap.dj import dj
         force = int(force)
         
         r = self.local_renderer
         
         r.env.sync_force_flag = ' --force ' if force else ''
         
-        _settings = get_settings(verbose=1, site=site, role=role)
+        _settings = dj.get_settings(site=site, role=role)
         assert _settings, 'Unable to import settings.'
         for k in _settings.__dict__.iterkeys():
             if k.startswith('AWS_'):
                 r.genv[k] = _settings.__dict__[k]
-        
-        render_remote_paths()
         
         site_data = r.genv.sites[r.genv.SITE]
         r.env.update(site_data)
@@ -108,11 +106,11 @@ class S3Satchel(Satchel):
         
         Note, only 1000 paths can be issued in a request at any one time.
         """
-        from burlap.dj import get_settings
+        dj = self.get_satchel('dj')
         if not paths:
             return
         # http://boto.readthedocs.org/en/latest/cloudfront_tut.html
-        _settings = get_settings()
+        _settings = dj.get_settings()
         if not _settings.AWS_STATIC_BUCKET_NAME:
             print('No static media bucket set.')
             return

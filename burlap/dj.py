@@ -512,6 +512,45 @@ class DjangoSatchel(Satchel):
         r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; ./manage schemamigration {app} --initial')
         r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; ./manage migrate {app} --fake')
 
+    @task
+    def manage_async(self, command='', name='process', site=ALL, exclude_sites='', end_message='', recipients=''):
+        """
+        Starts a Django management command in a screen.
+        
+        Parameters:
+            
+            command :- all arguments passed to `./manage` as a single string
+            
+            site :- the site to run the command for (default is all)
+            
+        Designed to be ran like:
+        
+            fab <role> dj.manage_async:"some_management_command --force"
+
+        """
+        exclude_sites = exclude_sites.split(':')
+        r = self.local_renderer
+        for site, site_data in self.iter_sites(site=site, no_secure=True):
+            if site in exclude_sites:
+                continue
+            r.env.SITE = site
+            r.env.command = command
+            r.env.end_email_command = ''
+            r.env.recipients = recipients or ''
+            if end_message:
+                end_message = end_message + ' for ' + site
+                end_message = end_message.replace(' ', '_')
+                r.env.end_email_command = (
+                    '{django_manage_cmd} send_mail '\
+                    '--subject=%s '\
+                    '--recipients={recipients}; '
+                ) % end_message
+            r.env.name = name.format(**r.genv)
+            r.run(
+                'screen -dmS {name} bash -c "export SITE={SITE}; '\
+                'export ROLE={ROLE}; cd /usr/local/alphabuyer/src/alphabuyer; '\
+                './manage {command} --traceback; {end_email_command}"; sleep 3;')
+
     def record_manifest(self):
         manifest = super(DjangoSatchel, self).record_manifest()
         
@@ -567,4 +606,4 @@ class DjangoSatchel(Satchel):
         self.configure_media()
         self.configure_migrations()
 
-DjangoSatchel()
+dj = DjangoSatchel()

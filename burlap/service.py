@@ -305,6 +305,13 @@ class ServiceManagementSatchel(Satchel):
                 for func in funcs:
                     func()
 
+
+    @task
+    def refresh(self):
+        self.configure()
+        self.deploy()
+        self.post_deploy()
+
     @task
     def configure(self):
         """

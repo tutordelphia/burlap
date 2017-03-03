@@ -15,6 +15,9 @@ from burlap import ServiceSatchel
 from burlap.constants import *
 from burlap.decorators import task
 
+DJANGO = 'django'
+LOCAL = 'local'
+
 class RabbitMQSatchel(ServiceSatchel):
     
     name = 'rabbitmq'
@@ -52,6 +55,8 @@ class RabbitMQSatchel(ServiceSatchel):
         self.env.management_enabled = False
         self.env.loopback_users = False
         self.env.admin_username = 'admin'
+        self.env.user_lookup_method = None # LOCAL|DJANGO
+        self.env.users_vhosts = [] # [(user, password, vhost)]
         
         # If true, enables a third-party reposistory to install the most recent version.
         self.env.bleeding = False
@@ -107,10 +112,9 @@ class RabbitMQSatchel(ServiceSatchel):
             r.sudo('apt-get update')
     
     def render_paths(self):
-        from burlap.dj import render_remote_paths
-        render_remote_paths()
+        r = self.local_renderer
         if self.env.erlang_cookie_template:
-            self.env.erlang_cookie = self.env.erlang_cookie_template % self.genv
+            r.env.erlang_cookie = r.format(self.env.erlang_cookie_template)
     
     @task
     def list_vhosts(self):
@@ -181,28 +185,37 @@ class RabbitMQSatchel(ServiceSatchel):
             self.sudo('service rabbitmq-server restart; sleep 3;')
     
     def get_user_vhosts(self, site=None):
-        #TODO:remove django hardcoding
-        from burlap.dj import get_settings
         params = set() # [(user, password, vhost)]
-        for site, site_data in self.iter_sites(site=site, renderer=self.render_paths, no_secure=True):
-            if self.verbose:
-                print('!'*80, file=sys.stderr)
-                print('site:', site, file=sys.stderr)
-                
-            # Only load site configurations that are allowed for this host.
-#             if target_sites is not None:
-#                 assert isinstance(target_sites, (tuple, list))
-#                 if site not in target_sites:
-#                     continue
-                
-            _settings = get_settings(site=site)
-            if not _settings:
-                continue
-                
-            if hasattr(_settings, 'BROKER_USER') and hasattr(_settings, 'BROKER_VHOST'):
+        if self.env.user_lookup_method == DJANGO:
+            # Retrieve user settings from one or more assoicated Django sites.
+            
+            dj = self.get_satchel('dj')
+            for site, site_data in self.iter_sites(site=site, renderer=self.render_paths, no_secure=True):
                 if self.verbose:
-                    print('RabbitMQ:', _settings.BROKER_USER, _settings.BROKER_VHOST)
-                params.add((_settings.BROKER_USER, _settings.BROKER_PASSWORD, _settings.BROKER_VHOST))
+                    print('!'*80, file=sys.stderr)
+                    print('site:', site, file=sys.stderr)
+                    
+                # Only load site configurations that are allowed for this host.
+    #             if target_sites is not None:
+    #                 assert isinstance(target_sites, (tuple, list))
+    #                 if site not in target_sites:
+    #                     continue
+                    
+                _settings = dj.get_settings(site=site)
+                if not _settings:
+                    continue
+                    
+                if hasattr(_settings, 'BROKER_USER') and hasattr(_settings, 'BROKER_VHOST'):
+                    if self.verbose:
+                        print('RabbitMQ:', _settings.BROKER_USER, _settings.BROKER_VHOST)
+                    params.add((_settings.BROKER_USER, _settings.BROKER_PASSWORD, _settings.BROKER_VHOST))
+        
+        elif self.env.user_lookup_method == LOCAL:
+            # Retrieve user settings from our local settings.
+            params.update(tuple(_) for _ in self.env.users_vhosts)
+        
+        elif self.env.user_lookup_method:
+            raise NotImplementedError('Unknown user lookup method: %s' % self.env.user_lookup_method)
                 
         return params
     

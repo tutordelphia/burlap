@@ -334,7 +334,17 @@ class FileSatchel(Satchel):
         func = use_sudo and run_as_root or self.run
         options = '-r ' if recursive else ''
         func('/bin/rm {0}{1}'.format(options, quote(path)))
+    
+    @task
+    def upload(self, src, dst=None):
+        dst = self.put_or_dryrun(local_path=src, remote_path=dst)
+        print('Uploaded to %s' % (dst,))
         
+    @task
+    def download(self, src, dst=None):
+        dst = self.get(local_path=dst, remote_path=src)
+        print('Downloaded to %s' % (dst,))
+
     def require(self, path=None, contents=None, source=None, url=None, md5=None,
          use_sudo=False, owner=None, group='', mode=None, verify_remote=True,
          temp_dir='/tmp'):

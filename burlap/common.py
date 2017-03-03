@@ -409,13 +409,16 @@ class Renderer(object):
     def format(self, s, **kwargs):
         return format(s, lenv=self.lenv, genv=self.genv, prefix=self.obj.name.lower(), **kwargs)
     
-    def collect_genv(self):
+    def collect_genv(self, include_local=True, include_global=True):
         """
         Returns a copy of the global environment with all the local variables copied back into it.
         """
-        e = type(self.genv)(self.genv)
-        for k, v in self.lenv.items():
-            e['%s_%s' % (self.obj.name.lower(), k)] = v
+        e = type(self.genv)()
+        if include_global:
+            e.update(self.genv)
+        if include_local:
+            for k, v in self.lenv.items():
+                e['%s_%s' % (self.obj.name.lower(), k)] = v
         return e
     
     def __getattr__(self, attrname):
@@ -979,6 +982,9 @@ class Satchel(object):
         warnings.warn('Use self.put() instead.', DeprecationWarning, stacklevel=2)
         return put_or_dryrun(*args, **kwargs)
     
+    def get(self, *args, **kwargs):
+        return get_or_dryrun(*args, **kwargs)
+    
     def put(self, *args, **kwargs):
         return put_or_dryrun(*args, **kwargs)
     
@@ -988,6 +994,12 @@ class Satchel(object):
     
     def run(self, *args, **kwargs):
         return run_or_dryrun(*args, **kwargs)
+    
+    def run_or_local(self, *args, **kwargs):
+        if self.genv.is_local:
+            return local_or_dryrun(*args, **kwargs)
+        else:
+            return run_or_dryrun(*args, **kwargs)
     
     def local_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.local() instead.', DeprecationWarning, stacklevel=2)
@@ -1228,6 +1240,17 @@ class ServiceSatchel(Satchel, Service):
         The standard method called to apply functionality when the manifest changes.
         """
         raise NotImplementedError
+
+class ContainerSatchel(Satchel):
+    """
+    Wraps functionality that doesn't need to track or deploy changes.
+    """
+    
+    def record_manifest(self):
+        return {}
+
+    def configure(self):
+        pass
 
 env.hosts_retriever = None
 env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,
@@ -1669,6 +1692,45 @@ def reboot_or_dryrun(*args, **kwargs):
         if not success:
             raise Exception('Reboot failed or took longer than %s seconds.' % wait)
             
+# def get_or_dryrun(*args, **kwargs):
+#     dryrun = get_dryrun(kwargs.get('dryrun'))
+#     use_sudo = kwargs.get('use_sudo', False)
+#     real_remote_path = None
+#     if 'dryrun' in kwargs:
+#         del kwargs['dryrun']
+#     if dryrun:
+#         local_path = kwargs['local_path']
+#         remote_path = kwargs.get('remote_path', None)
+#         
+#         if not local_path:
+#             _, local_path = tempfile.mkstemp()
+#             
+#         if not local_path.startswith('/') and not local_path.startswith('~'):
+#             local_path = '/tmp/' + local_path
+#         
+#         if use_sudo:
+#             real_local_path = local_path
+#             _, local_path = tempfile.mkstemp()
+#         
+#         if real_local_path is None:
+#             real_local_path = local_path
+#         
+#         if env.host_string in LOCALHOSTS:
+#             cmd = 'rsync --progress --verbose %s %s' % (remote_path, local_path)
+#             print('%s get: %s' % (render_command_prefix(is_local=True), cmd))
+#             env.get_local_path = local_path
+#         else:
+#             cmd = 'rsync --progress --verbose %s %s@%s:%s' % (local_path, env.user, env.host_string, local_path)
+#             env.get_local_path = local_path
+#             print('%s get: %s' % (render_command_prefix(is_local=True), cmd))
+#             
+#         if real_local_path and use_sudo:
+#             sudo_or_dryrun('mv %s %s' % (local_path, real_local_path))
+#             env.get_local_path = real_local_path
+#             
+#         return [real_local_path]
+#     else:
+#         return _get(**kwargs)
 
 def put_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
@@ -1726,7 +1788,6 @@ def get_or_dryrun(**kwargs):
         cmd = ('sudo ' if use_sudo else '')+'rsync --progress --verbose %s@%s:%s %s' % (env.user, env.host_string, remote_path, local_path)
         print('[localhost] get: %s' % (cmd,))
         env.get_local_path = local_path
-        
     else:
         return _get(**kwargs)
 

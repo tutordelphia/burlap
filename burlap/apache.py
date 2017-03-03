@@ -2,34 +2,10 @@ from __future__ import print_function
 
 import os
 import sys
-# import warnings
-# import posixpath
-#from pprint import pprint
-# from distutils.version import StrictVersion as V
 
-# from fabric.api import settings
-
-# from burlap.files import is_link
-# from burlap.system import UnsupportedFamily, distrib_family, distrib_id, distrib_release
-# from burlap.utils import run_as_root
-from burlap import Satchel, ServiceSatchel
+from burlap import ServiceSatchel
 from burlap.constants import *
 from burlap.decorators import task
-
-
-# def _choose(old_style, new_style):
-#     family = distrib_family()
-#     if family == 'debian':
-#         distrib = distrib_id()
-#         at_least_trusty = (distrib == 'Ubuntu' and V(distrib_release()) >= V('14.04'))
-#         at_least_jessie = (distrib == 'Debian' and V(distrib_release()) >= V('8.0'))
-#         if at_least_trusty or at_least_jessie:
-#             return new_style
-#         else:
-#             return old_style
-#     else:
-#         raise UnsupportedFamily(supported=['debian'])
-
     
 class ApacheSatchel(ServiceSatchel):
     
