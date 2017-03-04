@@ -386,7 +386,6 @@ class PackagerSatchel(Satchel):
         
         if isinstance(lm, list):
             lm = {'required_packages': lm}
-        #lm_passwords = lm.get('passwords', {})
         
         enabled_services = map(str.upper, self.genv.services)
         #for satchel_name, satchel in self.all_satchels.iteritems():
@@ -395,8 +394,7 @@ class PackagerSatchel(Satchel):
                 satchel.packager_pre_configure()
                 
         self.refresh()
-        
-        if initial_upgrade and lm.get('initial_upgrade') is None and self.env.initial_upgrade:
+        if initial_upgrade and lm.initial_upgrade is None and self.env.initial_upgrade:
             self.upgrade()
             if self.env.do_reboots:
                 self.reboot(wait=300, timeout=60)

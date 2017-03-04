@@ -39,6 +39,7 @@ def test_project():
     finally:
         shutil.rmtree(project_dir)
 
+
 def test_find_template():
     from burlap import common
     common.set_verbose(True)
@@ -46,6 +47,7 @@ def test_find_template():
     ret = common.find_template(fn)
     print('ret:', ret)
     assert ret and ret.endswith(fn) 
+
 
 def test_render_to_string():
     from burlap import common

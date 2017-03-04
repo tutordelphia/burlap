@@ -97,6 +97,9 @@ manifest_deployers_befores = type(env)() #{component:[pending components that mu
 #manifest_deployers_afters = type(env)() #{component:[pending components that must be run last]}
 manifest_deployers_takes_diff = type(env)()
 
+post_callbacks = []
+post_role_load_callbacks = []
+
 _post_import_modules = set()
 
 def deprecation(message):
@@ -617,6 +620,10 @@ class Satchel(object):
                     before=getattr(task.wrapped, 'deploy_before', []),#deployer.before,
                     after=getattr(task.wrapped, 'deploy_after', []),#deployer.after,
                     takes_diff=getattr(task.wrapped, 'deployer_takes_diff', False))
+            
+            # Collect callbacks to run after basic satchel init is complete.
+            if hasattr(task.wrapped, 'is_post_callback'):
+                post_callbacks.append(task.wrapped)
                 
         deployers = self.get_deployers()
         if deployers:
@@ -1286,10 +1293,6 @@ env.available_sites_by_host = {}
 
 # The command run to determine the percent of disk usage.
 env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{print $5 " " $1}'"
-
-env.post_callbacks = []
-
-post_role_load_callbacks = []
 
 env.burlap_data_dir = '.burlap'
 
@@ -2024,7 +2027,6 @@ class QueuedCommand(object):
 
 
 def get_template_dirs():
-    
     paths = (
         (env.ROLES_DIR, env[ROLE], 'templates'),
         (env.ROLES_DIR, env[ROLE]),
@@ -2036,14 +2038,13 @@ def get_template_dirs():
         (env.ROLES_DIR, '..', 'templates'),
         (os.path.dirname(__file__), 'templates'),
     )
-    
     for path in paths:
         if None in path:
             continue
         yield os.path.join(*path)
-    env.template_dirs = get_template_dirs()
+    #env.template_dirs = get_template_dirs()
 
-env.template_dirs = get_template_dirs()
+#env.template_dirs = get_template_dirs()
 
 def save_env():
     env_default = {}

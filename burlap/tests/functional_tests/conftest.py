@@ -23,10 +23,10 @@ import pytest
 from fabric.api import env, hide, lcd, local, settings
 from fabric.state import connections
 
-from burlap.vagrant import version as _vagrant_version
+from burlap.vagrant import vagrant
 
 HERE = os.path.dirname(__file__)
-VAGRANT_VERSION = _vagrant_version()
+VAGRANT_VERSION = vagrant.version()
 MIN_VAGRANT_VERSION = (1, 3)
 
 

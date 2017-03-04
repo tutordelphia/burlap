@@ -569,9 +569,9 @@ class UserSatchel(Satchel):
         r = self.local_renderer
         
         lm = self.last_manifest
-        lm_reset_passwords_on_first_login = lm.get('reset_passwords_on_first_login', {})
-        lm_passwordless = lm.get('passwordless', {})
-        lm_passwords = lm.get('passwords', {})
+        lm_reset_passwords_on_first_login = lm.reset_passwords_on_first_login or {}
+        lm_passwordless = lm.passwordless or {}
+        lm_passwords = lm.passwords or {}
         
         # Make one-time password changes.
         just_changed = set()

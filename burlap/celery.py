@@ -153,7 +153,7 @@ class CelerySatchel(ServiceSatchel):
         ret = self.render_to_string('celery/celery_supervisor.template.conf')
         return conf_name, ret
 
-    @task
+    @task(post_callback=True)
     def register_callbacks(self):
         from burlap.supervisor import supervisor
         supervisor.register_callback(self.create_supervisor_services)
@@ -163,6 +163,3 @@ class CelerySatchel(ServiceSatchel):
         pass
 
 celery = CelerySatchel()
-celery.genv.post_callbacks.append(celery.register_callbacks)
-
-register_callbacks = celery.register_callbacks

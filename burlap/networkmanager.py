@@ -119,7 +119,7 @@ class NetworkManagerSatchel(ServiceSatchel):
         r = self.local_renderer
         
         lm = self.last_manifest
-        lm_connections = lm.get('connections', {})
+        lm_connections = lm.connections or {}
         
         if r.env.enabled:
             

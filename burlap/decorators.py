@@ -63,6 +63,7 @@ def task(*args, **kwargs):
 
     """
     precursors = kwargs.pop('precursors', None)
+    post_callback = kwargs.pop('post_callback', False)
     if args and callable(args[0]):
         # direct decoration, @task
         return _task(*args)
@@ -71,6 +72,10 @@ def task(*args, **kwargs):
         def wrapper(meth):
             if precursors:
                 meth.deploy_before = list(precursors)
+            if post_callback:
+                #from burlap.common import post_callbacks
+                #post_callbacks.append(meth)
+                meth.is_post_callback = True
             return _task(meth)
         return wrapper
 

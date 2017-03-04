@@ -353,5 +353,5 @@ if common and not no_load:
     # These are useful for calling inter-sub-module functions
     # after the modules tasks are registered so task names don't get
     # mistakenly registered under the wrong module.
-    for cb in env.post_callbacks:
+    for cb in common.post_callbacks:
         cb()

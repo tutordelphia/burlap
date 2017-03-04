@@ -33,7 +33,7 @@ class DjangoSatchel(Satchel):
         self.env.app_name = None
         
         # This is the import path to your Django settings file.
-        self.env.settings_module_template = '{app_name}.settings'
+        self.env.settings_module = '{app_name}.settings'
         
         # The folder containing manage.py.
         self.env.project_dir = None
@@ -95,11 +95,7 @@ class DjangoSatchel(Satchel):
             if role:
                 self.set_role(role)
 
-            r.env.settings_module = r.format(self.env.settings_module_template)
             try:
-#                 os.environ['SITE'] = site
-#                 os.environ['ROLE'] = self.genv.ROLE
-                
                 # We need to explicitly delete sub-modules from sys.modules. Otherwise, reload() skips
                 # them and they'll continue to contain obsolete settings.
                 if r.env.delete_module_with_prefixes:
@@ -113,7 +109,7 @@ class DjangoSatchel(Satchel):
                         
                 if r.env.settings_module in sys.modules:
                     del sys.modules[r.env.settings_module]
-                module = import_module(r.env.settings_module)
+                module = import_module(r.format(r.env.settings_module))
         
                 # Works as long as settings.py doesn't also reload anything.
                 import imp
@@ -138,8 +134,8 @@ class DjangoSatchel(Satchel):
     def set_db(self, name=None, site=None, role=None):
         r = self.local_renderer
         name = name or 'default'
-        site = site or r.env.get('SITE') or r.genv.SITE
-        role = role or r.env.get('ROLE') or r.genv.SITE
+        site = site or r.env.get('SITE') or r.genv.SITE or r.genv.default_site
+        role = role or r.env.get('ROLE') or r.genv.ROLE
         settings = self.get_settings(site=site, role=role)
         assert settings, 'Unable to load Django settings for site %s.' % (site,)
         r.env.django_settings = settings
