@@ -547,12 +547,16 @@ class UserSatchel(Satchel):
             create_home = not system
             
         if create_home is True:
-            args.append('-m')
+            #args.append('-m')
+            pass
         elif create_home is False:
-            args.append('-M')
+            args.append('--no-create-home')
+            
+        if system:
+            args.append('--system')
             
         r.env.args = ' '.join(args)
-        r.env.groups = groups
+        r.env.groups = (groups or '').strip()
         r.sudo('adduser {username} {groups} {args} || true')
     
     @task

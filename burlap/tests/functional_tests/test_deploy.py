@@ -29,7 +29,7 @@ def test_deploy():
         PYTHON_EXE = os.path.split(sys.executable)[-1]
         VIRTUALENV_DIR = os.path.join(PROJECT_DIR, '.env')
         BURLAP_DIR = os.path.abspath('./burlap')
-        BURLAP_BIN = os.path.abspath('./bin/burlap')
+        BURLAP_BIN = os.path.abspath('./bin/burlap-admin.py')
         SITE_PACKAGES = os.path.join(VIRTUALENV_DIR, 'lib/%s/site-packages' % PYTHON_EXE)
      
         # Initialize project.
@@ -66,8 +66,8 @@ def test_deploy():
         kwargs = dict(
             project_dir=PROJECT_DIR,
         )
-        assert not os.system('cd {project_dir}; . ./shell; fab prod shell:command="echo hello"'.format(**kwargs))
-        out = getoutput('cd {project_dir}; . ./shell; fab prod shell:command="ifconfig"'.format(**kwargs))
+        assert not os.system('cd {project_dir}; . ./setup.bash; fab prod shell:command="echo hello"'.format(**kwargs))
+        out = getoutput('cd {project_dir}; . ./setup.bash; fab prod shell:command="ifconfig"'.format(**kwargs))
         print('out:', out)
         assert 'inet addr:10.0.2.15' in out
         

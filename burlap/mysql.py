@@ -88,11 +88,16 @@ class MySQLSatchel(DatabaseSatchel):
         
     @task
     def execute(self, sql, name='default', site=None, **kwargs):
+        use_sudo = int(kwargs.pop('use_sudo', 0))
         r = self.database_renderer(name=name, site=site)
         r.env.user = kwargs.pop('user', r.env.db_root_username)
         r.env.password = kwargs.pop('password', r.env.db_root_password)
         r.env.sql = sql
-        r.run("mysql --user={user} -p'{db_root_password}' --execute='{sql}'")
+        cmd = "mysql --user={user} -p'{db_root_password}' --execute='{sql}'"
+        if use_sudo:
+            r.sudo(cmd)
+        else:
+            r.run(cmd)
 
     @task
     def execute_file(self, filename, name='default', site=None, **kwargs):
@@ -156,7 +161,7 @@ class MySQLSatchel(DatabaseSatchel):
     
     @task
     def set_root_password(self, password=None, method=None, **kwargs):
-        method = MYSQLD_SAFE#|'mysqladmin'#|'mysqld_safe'|'dpkg'
+        method = method or MYSQLD_SAFE#|'mysqladmin'#|'mysqld_safe'|'dpkg'
         v = self.get_mysql_version()
         v = tuple(map(int, v.split('.')))
         self.vprint('mysql version:', v)
@@ -165,11 +170,12 @@ class MySQLSatchel(DatabaseSatchel):
             r.env.root_password = password or r.env.db_root_password
             r.sudo('mysqladmin -u root password {root_password}')
         elif method == DPKG:
-            # This no longer prompts to set root password with >= 5.7.
+            #TODO:fix? This no longer prompts to set root password with >= 5.7.
             self.prep_root_password(**kwargs)
             r = self.database_renderer(**kwargs)
             r.sudo("dpkg-reconfigure -fnoninteractive `dpkg --list | egrep -o 'mysql-server-([0-9.]+)'`")
         elif method == MYSQLD_SAFE:
+            #TODO:fix? unreliable?
             #https://dev.mysql.com/doc/refman/5.7/en/resetting-permissions.html
             r = self.database_renderer(**kwargs)
             r.env.root_password = password or r.env.db_root_password

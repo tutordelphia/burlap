@@ -1279,10 +1279,6 @@ env.hostname_translators.default = lambda hostname: hostname
 
 env.default_site = None
 
-#env.shell_default_dir_template = '/usr/local/%(app_name)s'
-env.shell_default_dir_template = '%(remote_app_src_package_dir)s'
-env.shell_interactive_shell = 'export SITE=%(SITE)s; export ROLE=%(ROLE)s; cd %(shell_default_dir)s; /bin/bash -i'
-
 # A list of all site names that should be available on the current host.
 env.available_sites = []
 
@@ -2027,6 +2023,7 @@ class QueuedCommand(object):
 
 
 def get_template_dirs():
+    # This must be an iterator so we can easily update the env variables used.
     paths = (
         (env.ROLES_DIR, env[ROLE], 'templates'),
         (env.ROLES_DIR, env[ROLE]),
@@ -2058,7 +2055,7 @@ def save_env():
 
 try:
     from django.conf import settings as _settings
-    _settings.configure(TEMPLATE_DIRS=env.template_dirs)
+    _settings.configure(TEMPLATE_DIRS=get_template_dirs())
 except (ImportError, RuntimeError):
     warnings.warn('Unable to import Django settings.', ImportWarning)
 

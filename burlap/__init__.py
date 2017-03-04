@@ -17,6 +17,7 @@ try:
     from fabric.tasks import WrappedCallableTask
     from fabric.utils import _AliasDict
     from fabric.api import hide, settings
+    from fabric.decorators import task, runs_once
 
     import yaml
     
@@ -262,6 +263,11 @@ def load_yaml_settings(name, priors=None, verbose=0):
     
     return config
 
+@task
+@runs_once
+def shell(*args, **kwargs):
+    return debug.debug.shell(*args, **kwargs)
+
 def populate_fabfile():
     """
     Automatically includes all submodules and role selectors
@@ -301,14 +307,19 @@ def populate_fabfile():
         locals_['common'] = common
         
         # Put all debug commands into the global namespace.
-        for _debug_name in dir(debug):
-            locals_[_debug_name] = getattr(debug, _debug_name)
+        
+#         for _debug_name in debug.debug.get_tasks():
+#             print('_debug_name:', _debug_name)
+
+        locals_['shell'] = shell#debug.debug.shell
         
         # Put all virtual satchels in the global namespace so Fabric can find them.
         for _module_alias in common._post_import_modules:
             exec("import %s" % _module_alias) # pylint: disable=exec-used
             locals_[_module_alias] = locals()[_module_alias]
-            
+    
+    except Exception:
+        traceback.print_exc()
     finally:
         del stack
 

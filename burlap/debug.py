@@ -23,7 +23,8 @@ class DebugSatchel(ContainerSatchel):
     name = 'debug'
     
     def set_defaults(self):
-        pass
+        self.env.shell_default_dir = '~'
+        self.env.shell_interactive_cmd = '/bin/bash -i'
     
     @task
     def ping_servers(self):
@@ -218,28 +219,24 @@ class DebugSatchel(ContainerSatchel):
             
         r.env.shell_check_host_key_str = '-o StrictHostKeyChecking=no'
         
-        try:
-            r.env.shell_default_dir = r.genv.shell_default_dir_template % r.genv
-        except KeyError:
-            r.env.shell_default_dir = '~'
         if command:
-            r.env.shell_interactive_shell_str = command
+            r.env.shell_interactive_cmd_str = command
         else:
-            r.env.shell_interactive_shell_str = (r.env.shell_interactive_shell or '') % r.genv
+            r.env.shell_interactive_cmd_str = r.format(r.env.shell_interactive_cmd)
         
         if r.genv.is_local:
-            cmd = '{shell_interactive_shell_str}'
+            cmd = '{shell_interactive_cmd_str}'
         elif r.genv.key_filename:
             # If host_string contains the port, then strip it off and pass separately.
             port = r.env.shell_host_string.split(':')[-1]
             if port.isdigit():
                 r.env.shell_host_string = r.env.shell_host_string.split(':')[0] + (' -p %s' % port)
-            cmd = 'ssh -t {shell_x_opt} {shell_check_host_key_str} -i {key_filename} {shell_host_string} "{shell_interactive_shell_str}"'
+            cmd = 'ssh -t {shell_x_opt} {shell_check_host_key_str} -i {key_filename} {shell_host_string} "{shell_interactive_cmd_str}"'
         elif r.genv.password:
-            cmd = 'ssh -t {shell_x_opt} {shell_check_host_key_str} {shell_host_string} "{shell_interactive_shell_str}"'
+            cmd = 'ssh -t {shell_x_opt} {shell_check_host_key_str} {shell_host_string} "{shell_interactive_cmd_str}"'
         else:
             # No explicit password or key file needed?
-            cmd = 'ssh -t {shell_x_opt} {shell_host_string} "{shell_interactive_shell_str}"'
+            cmd = 'ssh -t {shell_x_opt} {shell_host_string} "{shell_interactive_cmd_str}"'
         r.local(cmd)
 
     @task
