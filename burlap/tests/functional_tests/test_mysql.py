@@ -14,9 +14,11 @@ def test_set_root_password_mysqld_safe():
         # http://askubuntu.com/a/489817/13217
         os_ver = mysql.os_version
         if os_ver.distro == UBUNTU and os_ver.release == '14.04':
-            mysql.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq purge mysql-client-core-*')
+            mysql.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq purge mysql*')
             mysql.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq autoremove')
             mysql.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq autoclean')
+            mysql.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq update')
+            mysql.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq install mysql-client-core-5.5')
             
         mysql.install_packages()
         mysql.env.root_username = 'root'
