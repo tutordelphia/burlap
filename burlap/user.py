@@ -1,17 +1,17 @@
 from __future__ import print_function
 
 import os
-# from pipes import quote
+from pipes import quote
 # import posixpath
-# import random
-# import string
+import random
+import string
 
 # from fabric.api import (
 #     env,
 #     settings,
 #     task,
 # )
-# from fabric.api import hide, run, settings, sudo, local
+from fabric.api import hide
 
 from burlap.constants import *
 from burlap import Satchel
@@ -26,28 +26,10 @@ from burlap import Satchel
 # from burlap.utils import run_as_root
 from burlap.decorators import task
 
+ 
+_SALT_CHARS = string.ascii_letters + string.digits + './'
 
-# def exists(name):
-#     """
-#     Check if a user exists.
-#     """
-#     with settings(hide('running', 'stdout', 'warnings'), warn_only=True):
-#         return run('getent passwd %(name)s' % locals()).succeeded
-# 
-# 
-# _SALT_CHARS = string.ascii_letters + string.digits + './'
-# 
-# 
-# def _crypt_password(password):
-#     from crypt import crypt
-#     random.seed()
-#     salt = ''
-#     for _ in range(2):
-#         salt += random.choice(_SALT_CHARS)
-#     crypted_password = crypt(password, salt)
-#     return crypted_password
-# 
-# 
+ 
 # # def create(name, comment=None, home=None, create_home=None, skeleton_dir=None,
 # #            group=None, create_group=True, extra_groups=None, password=None,
 # #            system=False, shell=None, uid=None, ssh_public_keys=None,
@@ -347,6 +329,16 @@ from burlap.decorators import task
 CAT_KEY = 'cat-key'
 UPLOAD_KEY = 'upload-key'
 
+def _crypt_password(password):
+    from crypt import crypt
+    random.seed()
+    salt = ''
+    for _ in range(2):
+        salt += random.choice(_SALT_CHARS)
+    crypted_password = crypt(password, salt)
+    return crypted_password
+
+
 class UserSatchel(Satchel):
     
     name = 'user'
@@ -529,9 +521,17 @@ class UserSatchel(Satchel):
                 r.env.dst = dst
                 r.local('mv {src} {dst}')
         return r.env.key_filename
-    
+
     @task
-    def create(self, username, groups=None, uid=None, create_home=None, system=False):
+    def exists(self, name):
+        """
+        Check if a user exists.
+        """
+        with self.settings(hide('running', 'stdout', 'warnings'), warn_only=True):
+            return self.run('getent passwd %s' % name).succeeded
+
+    @task
+    def create(self, username, groups=None, uid=None, create_home=None, system=False, password=None):
         """
         Creates a user with the given username.
         """
@@ -551,7 +551,17 @@ class UserSatchel(Satchel):
             pass
         elif create_home is False:
             args.append('--no-create-home')
-            
+        
+        if password is None:
+            pass
+        elif password:
+            crypted_password = _crypt_password(password)
+            args.append('-p %s' % quote(crypted_password))
+        else:
+            args.append('--disabled-password')
+        
+        args.append('--gecos ""')
+        
         if system:
             args.append('--system')
             

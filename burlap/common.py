@@ -1844,6 +1844,8 @@ def get_last_modified_timestamp(path):
     """
     Recursively finds the most recent timestamp in the given directory.
     """
+    if not isinstance(path, basestring):
+        return
     cmd = 'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
          #'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d " " -f1
     ret = subprocess.check_output(cmd, shell=True)
@@ -2024,6 +2026,10 @@ class QueuedCommand(object):
 
 def get_template_dirs():
     # This must be an iterator so we can easily update the env variables used.
+    verbose = get_verbose()
+    if verbose:
+        print('get_template_dirs.env.ROLES_DIR:', env.ROLES_DIR)
+        print('get_template_dirs.os.getcwd():', os.getcwd())
     paths = (
         (env.ROLES_DIR, env[ROLE], 'templates'),
         (env.ROLES_DIR, env[ROLE]),

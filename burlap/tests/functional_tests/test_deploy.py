@@ -8,9 +8,10 @@ from fabric.api import env
 
 from burlap.shelf import Shelf
 from burlap.context import set_cwd
-from burlap.common import getoutput
+from burlap.common import getoutput, set_verbose
 from burlap.deploy import preview as deploy_preview
 from burlap import load_role_handler
+#from burlap.vagrant import vagrant
 
 def test_deploy():
     """
@@ -18,6 +19,7 @@ def test_deploy():
     """
     
     try:
+        set_verbose(True)
         
         # Delete any old tmp files
         PROJECT_DIR = '/tmp/burlap_test'
@@ -37,7 +39,10 @@ def test_deploy():
             project_dir=PROJECT_DIR,
             burlap_bin=BURLAP_BIN,
         )
-        assert not os.system('cd {project_dir}; {burlap_bin} skel multitenant'.format(**kwargs))
+        print('Initializing project skeleton...')
+        cmd = 'cd {project_dir}; {burlap_bin} skel multitenant'.format(**kwargs)
+        print('cmd:', cmd)
+        assert not os.system(cmd)
      
         # Symlink burlap.
         assert not os.system('ln -s %s %s' % (BURLAP_DIR, SITE_PACKAGES))
@@ -66,10 +71,16 @@ def test_deploy():
         kwargs = dict(
             project_dir=PROJECT_DIR,
         )
-        assert not os.system('cd {project_dir}; . ./setup.bash; fab prod shell:command="echo hello"'.format(**kwargs))
-        out = getoutput('cd {project_dir}; . ./setup.bash; fab prod shell:command="ifconfig"'.format(**kwargs))
+        print('Testing hello world...')
+        cmd = 'cd {project_dir}; . ./setup.bash; fab prod shell:command="echo hello"'.format(**kwargs)
+        print('cmd:', cmd)
+        assert not os.system(cmd)
+        print('Testing ifconfig...')
+        cmd = 'cd {project_dir}; . ./setup.bash; fab prod shell:command="ifconfig"'.format(**kwargs)
+        print('cmd:', cmd)
+        out = getoutput(cmd)
         print('out:', out)
-        assert 'inet addr:10.0.2.15' in out
+        assert 'inet addr:127.0.0.1' in out
         
         # Add services.
         services = prod_settings.get('services', [])
@@ -100,6 +111,7 @@ def test_deploy():
                 'apache_enforce_subdomain': False,
             }
         })
+        prod_settings.set('pip_requirements', 'pip-requirements.txt')
         
         # Confirm deployment changes are detected.
         with set_cwd(PROJECT_DIR):
@@ -110,32 +122,35 @@ def test_deploy():
             assert 'sites' in env
             env.host_string = env.hosts[0]
             
+            
             changed_components, deploy_funcs = deploy_preview()
+            changed_components = sorted(changed_components)
             print('changed_components:', changed_components)
             assert changed_components == [
+                'APACHE',
+                'MYSQL',
                 'MYSQLCLIENT',
-                'UBUNTUMULTIVERSE',
+                'NTPCLIENT',
                 'PACKAGER',
                 'PIP',
                 'SSHNICE',
                 'TIMEZONE',
+                'UBUNTUMULTIVERSE',
                 'UNATTENDEDUPGRADES',
-                'APACHE',
-                'MYSQL',
-                'NTPCLIENT',
             ]
+            deploy_funcs = sorted(deploy_funcs)
             print('deploy_funcs:', deploy_funcs)
             assert deploy_funcs == [
+                ('apache.configure', None),
+                ('mysql.configure', None),
                 ('mysqlclient.configure', None),
-                ('ubuntumultiverse.configure', None),
+                ('ntpclient.configure', None),
                 ('packager.configure', None),
                 ('pip.configure', None),
                 ('sshnice.configure', None),
                 ('timezone.configure', None),
+                ('ubuntumultiverse.configure', None),
                 ('unattendedupgrades.configure', None),
-                ('apache.configure', None),
-                ('mysql.configure', None),
-                ('ntpclient.configure', None),
             ]
         
         # Deploy changes.

@@ -68,7 +68,7 @@ class TarballSatchel(Satchel):
         for a future deployment.
         """
         from burlap.common import get_last_modified_timestamp
-        fn = self.env.absolute_src_dir
+        fn = self.env.rsync_source_dir
         if self.verbose:
             print('tarball.fn:', fn)
         data = get_last_modified_timestamp(fn)

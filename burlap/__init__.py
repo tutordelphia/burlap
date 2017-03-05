@@ -263,10 +263,13 @@ def load_yaml_settings(name, priors=None, verbose=0):
     
     return config
 
-@task
-@runs_once
-def shell(*args, **kwargs):
-    return debug.debug.shell(*args, **kwargs)
+try:
+    @task
+    @runs_once
+    def shell(*args, **kwargs):
+        return debug.debug.shell(*args, **kwargs)
+except NameError:
+    pass
 
 def populate_fabfile():
     """
@@ -317,9 +320,7 @@ def populate_fabfile():
         for _module_alias in common._post_import_modules:
             exec("import %s" % _module_alias) # pylint: disable=exec-used
             locals_[_module_alias] = locals()[_module_alias]
-    
-    except Exception:
-        traceback.print_exc()
+
     finally:
         del stack
 

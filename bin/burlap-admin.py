@@ -47,7 +47,7 @@ def to_camelcase(value):
 
 def init_django(args, virtualenv='.env'):
     
-    site_name = args.project_name + '_site'
+    site_name = args.project_name
     
     print('Initializing Django project...')
     if not os.path.isdir('src/%s' % site_name):
@@ -211,7 +211,9 @@ if __name__ == "__main__":
 
     if args.action == SKEL:
         assert args.project_name, 'Specify project name.'
-        site_name = args.project_name + '_site'
+        site_name = args.project_name
+        
+        app_name = args.project_name + '_site'
         
         default_roles = [_ for _ in args.roles.split(',') if _.strip()]
         default_components = [_.strip().lower() for _ in args.components.split(',') if _.strip()]
@@ -226,7 +228,7 @@ if __name__ == "__main__":
         open('roles/all/settings.yaml', 'w').write(
             common.render_to_string(
                 'burlap/all_settings.yaml.template',
-                extra=dict(project_name=args.project_name, site_name=site_name)))
+                extra=dict(project_name=args.project_name, site_name=site_name, app_name=app_name)))
         for _role in default_roles:
             open('roles/%s/settings.yaml' % _role, 'w').write(
                 common.render_to_string(
@@ -236,6 +238,8 @@ if __name__ == "__main__":
         default_packages = args.pip_requirements.split(',')
         if default_packages:
             open('roles/all/pip-requirements.txt', 'w').write('\n'.join(default_packages))
+            
+        open('roles/all/apt-requirements.txt', 'w').write('')
         
         content = open(fabfile_template, 'r').read()
         content = content.format(project_name=args.project_name)

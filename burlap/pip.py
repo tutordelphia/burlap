@@ -48,7 +48,7 @@ class PIPSatchel(Satchel):
         self.env.group = 'www-data'
         self.env.perms = '775'
         self.env.virtualenv_dir = '.env'
-        self.env.requirements = 'requirements.txt'
+        self.env.requirements = 'pip-requirements.txt'
 
     @task
     def has_pip(self):

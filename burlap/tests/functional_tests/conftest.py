@@ -145,6 +145,7 @@ def _stop_vagrant_machine():
 
 def _target_vagrant_machine():
     config = _vagrant_ssh_config()
+    print('vagrant.config:', config)
     _set_fabric_env(
         host=config['HostName'],
         port=config['Port'],
@@ -170,6 +171,7 @@ def _vagrant_ssh_config():
     with lcd(HERE):
         with settings(hide('running')):
             output = local('vagrant ssh-config', capture=True)
+    print('output:', output)
     config = {}
     for line in output.splitlines()[1:]:
         key, value = line.strip().split(' ', 2)
@@ -178,7 +180,7 @@ def _vagrant_ssh_config():
 
 
 def _set_fabric_env(host, port, user, key_filename):
-    if port:
+    if port and str(port) != '22':
         env.host_string = env.host = "%s:%s" % (host, port)
     else:
         env.host_string = env.host = host
