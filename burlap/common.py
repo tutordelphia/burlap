@@ -16,6 +16,7 @@ import json
 import getpass
 import subprocess
 import uuid
+import inspect
 from collections import namedtuple, OrderedDict
 from pprint import pprint
 #from datetime import date
@@ -894,7 +895,11 @@ class Satchel(object):
         Otherwise, does nothing.
         """
         if self.verbose:
-            print(*args, **kwargs)
+            curframe = inspect.currentframe()
+            calframe = inspect.getouterframes(curframe, 2)
+            caller_name = calframe[1][3]
+            prefix = '%s.%s:' % (self.name.lower(), caller_name)
+            print(prefix, *args, **kwargs)
 
     def get_package_list(self):
         """

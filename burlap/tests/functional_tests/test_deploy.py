@@ -72,11 +72,11 @@ def test_deploy():
             project_dir=PROJECT_DIR,
         )
         print('Testing hello world...')
-        cmd = 'cd {project_dir}; . ./setup.bash; fab prod shell:command="echo hello"'.format(**kwargs)
+        cmd = 'cd {project_dir}; . ./setup.bash; fab prod:verbose=1 shell:command="echo hello"'.format(**kwargs)
         print('cmd:', cmd)
         assert not os.system(cmd)
         print('Testing ifconfig...')
-        cmd = 'cd {project_dir}; . ./setup.bash; fab prod shell:command="ifconfig"'.format(**kwargs)
+        cmd = 'cd {project_dir}; . ./setup.bash; fab prod:verbose=1 shell:command="ifconfig"'.format(**kwargs)
         print('cmd:', cmd)
         out = getoutput(cmd)
         print('out:', out)

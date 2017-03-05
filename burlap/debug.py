@@ -25,6 +25,7 @@ class DebugSatchel(ContainerSatchel):
     def set_defaults(self):
         self.env.shell_default_dir = '~'
         self.env.shell_interactive_cmd = '/bin/bash -i'
+        self.env.shell_default_options = ['-o StrictHostKeyChecking=no']
     
     @task
     def ping_servers(self):
@@ -204,7 +205,9 @@ class DebugSatchel(ContainerSatchel):
                 r.genv.host_string = shell_hosts[0]
         
         r.env.SITE = r.genv.SITE or r.genv.default_site
-        r.env.shell_x_opt = '-X' if int(gui) else ''
+        
+        if int(gui):
+            r.env.shell_default_options.append('-X')
         
         if 'host_string' not in self.genv or not self.genv.host_string:
             if 'available_sites' in self.genv and r.env.SITE not in r.genv.available_sites:
@@ -217,26 +220,29 @@ class DebugSatchel(ContainerSatchel):
         else:
             r.env.shell_host_string = '{user}@{host_string}'
             
-        r.env.shell_check_host_key_str = '-o StrictHostKeyChecking=no'
-        
         if command:
             r.env.shell_interactive_cmd_str = command
         else:
             r.env.shell_interactive_cmd_str = r.format(r.env.shell_interactive_cmd)
         
+        r.env.shell_default_options_str = ' '.join(r.env.shell_default_options)
         if r.genv.is_local:
+            self.vprint('Using direct local.')
             cmd = '{shell_interactive_cmd_str}'
         elif r.genv.key_filename:
+            self.vprint('Using key filename.')
             # If host_string contains the port, then strip it off and pass separately.
             port = r.env.shell_host_string.split(':')[-1]
             if port.isdigit():
                 r.env.shell_host_string = r.env.shell_host_string.split(':')[0] + (' -p %s' % port)
-            cmd = 'ssh -t {shell_x_opt} {shell_check_host_key_str} -i {key_filename} {shell_host_string} "{shell_interactive_cmd_str}"'
+            cmd = 'ssh -t {shell_default_options_str} -i {key_filename} {shell_host_string} "{shell_interactive_cmd_str}"'
         elif r.genv.password:
-            cmd = 'ssh -t {shell_x_opt} {shell_check_host_key_str} {shell_host_string} "{shell_interactive_cmd_str}"'
+            self.vprint('Using password.')
+            cmd = 'ssh -t {shell_default_options_str} {shell_host_string} "{shell_interactive_cmd_str}"'
         else:
             # No explicit password or key file needed?
-            cmd = 'ssh -t {shell_x_opt} {shell_host_string} "{shell_interactive_cmd_str}"'
+            self.vprint('Using nothing.')
+            cmd = 'ssh -t {shell_default_options_str} {shell_host_string} "{shell_interactive_cmd_str}"'
         r.local(cmd)
 
     @task

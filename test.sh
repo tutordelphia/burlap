@@ -3,4 +3,6 @@
 #
 #   tox -c tox-full.ini -- -s burlap/tests/test_common.py::CommonTests::test_iter_sites
 #
+set -e
+./pep8.sh
 tox -c tox-full.ini
