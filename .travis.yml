@@ -22,7 +22,7 @@ env:
     -   BURLAP_TEST_BOX=localhost
 
 install:
--   sudo apt-key -yq update
+-   sudo apt-key update
 -   sudo apt-get -yq update
 -   sudo apt-get -yq purge postgr*
 -   sudo apt-get -yq purge virtualbox*
