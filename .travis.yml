@@ -22,14 +22,14 @@ env:
     -   BURLAP_TEST_BOX=localhost
 
 install:
--   sudo apt-key update
--   sudo apt-get update -q
--   sudo apt-get purge postgr*
--   sudo apt-get purge virtualbox*
+-   sudo apt-key -yq update
+-   sudo apt-get -yq update
+-   sudo apt-get -yq purge postgr*
+-   sudo apt-get -yq purge virtualbox*
 -   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
--   sudo apt-get -y install build-essential
--   sudo apt-get -y --force-yes install linux-headers-`uname -r`
--   sudo apt-get install pandoc
+-   sudo apt-get -yq install build-essential
+-   sudo apt-get -yq --force-yes install linux-headers-`uname -r`
+-   sudo apt-get -yq install pandoc
 -   sudo pip install -r requirements-test.txt
 #TODO: Get fab to test fab
 #-  pip install -e .
