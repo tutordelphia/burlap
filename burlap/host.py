@@ -461,6 +461,11 @@ class TimezoneSatchel(Satchel):
     
     @task
     def get_current_timezone(self):
+        ret = self.sudo('dpkg-reconfigure -f noninteractive tzdata') or ''
+        matches = re.findall(r'Local time is now:.*?[0-9]+\s+([A-Z]+)\s+[0-9]+', ret)
+        self.vprint('matches:', matches)
+        if matches:
+            return matches[0]
         return (self.run('date +%Z') or self.env.timezone).strip()
     
     @task(precursors=['packager'])

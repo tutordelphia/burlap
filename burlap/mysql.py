@@ -33,7 +33,7 @@ class MySQLSatchel(DatabaseSatchel):
         return {
             FEDORA: ['mysql-server'],
             (UBUNTU, '12.04'): ['mysql-server', 'libmysqlclient-dev'],
-            (UBUNTU, '14.04'): ['mysql-server', 'libmysqlclient-dev'],
+            (UBUNTU, '14.04'): ['mysql-server-5.5', 'libmysqlclient-dev'],
             (UBUNTU, '16.04'): ['mysql-server', 'libmysqlclient-dev'],
         }
     
