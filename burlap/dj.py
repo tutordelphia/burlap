@@ -324,13 +324,14 @@ class DjangoSatchel(Satchel):
         Runs manage() across all unique site default databases.
         """
         for site, site_data in self.iter_unique_databases(site='all'):
-            print('-'*80, file=sys.stderr)
-            print('site:', site, file=sys.stderr)
+            if self.verbose:
+                print('-'*80, file=sys.stderr)
+                print('site:', site, file=sys.stderr)
             if self.env.available_sites_by_host:
                 hostname = self.current_hostname
                 sites_on_host = self.env.available_sites_by_host.get(hostname, [])
                 if sites_on_host and site not in sites_on_host:
-                    print('skipping site:', site, sites_on_host, file=sys.stderr)
+                    self.vprint('skipping site:', site, sites_on_host, file=sys.stderr)
                     continue
             self.manage(*args, **kwargs)
 
@@ -364,9 +365,7 @@ class DjangoSatchel(Satchel):
         return settings
     
     def iter_static_paths(self, ignore_import_error=False):
-    
         self.load_django_settings()
-    
         from django.contrib.staticfiles import finders, storage
         for finder in finders.get_finders():
             for _n, _s in finder.storages.iteritems():
@@ -428,10 +427,7 @@ class DjangoSatchel(Satchel):
             r.env.shell_host_string = '{user}@{host_string}'
         r.env.shell_default_dir = self.genv.shell_default_dir_template
         r.env.shell_interactive_djshell_str = self.genv.interactive_shell_template
-        if self.genv.is_local:
-            r.local('{shell_interactive_djshell_str}')
-        else:
-            r.run('ssh -t -i {key_filename} {shell_host_string} "{shell_interactive_djshell_str}"')
+        r.run_or_local('ssh -t -i {key_filename} {shell_host_string} "{shell_interactive_djshell_str}"')
         
     @task
     def syncdb(self, site=None, all=0, database=None, ignore_errors=1): # pylint: disable=redefined-builtin
@@ -451,7 +447,7 @@ class DjangoSatchel(Satchel):
         for site, site_data in r.iter_unique_databases(site=site):
             r.env.SITE = site
             with self.settings(warn_only=ignore_errors):
-                r.run(
+                r.run_or_local(
                     'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
                     '{manage_cmd} syncdb --noinput {db_syncdb_all_flag} {db_syncdb_database}')
 
@@ -519,11 +515,11 @@ class DjangoSatchel(Satchel):
     #             print('r.env.migrate_app:', r.env.migrate_app)
                 r.env.SITE = site
                 with self.settings(warn_only=ignore_errors):
-                    r.run(
-                    'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
-                    '{manage_cmd} migrate --noinput {migrate_merge} --traceback '
-                    '{migrate_database} {delete_ghosts} {django_migrate_app} {django_migrate_migration} '
-                    '{django_migrate_fake_str}')
+                    r.run_or_local(
+                        'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
+                        '{manage_cmd} migrate --noinput {migrate_merge} --traceback '
+                        '{migrate_database} {delete_ghosts} {migrate_app} {migrate_migration} '
+                        '{migrate_fake_str}')
 
     @task
     def migrate_all(self, *args, **kwargs):
@@ -566,14 +562,12 @@ class DjangoSatchel(Satchel):
             r.env.command = command
             r.env.end_email_command = ''
             r.env.recipients = recipients or ''
+            r.env.end_email_command = ''
             if end_message:
                 end_message = end_message + ' for ' + site
                 end_message = end_message.replace(' ', '_')
-                r.env.end_email_command = (
-                    '{django_manage_cmd} send_mail '\
-                    '--subject=%s '\
-                    '--recipients={recipients}; '
-                ) % end_message
+                r.env.end_message = end_message
+                r.env.end_email_command = r.format('{manage_cmd} send_mail --subject={end_message} --recipients={recipients}')
             r.env.name = name.format(**r.genv)
             r.run(
                 'screen -dmS {name} bash -c "export SITE={SITE}; '\
