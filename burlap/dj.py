@@ -452,7 +452,7 @@ class DjangoSatchel(Satchel):
             r.env.SITE = site
             with self.settings(warn_only=ignore_errors):
                 r.run(
-                    'export SITE={SITE}; export ROLE={ROLE}; cd {remote_manage_dir}; '
+                    'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
                     '{manage_cmd} syncdb --noinput {db_syncdb_all_flag} {db_syncdb_database}')
 
     @task
@@ -538,8 +538,8 @@ class DjangoSatchel(Satchel):
         r.run('rm -f {app_dir}/{app}/migrations/*.py')
         r.run('rm -f {app_dir}/{app}/migrations/*.pyc')
         r.run('touch {app_dir}/{app}/migrations/__init__.py')
-        r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; ./manage schemamigration {app} --initial')
-        r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; ./manage migrate {app} --fake')
+        r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; {manage_cmd} schemamigration {app} --initial')
+        r.run('export SITE={SITE}; export ROLE={ROLE}; cd {app_dir}; {manage_cmd} migrate {app} --fake')
 
     @task
     def manage_async(self, command='', name='process', site=ALL, exclude_sites='', end_message='', recipients=''):
@@ -578,7 +578,7 @@ class DjangoSatchel(Satchel):
             r.run(
                 'screen -dmS {name} bash -c "export SITE={SITE}; '\
                 'export ROLE={ROLE}; cd {project_dir}; '\
-                './manage {command} --traceback; {end_email_command}"; sleep 3;')
+                '{manage_cmd} {command} --traceback; {end_email_command}"; sleep 3;')
 
     def record_manifest(self):
         manifest = super(DjangoSatchel, self).record_manifest()
@@ -610,7 +610,8 @@ class DjangoSatchel(Satchel):
     
     @task(precursors=['packager''pip'])
     def configure_media(self, *args, **kwargs):
-        self.local('cd %(manage_dir)s; ./manage collectstatic --noinput' % self.lenv)
+        r = self.local_renderer
+        r.local('cd {project_dir}; {manage_cmd} collectstatic --noinput')
         
     @task(precursors=['packager', 'apache', 'pip', 'tarball', 'postgresql', 'mysql'])
     def configure_migrations(self):
