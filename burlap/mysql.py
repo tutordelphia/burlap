@@ -204,12 +204,14 @@ class MySQLSatchel(DatabaseSatchel):
                 raise Exception('Could not launch mysqld_safe.')
             r.run('sleep 5')
             # Work in Ubuntu 16/MySQL 5.7 but not Ubuntu 14/MySQL 5.6?
-            r.run("mysql -uroot --execute=\""
-                "use mysql; "
-                "update user set authentication_string=PASSWORD('{root_password}') where User='root'; "
-                "flush privileges;\"")
+            with settings(warn_only=True):
+                r.run("mysql -uroot --execute=\""
+                    "use mysql; "
+                    "update user set authentication_string=PASSWORD('{root_password}') where User='root'; "
+                    "flush privileges;\"")
             # Work in Ubuntu 14/MySQL 5.6 but not Ubuntu 16/MySQL 5.7?
-            r.sudo('mysql --execute="USE mysql; SET PASSWORD FOR \'root\'@\'localhost\' = PASSWORD(\'{root_password}\'); FLUSH PRIVILEGES;"')
+            with settings(warn_only=True):
+                r.sudo('mysql --execute="USE mysql; SET PASSWORD FOR \'root\'@\'localhost\' = PASSWORD(\'{root_password}\'); FLUSH PRIVILEGES;"')
             
             # Signal server to stop.
             # Note, `sudo service mysql stop` and `sudo /etc/init.d/mysql stop` and `mysqladmin shutdown` don't seem to work with mysqld_safe.
