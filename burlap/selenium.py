@@ -38,7 +38,7 @@ class SeleniumSatchel(Satchel):
         r = self.local_renderer
         r.run(
             'cd /tmp; '
-            'wget --show-progress -O geckodriver.tar.gz {geckodriver_url_template}; '
+            'wget -O geckodriver.tar.gz {geckodriver_url_template}; '
             'tar -xvzf geckodriver.tar.gz')
         r.sudo('mv /tmp/{geckodriver_bin_name} {geckodriver_install_bin_path}')
 
