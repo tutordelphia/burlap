@@ -3,6 +3,7 @@ from __future__ import print_function
 import os
 import sys
 import subprocess
+from pprint import pprint
 
 from fabric.api import env#, runs_once
 
@@ -121,8 +122,9 @@ class DatabaseSatchel(ServiceSatchel):
         role = role or self.genv.ROLE
         
         key = (name, site, role)
-#         print('key:', key)
+        self.vprint('checking key:', key)
         if key not in self._database_renderers:
+            self.vprint('No cached db renderer, generating...')
             
             d = type(self.genv)(self.lenv)
             d.update(self.get_database_defaults())
@@ -130,14 +132,23 @@ class DatabaseSatchel(ServiceSatchel):
             d['db_name'] = name
             
             if d.connection_handler == CONNECTION_HANDLER_DJANGO:
+                self.vprint('Using django handler...')
                 dj = self.get_satchel('dj')
 #                 _d = type(self.genv)()
                 if self.verbose:
                     print('Loading Django DB settings for site {} and role {}.'.format(site, role), file=sys.stderr)
                 dj.set_db(name=name, site=site, role=role)
                 _d = dj.local_renderer.collect_genv(include_local=True, include_global=False)
+
+                # Copy "dj_db_*" into "db_*".
+                for k, v in _d.items():
+                    if k.startswith('dj_db_'):
+                        _d[k[3:]] = v
+                    del _d[k]
+
                 if self.verbose:
-                    print('Loaded:', _d, file=sys.stderr)
+                    print('Loaded:')
+                    pprint(_d)
                 d.update(_d)
             
             r = LocalRenderer(self, lenv=d)
@@ -146,6 +157,8 @@ class DatabaseSatchel(ServiceSatchel):
             self.set_root_login(r)
             
             self._database_renderers[key] = r
+        else:
+            self.vprint('Cached db renderer found.')
         
         return self._database_renderers[key]
         
