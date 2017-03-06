@@ -22,7 +22,7 @@ from burlap import common as com_mod
 from burlap.common import (
     get_verbose, put_or_dryrun, manifest_recorder, assert_valid_satchel,
     manifest_deployers_befores, manifest_deployers_takes_diff, manifest_deployers,
-    resolve_deployer, topological_sort,
+    resolve_deployer, topological_sort, init_burlap_data_dir,
 )
 from burlap import exceptions
 
@@ -551,8 +551,8 @@ class DeploySatchel(ContainerSatchel):
             return open(fqfn, mode)
     
     def init_plan_data_dir(self):
-        self.init_burlap_data_dir()
-        d = env.plan_data_dir % env
+        init_burlap_data_dir()
+        d = self.env.plan_data_dir % env
         self.make_dir(d)
         return d
 
@@ -771,7 +771,7 @@ class DeploySatchel(ContainerSatchel):
     @task
     def info(self):
         d = os.path.join(self.init_plan_data_dir(), env.ROLE)
-        print('storage:', env.plan_storage)
+        print('storage:', self.env.plan_storage)
         print('dir:', d)
     
     @task
@@ -781,10 +781,10 @@ class DeploySatchel(ContainerSatchel):
         This will cause the planner to think everything needs to be re-deployed.
         """
         d = os.path.join(self.init_plan_data_dir(), env.ROLE)
-        if env.plan_storage == STORAGE_REMOTE:
+        if self.env.plan_storage == STORAGE_REMOTE:
             self.sudo('rm -Rf "%s"' % d)
             self.sudo('mkdir -p "%s"' % d)
-        elif env.plan_storage == STORAGE_LOCAL:
+        elif self.env.plan_storage == STORAGE_LOCAL:
             self.local('rm -Rf "%s"' % d)
             self.local('mkdir -p "%s"' % d)
         else:
