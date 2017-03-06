@@ -54,7 +54,7 @@ def update_tickets_from_git(last=None, current=None):
     Finds all ticket numbers and updates their status in Jira.
     """
     from jira import JIRA, JIRAError
-    from burlap.deploy import get_last_current_diffs
+    from burlap.deploy import deploy
     from burlap.git import gittracker
     
     get_current_commit = gittracker.get_current_commit
@@ -79,7 +79,7 @@ def update_tickets_from_git(last=None, current=None):
     # During a deployment, we should be given these, but for testing,
     # lookup the diffs dynamically.
     if not last or not current:
-        last, current = get_last_current_diffs(GITTRACKER)
+        last, current = deploy.get_last_current_diffs(GITTRACKER)
     
     if verbose:
         print('-'*80)

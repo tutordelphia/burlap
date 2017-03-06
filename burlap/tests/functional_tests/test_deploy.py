@@ -9,7 +9,7 @@ from fabric.api import env
 from burlap.shelf import Shelf
 from burlap.context import set_cwd
 from burlap.common import getoutput, set_verbose
-from burlap.deploy import preview as deploy_preview
+from burlap.deploy import deploy
 from burlap import load_role_handler
 #from burlap.vagrant import vagrant
 
@@ -17,7 +17,6 @@ def test_deploy():
     """
     Creates a multi-site Apache Django powered web server with a MySQL backend.
     """
-    
     try:
         set_verbose(True)
         
@@ -123,7 +122,7 @@ def test_deploy():
             env.host_string = env.hosts[0]
             
             
-            changed_components, deploy_funcs = deploy_preview()
+            changed_components, deploy_funcs = deploy.preview()
             changed_components = sorted(changed_components)
             print('changed_components:', changed_components)
             assert changed_components == [
