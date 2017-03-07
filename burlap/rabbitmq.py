@@ -84,7 +84,9 @@ class RabbitMQSatchel(ServiceSatchel):
             },
             STATUS:{
                 FEDORA: 'systemctl status rabbitmq-server.service',
-                UBUNTU: 'service rabbitmq-server status',
+                UBUNTU: 'service rabbitmq-server status | cat',
+                (UBUNTU, '14.04'): 'service rabbitmq-server status',
+                (UBUNTU, '16.04'): 'service rabbitmq-server status | cat',
             },
         }
     
@@ -186,9 +188,9 @@ class RabbitMQSatchel(ServiceSatchel):
     
     def get_user_vhosts(self, site=None):
         params = set() # [(user, password, vhost)]
+        site = site or ALL
         if self.env.user_lookup_method == DJANGO:
             # Retrieve user settings from one or more assoicated Django sites.
-            
             dj = self.get_satchel('dj')
             for site, site_data in self.iter_sites(site=site, renderer=self.render_paths, no_secure=True):
                 if self.verbose:
@@ -223,13 +225,12 @@ class RabbitMQSatchel(ServiceSatchel):
         """
         Installs and configures RabbitMQ.
         """
-        from burlap import packager
-        from burlap.common import get_current_hostname, iter_sites
-        
+
         full = int(full)
         
     #    assert self.env.erlang_cookie
         if full and not only_data:
+            packager = self.get_satchel('packager')
             packager.install_required(type=SYSTEM, service=self.name)
         
         #render_paths()

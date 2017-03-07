@@ -47,7 +47,7 @@ from .decorators import task
 
 if hasattr(fabric.api, '_run'):
     _run = fabric.api._run
-    
+
 if hasattr(fabric.api, '_sudo'):
     _sudo = fabric.api._sudo
 
@@ -137,7 +137,7 @@ def create_module(name, code=None):
         sys.modules[name] = imp.new_module(name)
 
     module = sys.modules[name]
-    
+
     if code:
         print('executing code for %s: %s' % (name, code))
         exec(code in module.__dict__) # pylint: disable=exec-used
@@ -156,7 +156,7 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
     '''
     import imp
     from .decorators import task_or_dryrun
-    
+
     # get the module as an object
     module_obj = sys.modules[module_name]
 
@@ -166,14 +166,14 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
     # for each method that calls the method and add it to the current module
     # NOTE: inspect.ismethod actually executes the methods?!
     #for method in inspect.getmembers(instance, predicate=inspect.ismethod):
-    
+
     method_obj = getattr(instance, method_name)
 
     if not method_name.startswith('_'):
-        
+
         # get the bound method
         func = getattr(instance, method_name)
-        
+
 #         if module_name == 'buildbot' or module_alias == 'buildbot':
 #             print('-'*80)
 #             print('module_name:', module_name)
@@ -181,7 +181,7 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
 #             print('module_alias:', module_alias)
 #             print('module_obj:', module_obj)
 #             print('func.module:', func.__module__)
-        
+
         # Convert executable to a Fabric task, if not done so already.
         if not hasattr(func, 'is_task_or_dryrun'):
             func = task_or_dryrun(func)
@@ -191,55 +191,55 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
 
             # add the function to the current module
             setattr(module_obj, method_name, func)
-            
+
         else:
-            
+
             # Dynamically create a module for the virtual satchel.
             _module_obj = module_obj
             module_obj = create_module(module_alias)
             setattr(module_obj, method_name, func)
             _post_import_modules.add(module_alias)
-        
+
         fabric_name = '%s.%s' % (module_alias or module_name, method_name)
         func.wrapped.__func__.fabric_name = fabric_name
-        
+
         return func
 
 def add_deployer(event, func, before=None, after=None, takes_diff=False):
-    
+
     before = before or []
-    
+
     after = after or []
-    
+
     event = event.strip().upper()
-    
+
     manifest_deployers.setdefault(event, [])
     if func not in manifest_deployers[event]:
         manifest_deployers[event].append(func)
-    
+
     manifest_deployers_befores.setdefault(event, [])
     manifest_deployers_befores[event].extend(map(str.upper, before))
-    
+
     for _c in after:
         _c = _c.strip().upper()
         manifest_deployers_befores.setdefault(_c, [])
         manifest_deployers_befores[_c].append(event)
-    
+
     manifest_deployers_takes_diff[func] = takes_diff
 
 def resolve_deployer(func_name):
     print('resolve deployer:', func_name)
-    
+
     if '.' in func_name:
         mod_name, func_name = func_name.split('.')
     else:
         mod_name = 'fabfile'
-        
+
     if mod_name.upper() in all_satchels:
         ret = all_satchels[mod_name.upper()].configure
     else:
         ret = getattr(importlib.import_module(mod_name), func_name)
-        
+
     return ret
 
 class Deployer(object):
@@ -247,7 +247,7 @@ class Deployer(object):
     Represents a task that must be run to update a service after a configuration change
     has been made.
     """
-    
+
     def __init__(self, func, before=None, after=None, takes_diff=False):
         self.func = func
         self.before = before or []
@@ -264,22 +264,22 @@ def get_class_module_name(self):
 class _EnvProxy(object):
     """
     Filters a satchel's access to the enviroment object.
-    
+
     Allows referencing of environment variables without explicitly specifying
     the Satchel's namespace.
-    
+
     For example, instead of:
-    
+
         env.satchelname_variable = 123
-    
+
     you can use:
-        
-        self.env.variable = 123 
+
+        self.env.variable = 123
     """
-    
+
     def __init__(self, satchel):
         self.satchel = satchel
-    
+
     def __contains__(self, k):
 #         if k in ('satchel',):
 #             return k in super(_EnvProxy, self).__contains__(k)
@@ -288,12 +288,12 @@ class _EnvProxy(object):
 
     def __getitem__(self, k):
         return getattr(self, k)
-    
+
     def __getattr__(self, k):
         if k in ('satchel',):
             return super(_EnvProxy, self).__getattr__(k)
         return env.get(self.satchel.env_prefix + k)
-        
+
     def __setattr__(self, k, v):
         if k in ('satchel',):
             return super(_EnvProxy, self).__setattr__(k, v)
@@ -325,17 +325,17 @@ def format(s, lenv, genv, prefix=None, ignored_variables=None): # pylint: disabl
         cnt += 1
         if cnt > 10:
             raise Exception('Too many variables containing variables.')
-        
+
         var_names = CMD_VAR_REGEX.findall(s)
 #         if verbose:
 #             print('format.s:', s)
 #             print('found var_names:', var_names)
-            
+
         if not var_names:
             break
         elif set(var_names).issubset(ignored_variables):
             break
-        
+
         # Lookup local and global variable values.
         var_values = {}
         for var_name in var_names:
@@ -365,54 +365,54 @@ def format(s, lenv, genv, prefix=None, ignored_variables=None): # pylint: disabl
                 raise Exception((
                     'Command references variable "%s" which is not found '
                     'in either the local or global namespace.') % var_name)
-        
+
         escaped_var_names = dict(
             (k, str(uuid.uuid4()))
             for k in CMD_ESCAPED_VAR_REGEX.findall(s)
         )
         for k, v in escaped_var_names.iteritems():
             s = s.replace(k, v)
-        
+
 #         if verbose:
 #             print('var_values:')
 #             pprint(var_values, indent=4)
-            
+
         for _vn in ignored_variables:
             var_values[_vn] = '{%s}' % _vn
         s = s.format(**var_values)
-        
+
         for k, v in escaped_var_names.iteritems():
             s = s.replace(v, k)
-    
+
     s = s.replace(r'\{', '{')
     s = s.replace(r'\}', '}')
-    
+
     return s
 
 class Renderer(object):
     """
     Base convenience wrapper around command executioners.
     """
-    
+
     env_type = None
-    
+
     def __init__(self, obj, lenv=None, set_default=False):
         from fabric.context_managers import env
-        
+
         # Satchel instance.
         self.obj = obj
-        
+
         # Copy the local environment dictionary so we don't modify the original.
         self.lenv = type(env)(obj.lenv if lenv is None else lenv)
-        
+
         self.genv = env#type(env)(obj.genv)
-        
+
         # If true, getattr will return None if no attribute set.
         self._set_default = set_default
-    
+
     def format(self, s, **kwargs):
         return format(s, lenv=self.lenv, genv=self.genv, prefix=self.obj.name.lower(), **kwargs)
-    
+
     def collect_genv(self, include_local=True, include_global=True):
         """
         Returns a copy of the global environment with all the local variables copied back into it.
@@ -424,84 +424,84 @@ class Renderer(object):
             for k, v in self.lenv.items():
                 e['%s_%s' % (self.obj.name.lower(), k)] = v
         return e
-    
+
     def __getattr__(self, attrname):
-        
+
         # Alias .env to the default type.
         if attrname == 'env':
             attrname = self.env_type
-        
+
         if attrname in ('obj', 'lenv', 'genv', 'env_type', '_set_default'):
             return super(LocalRenderer, self).__getattribute__(attrname)
-        
+
         def wrap(func):
-            
+
             def _wrap(cmd, *args, **kwargs):
                 cmd = self.format(cmd)
                 return func(cmd, *args, **kwargs)
-            
+
             return _wrap
-        
+
         def wrap2(func):
             # For non-command functions, just pass-through.
-            
+
             def _wrap(*args, **kwargs):
                 return func(*args, **kwargs)
-            
+
             return _wrap
-            
+
         def put_wrap2(func):
             # For non-command functions, just pass-through.
-            
+
             def _wrap(*args, **kwargs):
                 kwargs['local_path'] = self.format(kwargs['local_path'])
                 kwargs['remote_path'] = self.format(kwargs['remote_path'])
                 return func(*args, **kwargs)
-            
+
             return _wrap
-            
+
         def sed_wrap2(func):
             # For non-command functions, just pass-through.
-            
+
             def _wrap(*args, **kwargs):
                 kwargs['filename'] = self.format(kwargs['filename'])
                 return func(*args, **kwargs)
-            
+
             return _wrap
-            
+
         def append_wrap2(func):
             # For non-command functions, just pass-through.
-            
+
             def _wrap(*args, **kwargs):
                 args = list(args)
-                
+
                 if len(args) >= 1:
                     args[0] = self.format(args[0])
                 else:
                     kwargs['text'] = self.format(kwargs['text'])
-                    
+
                 if len(args) >= 2:
                     args[1] = self.format(args[1])
                 else:
                     kwargs['filename'] = self.format(kwargs['filename'])
-                    
+
                 return func(*args, **kwargs)
-            
+
             return _wrap
-        
+
         try:
             ret = getattr(self.obj, attrname)
         except AttributeError:
             try:
                 return getattr(self.lenv, attrname)
-            except AttributeError:    
+            except AttributeError:
                 try:
                     return getattr(self.genv, attrname)
                 except AttributeError:
                     if self._set_default:
                         return
                     raise
-        
+
         # If we're calling a command executor, wrap it so that it automatically formats
         # the command string using our preferred environment dictionary when called.
         if attrname.startswith('local') \
@@ -523,15 +523,15 @@ class Renderer(object):
             ret = sed_wrap2(ret)
         elif attrname.startswith('append'):
             ret = append_wrap2(ret)
-            
+
         return ret
-        
+
 class LocalRenderer(Renderer):
-    
+
     env_type = 'lenv'
 
 class GlobalRenderer(Renderer):
-    
+
     env_type = 'genv'
 
 def get_satchel(name):
@@ -542,68 +542,68 @@ class Satchel(object):
     Represents a base unit of functionality that is deployed and maintained on one
     or more a target servers.
     """
-    
+
     # This will be used to uniquely identify this unit of functionality.
     name = None
-    
+
     # This is the list of Fabric tasks exposed by the instance.
     tasks = []
-    
+
     required_system_packages = {
         #OS: [package1, package2, ...],
     }
-    
+
     # These files will have their changes tracked.
     # You can specify dynamic values by using brace notation to refer to a satchel variable.
     # e.g. templates = ['{my_conf_template}']
     templates = []
-    
+
     def __init__(self):
         assert self.name, 'A name must be specified.'
         self.name = self.name.strip().lower()
-        
+
         assert SATCHEL_NAME_PATTERN.findall(self.name), 'Invalid name: %s' % self.name
-        
+
         self._os_version_cache = {} # {host:info}
-        
+
         all_satchels[self.name.upper()] = self
-        
+
         # Global environment.
         self.genv = env
-        
+
         self._genv = None
-        
+
         self._requires_satchels = set()
-        
+
         self.env = _EnvProxy(self)
-        
+
         self.files = files
-        
+
         self._local_renderer = None
-        
+
         self._last_manifest = None
-        
+
         self.settings = settings
-        
+
         _prefix = '%s_enabled' % self.name
         if _prefix not in env:
             env[_prefix] = True
             self.set_defaults()
-        
+
         manifest_recorder[self.name] = self.record_manifest
-                
+
         super(Satchel, self).__init__()
-        
+
         # Register service commands.
         if self.required_system_packages:
             required_system_packages[self.name.upper()] = self.required_system_packages
-        
+
         # Add built-in tasks.
         if 'install_packages' not in self.tasks:
             self.tasks += ('install_packages',)
         if 'configure' not in self.tasks:
             self.tasks += ('configure',)
-        
+
         # Register select instance methods as Fabric tasks.
         for task_name in self.get_tasks():
             task = add_class_methods_as_module_level_functions_for_fabric(
@@ -612,7 +612,7 @@ class Satchel(object):
                 method_name=task_name,
                 module_alias=self.name,
             )
-            
+
             # If task is marked as a deployer, then add it to the deployer list.
             if hasattr(task.wrapped, 'is_deployer') or task_name == 'configure':
                 add_deployer(
@@ -621,11 +621,11 @@ class Satchel(object):
                     before=getattr(task.wrapped, 'deploy_before', []),#deployer.before,
                     after=getattr(task.wrapped, 'deploy_after', []),#deployer.after,
                     takes_diff=getattr(task.wrapped, 'deployer_takes_diff', False))
-            
+
             # Collect callbacks to run after basic satchel init is complete.
             if hasattr(task.wrapped, 'is_post_callback'):
                 post_callbacks.append(task.wrapped)
-                
+
         deployers = self.get_deployers()
         if deployers:
             for deployer in deployers:
@@ -636,17 +636,17 @@ class Satchel(object):
                     before=deployer.before,
                     after=deployer.after,
                     takes_diff=deployer.takes_diff)
-    
+
     @property
     def current_hostname(self):
         return get_current_hostname()
-    
+
     def set_site(self, site):
         set_site(site)
-    
+
     def set_role(self, role):
         set_role(role)
-        
+
     def get_tasks(self):
         """
         Returns an ordered list of all task names.
@@ -660,25 +660,25 @@ class Satchel(object):
             if hasattr(attr, '__call__') and getattr(attr, 'is_task', False):
                 tasks.add(_name)
         return sorted(tasks)
-    
+
     def push_genv(self):
         self._genv = type(self.genv)(self.genv.copy())
-        
+
     def pop_genv(self):
         if self._genv is not None:
             _genv = self._genv
             self.genv = type(self._genv)(self._genv.copy())
             self._genv = None
             return _genv
-    
+
     def add_post_role_load_callback(self, cb):
         post_role_load_callbacks.append(cb)
-    
+
     @task
     def list_tasks(self):
         for _task in self.get_tasks():
             print(_task)
-    
+
     def create_local_renderer(self):
         """
         Instantiates a new local renderer.
@@ -686,7 +686,7 @@ class Satchel(object):
         """
         r = LocalRenderer(self)
         return r
-    
+
     @property
     def local_renderer(self):
         """
@@ -696,21 +696,21 @@ class Satchel(object):
             r = self.create_local_renderer()
             self._local_renderer = r
         return self._local_renderer
-    
+
     def clear_local_renderer(self):
         """
         Deletes the cached local renderer.
         """
         self._local_renderer = None
-    
+
     @property
     def global_renderer(self):
         return GlobalRenderer(self)
-        
+
     @property
     def all_satchels(self):
         return all_satchels
-    
+
     @property
     def all_other_enabled_satchels(self):
         """
@@ -721,16 +721,16 @@ class Satchel(object):
             for name, satchel in self.all_satchels.items()
             if name != self.name.upper() and name.lower() in map(str.lower, self.genv.services)
         )
-    
+
     def iter_sites(self, *args, **kwargs):
         return iter_sites(*args, **kwargs)
-    
+
     @property
     def is_selected(self):
 #         print('self.genv.services:', self.genv.services)
 #         print('self.name.lower():', self.name.lower())
         return self.name.lower() in self.genv.services
-        
+
     def get_satchel(self, name):
 #         try:
         return get_satchel(name)
@@ -738,7 +738,7 @@ class Satchel(object):
 #             module = importlib.import_module("burlap.%s" % name)
 #             if hasattr(module, name):
 #                 return getattr(module, name)
-    
+
     def define_cron_job(self, template, script_path, command=None, name='default', perms='600'):
         if 'cron' not in self.env:
             self.env.cron = type(env)()
@@ -749,24 +749,24 @@ class Satchel(object):
         self.env.cron[name].perms = '600'
         self.templates = list(self.templates)
         self.templates.append(template)
-    
+
     def install_cron_job(self, name='default', extra=None):
         assert name in self.env.cron
-        
+
         data = self.env.cron[name]
         data.update(extra or {})
-    
+
         self.install_script(
             local_path=data.template,
             remote_path=data.script_path,
             render=True,
             extra=data,
         )
-        
+
         r = self.local_renderer
-            
+
         r.sudo('chown root:root %s' % data.script_path)
-        
+
         # Must be 600, otherwise gives INSECURE MODE error.
         # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
         r.sudo('chmod %s %s' % (data.perms, data.script_path))#env.put_remote_path)
@@ -774,13 +774,13 @@ class Satchel(object):
 
     def uninstall_cron_job(self, name):
         assert name in self.cron
-        
+
     def pc(self, *args, **kwargs):
         return pc(*args, **kwargs)
-    
+
     def requires_satchel(self, satchel):
         self._requires_satchels.add(satchel.name.lower())
-    
+
     def check_satchel_requirements(self):
         lst = []
         lst.extend(self.genv.get('services') or [])
@@ -789,7 +789,7 @@ class Satchel(object):
         for req in self._requires_satchels:
             req = req.lower()
             assert req in lst
-    
+
     @property
     def lenv(self):
         """
@@ -800,22 +800,22 @@ class Satchel(object):
             if _k.startswith(self.name+'_'):
                 _env[_k[len(self.name)+1:]] = _v
         return _env
-    
+
     @property
     def env_prefix(self):
         return '%s_' % self.name
-    
+
     @property
     def packager(self):
         return get_packager()
-    
+
     @property
     def os_version(self):
         hs = env.host_string
         if hs not in self._os_version_cache:
             self._os_version_cache[hs] = get_os_version()
         return self._os_version_cache[hs]
-    
+
     def sleep(self, seconds):
         if self.dryrun:
             cmd = 'sleep %s' % seconds
@@ -825,44 +825,44 @@ class Satchel(object):
                 print(cmd)
         else:
             time.sleep(seconds)
-    
+
     def _local(self, *args, **kwargs):
         return _local(*args, **kwargs)
-    
+
     def _run(self, *args, **kwargs):
         return _run(*args, **kwargs)
-    
+
     def render_to_string(self, *args, **kwargs):
         return render_to_string(*args, **kwargs)
-    
+
     def reboot_or_dryrun(self, *args, **kwargs):
         """
         Reboots the server and waits for it to come back.
         """
         warnings.warn('Use self.run() instead.', DeprecationWarning, stacklevel=2)
         self.reboot(*args, **kwargs)
-    
+
     def reboot(self, *args, **kwargs):
         """
         Reboots the server and waits for it to come back.
         """
         reboot_or_dryrun(*args, **kwargs)
-    
+
     def enable_attr(self, *args, **kwargs):
         return enable_attribute_or_dryrun(*args, **kwargs)
-    
+
     def disable_attr(self, *args, **kwargs):
         return disable_attribute_or_dryrun(*args, **kwargs)
-    
+
     def write_to_file(self, *args, **kwargs):
         return write_to_file(*args, **kwargs)
-    
+
     def find_template(self, template):
         return find_template(template)
-    
+
     def get_template_contents(self, template):
         return get_template_contents(template)
-    
+
     def install_script(self, *args, **kwargs):
         return install_script(*args, **kwargs)
 
@@ -876,7 +876,7 @@ class Satchel(object):
         if self.verbose:
             print('set_site_specifics.data:')
             pprint(site_data, indent=4)
-        
+
         # Remove local namespace settings from the global namespace
         # by converting <satchel_name>_<variable_name> to <variable_name>.
         local_ns = {}
@@ -885,7 +885,7 @@ class Satchel(object):
                 _k = k[len(self.name + '_'):]
                 local_ns[_k] = v
                 del site_data[k]
-        
+
         r.env.update(local_ns)
         r.env.update(site_data)
 
@@ -907,18 +907,18 @@ class Satchel(object):
         """
         os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
         self.vprint('os_version:', os_version)
-        
+
         # Lookup legacy package list.
         # OS: [package1, package2, ...],
         req_packages1 = self.required_system_packages
         if req_packages1:
             deprecation('The required_system_packages attribute is deprecated, '
                 'use the packager_system_packages property instead.')
-        
+
         # Lookup new package list.
         # OS: [package1, package2, ...],
         req_packages2 = self.packager_system_packages
-        
+
         patterns = [
             (os_version.type, os_version.distro, os_version.release),
             (os_version.distro, os_version.release),
@@ -941,7 +941,7 @@ class Satchel(object):
             print('Warning: No operating system pattern found for %s' % (os_version,))
         self.vprint('package_list:', package_list)
         return package_list
-    
+
     def install_packages(self):
         """
         Installs all required packages listed for this satchel.
@@ -959,7 +959,7 @@ class Satchel(object):
                 self.sudo('yum install --assumeyes %s' % package_list_str)
             else:
                 raise NotImplementedError('Unknown distro: %s' % os_version.distro)
-    
+
     def purge_packages(self):
         os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
 #         print('os_version:', os_version)
@@ -987,104 +987,104 @@ class Satchel(object):
                 self.sudo_or_dryrun('yum remove %s' % package_list_str)
             else:
                 raise NotImplementedError('Unknown distro: %s' % os_version.distro)
-    
+
     def set_defaults(self):
         # Override to specify custom defaults.
         pass
-    
+
     def render_to_file(self, *args, **kwargs):
         return render_to_file(*args, **kwargs)
-    
+
     def put_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.put() instead.', DeprecationWarning, stacklevel=2)
         return put_or_dryrun(*args, **kwargs)
-    
+
     def get(self, *args, **kwargs):
         return get_or_dryrun(*args, **kwargs)
-    
+
     def put(self, *args, **kwargs):
         return put_or_dryrun(*args, **kwargs)
-    
+
     def run_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.run() instead.', DeprecationWarning, stacklevel=2)
         return run_or_dryrun(*args, **kwargs)
-    
+
     def run(self, *args, **kwargs):
         return run_or_dryrun(*args, **kwargs)
-    
+
     def run_or_local(self, *args, **kwargs):
         if self.genv.is_local:
             return local_or_dryrun(*args, **kwargs)
         else:
             return run_or_dryrun(*args, **kwargs)
-    
+
     def local_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.local() instead.', DeprecationWarning, stacklevel=2)
         return local_or_dryrun(*args, **kwargs)
-        
+
     def append(self, *args, **kwargs):
         return append_or_dryrun(*args, **kwargs)
-    
+
     def file_exists(self, *args, **kwargs):
         return files_exists_or_dryrun(*args, **kwargs)
-    
+
     def file_contains(self, *args, **kwargs):
         from fabric.contrib.files import contains
         return contains(*args, **kwargs)
-        
+
     def sed(self, *args, **kwargs):
         return sed_or_dryrun(*args, **kwargs)
-    
+
     def local(self, *args, **kwargs):
         return local_or_dryrun(*args, **kwargs)
-    
+
     def local_if_missing(self, fn, cmd, **kwargs):
         _cmd = "[ ! -f '%s' ] && %s || true" % (fn, cmd)
         self.local(_cmd, **kwargs)
-    
+
     def local_if_exists(self, fn, cmd, **kwargs):
         _cmd = "[ -f '%s' ] && %s || true" % (fn, cmd)
         self.local(_cmd, **kwargs)
-    
+
     def sudo_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.sudo() instead.', DeprecationWarning, stacklevel=2)
         return sudo_or_dryrun(*args, **kwargs)
-    
+
     def sudo(self, *args, **kwargs):
         return sudo_or_dryrun(*args, **kwargs)
-    
+
     def sudo_or_local(self, *args, **kwargs):
         if self.genv.is_local:
             return local_or_dryrun(*args, **kwargs)
         else:
             return sudo_or_dryrun(*args, **kwargs)
-    
+
     def sudo_if_missing(self, fn, cmd, **kwargs):
         _cmd = "[ ! -f '%s' ] && %s || true" % (fn, cmd)
         self.sudo(_cmd, **kwargs)
-    
+
     def sudo_if_exists(self, fn, cmd, **kwargs):
         _cmd = "[ -f '%s' ] && %s || true" % (fn, cmd)
         self.sudo(_cmd, **kwargs)
-        
+
     def write_temp_file(self, *args, **kwargs):
         return write_temp_file_or_dryrun(*args, **kwargs)
-    
+
     def comment(self, *args):
         print('# ' + (' '.join(map(str, args))))
-    
+
     def print_command(self, *args, **kwargs):
         return print_command(*args, **kwargs)
-    
+
     def get_templates(self):
         return self.templates or []
-    
+
     def record_manifest(self):
         """
         Returns a dictionary representing a serialized state of the service.
         """
         manifest = get_component_settings(self.name)
-        
+
         # Record a signature of each template so we know to redeploy when they change.
         for template in self.get_templates():
             # Dereference brace notation. e.g. convert '{var}' to `env[var]`.
@@ -1096,9 +1096,9 @@ class Satchel(object):
                 fqfn = self.find_template('%s/%s' % (self.name, template))
             assert fqfn, 'Unable to find template: %s/%s' % (self.name, template)
             manifest['_%s' % template] = get_file_hash(fqfn)
-        
+
         return manifest
-    
+
     def configure(self):
         """
         The standard method called to apply functionality when the manifest changes.
@@ -1108,54 +1108,54 @@ class Satchel(object):
     # List of satchels that should be run before this one during deployments.
     configure.deploy_before = []
     configure.takes_diff = False #DEPRECATED
-    
+
     #TODO:deprecated, remove?
     def get_deployers(self):
         """
         Returns one or more Deployer instances, representing tasks to run during a deployment.
         """
         #raise NotImplementedError
-        
+
     @property
     def current_manifest(self):
         from burlap import manifest
         return manifest.get_current(name=self.name)
-        
+
     @property
     def last_manifest(self):
         from burlap import manifest
         if not self._last_manifest:
             self._last_manifest = LocalRenderer(self, lenv=manifest.get_last(name=self.name), set_default=True)
         return self._last_manifest
-        
+
     @property
     def verbose(self):
         return get_verbose()
-        
+
     @verbose.setter
     def verbose(self, v):
         return set_verbose(v)
-        
+
     @property
     def dryrun(self):
         return get_dryrun()
-        
+
     @dryrun.setter
     def dryrun(self, v):
         return set_dryrun(v)
 
 class Service(object):
-    
+
     name = None
-    
+
     commands = {} # {action: {os_version_distro: command}}
-    
+
     # If true, any warnings or errors encountered during commands will be ignored.
     ignore_errors = False
-    
+
     # This command will be automatically run after every deployment.
     post_deploy_command = None #'restart'
-    
+
     def __init__(self):
         assert self.name
         self.name = self.name.strip().lower()
@@ -1163,15 +1163,15 @@ class Service(object):
         service_stoppers[self.name.upper()] = [self.stop]
         if self.post_deploy_command:
             service_post_deployers[self.name.upper()] = [getattr(self, self.post_deploy_command)]
-            
+
         super(Service, self).__init__()
-        
+
         services[self.name.strip().upper()] = self
-        
+
         _key = '%s_service_commands' % self.name
         if _key in env:
             self.commands = env[_key]
- 
+
         #DEPRECATED
         tasks = (
             'start',
@@ -1181,7 +1181,7 @@ class Service(object):
             'disable',
             'status',
             'reload',
-        )   
+        )
         for task_name in tasks:
             task = add_class_methods_as_module_level_functions_for_fabric(
                 instance=self,
@@ -1189,7 +1189,7 @@ class Service(object):
                 method_name=task_name,
                 module_alias=self.name,
             )
-    
+
     def get_command(self, action):
         os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
 #         print('os_version:', os_version)
@@ -1203,17 +1203,17 @@ class Service(object):
         for pattern in patterns:
             if pattern in self.commands[action]:
                 return self.commands[action][pattern]
-    
+
     def enable(self):
         cmd = self.get_command(ENABLE)
         sudo_or_dryrun(cmd)
-    
+
     def disable(self):
         cmd = self.get_command(DISABLE)
         sudo_or_dryrun(cmd)
-        
+
     def restart(self):
-        s = {'warn_only':True} if self.ignore_errors else {} 
+        s = {'warn_only':True} if self.ignore_errors else {}
         restart_cmd = self.get_command(RESTART)
         if restart_cmd:
             with settings(**s):
@@ -1221,31 +1221,31 @@ class Service(object):
         else:
             self.stop()
             self.start()
-                
-        
+
+
     def reload(self):
-        s = {'warn_only':True} if self.ignore_errors else {} 
+        s = {'warn_only':True} if self.ignore_errors else {}
         with settings(**s):
             cmd = self.get_command(RELOAD)
             sudo_or_dryrun(cmd)
-        
+
     def start(self):
-        s = {'warn_only':True} if self.ignore_errors else {} 
+        s = {'warn_only':True} if self.ignore_errors else {}
         with settings(**s):
             cmd = self.get_command(START)
             sudo_or_dryrun(cmd)
-        
+
     def stop(self, ignore_errors=True):
-        s = {'warn_only': True} if ignore_errors else {} 
+        s = {'warn_only': True} if ignore_errors else {}
         with settings(**s):
             cmd = self.get_command(STOP)
             sudo_or_dryrun(cmd)
-        
+
     def status(self):
         with settings(warn_only=True):
             cmd = self.get_command(STATUS)
             return sudo_or_dryrun(cmd)
-    
+
     @task
     def is_running(self):
         status = str(self.status() or '')
@@ -1268,7 +1268,7 @@ class ContainerSatchel(Satchel):
     """
     Wraps functionality that doesn't need to track or deploy changes.
     """
-    
+
     def record_manifest(self):
         return {}
 
@@ -1368,7 +1368,7 @@ def set_show(v):
 
 def get_show():
     return _show_command_output
-    
+
 def render_command_prefix(is_local=False):
     extra = {}
     if env.key_filename:
@@ -1388,22 +1388,22 @@ def print_command(cmd):
 def append_or_dryrun(*args, **kwargs):
     """
     Wrapper around Fabric's contrib.files.append() to give it a dryrun option.
-    
+
     http://docs.fabfile.org/en/0.9.1/api/contrib/files.html#fabric.contrib.files.append
     """
     from fabric.contrib.files import append
-    
+
     dryrun = get_dryrun(kwargs.get('dryrun'))
-    
+
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
-        
+
     use_sudo = kwargs.pop('use_sudo', False)
-        
+
     text = args[0] if len(args) >= 1 else kwargs.pop('text')
-    
+
     filename = args[1] if len(args) >= 2 else kwargs.pop('filename')
-    
+
     if dryrun:
         text = text.replace('\n', '\\n')
         cmd = 'echo -e "%s" >> %s' % (text, filename)
@@ -1420,26 +1420,26 @@ def enable_attribute_or_dryrun(*args, **kwargs):
     Similar to append() but ensures a line containing a key-value pair exists and is enabled.
     """
     dryrun = get_dryrun(kwargs.get('dryrun'))
-    
+
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
-        
+
     use_sudo = kwargs.pop('use_sudo', False)
     run_cmd = sudo_or_dryrun if use_sudo else run_or_dryrun
     run_cmd_str = 'sudo' if use_sudo else 'run'
-        
+
     key = args[0] if len(args) >= 1 else kwargs.pop('key')
-    
+
     value = str(args[1] if len(args) >= 2 else kwargs.pop('value'))
-    
+
     filename = args[2] if len(args) >= 3 else kwargs.pop('filename')
-    
+
     comment_pattern = args[3] if len(args) >= 4 else kwargs.pop('comment_pattern', r'#\s*')
-    
+
     equals_pattern = args[4] if len(args) >= 5 else kwargs.pop('equals_pattern', r'\s*=\s*')
-    
+
     equals_literal = args[5] if len(args) >= 6 else kwargs.pop('equals_pattern', '=')
-    
+
     context = dict(
         key=key,
         value=value,
@@ -1453,7 +1453,7 @@ def enable_attribute_or_dryrun(*args, **kwargs):
         comment_pattern=comment_pattern,
         equals_pattern=equals_pattern,
     )
-    
+
     cmds = [
         # Replace partial commented text with full un-commented text.
         'sed -i -r -e "s/{commented_pattern_partial}/{uncommented_literal}/g" {filename}'.format(**context),
@@ -1464,7 +1464,7 @@ def enable_attribute_or_dryrun(*args, **kwargs):
         # If uncommented text still does not exist, append it.
         'grep -qE "{uncommented_pattern}" {filename} || echo "{uncommented_literal}" >> {filename}'.format(**context),
     ]
-    
+
     if dryrun:
         for cmd in cmds:
             if BURLAP_COMMAND_PREFIX:
@@ -1482,24 +1482,24 @@ def disable_attribute_or_dryrun(*args, **kwargs):
     The inverse of enable_attribute_or_dryrun().
     """
     dryrun = get_dryrun(kwargs.get('dryrun'))
-    
+
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
-        
+
     use_sudo = kwargs.pop('use_sudo', False)
     run_cmd = sudo_or_dryrun if use_sudo else run_or_dryrun
     run_cmd_str = 'sudo' if use_sudo else 'run'
-        
+
     key = args[0] if len(args) >= 1 else kwargs.pop('key')
-    
+
     filename = args[1] if len(args) >= 2 else kwargs.pop('filename')
-    
+
     comment_pattern = args[2] if len(args) >= 3 else kwargs.pop('comment_pattern', r'#\s*')
-    
+
     equals_pattern = args[3] if len(args) >= 4 else kwargs.pop('equals_pattern', r'\s*=\s*')
-    
+
     equals_literal = args[4] if len(args) >= 5 else kwargs.pop('equals_pattern', '=')
-    
+
     context = dict(
         key=key,
         uncommented_literal='%s%s' % (key, equals_literal), # key=value
@@ -1512,12 +1512,12 @@ def disable_attribute_or_dryrun(*args, **kwargs):
         comment_pattern=comment_pattern,
         equals_pattern=equals_pattern,
     )
-    
+
     cmds = [
         # Replace partial un-commented text with full commented text.
         'sed -i -r -e "s/{uncommented_pattern_partial}//g" {filename}'.format(**context),
     ]
-    
+
     if dryrun:
         for cmd in cmds:
             if BURLAP_COMMAND_PREFIX:
@@ -1568,15 +1568,15 @@ def write_temp_file_or_dryrun(content, *args, **kwargs):
 def sed_or_dryrun(*args, **kwargs):
     """
     Wrapper around Fabric's contrib.files.sed() to give it a dryrun option.
-    
+
     http://docs.fabfile.org/en/0.9.1/api/contrib/files.html#fabric.contrib.files.sed
     """
     dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
-        
+
     use_sudo = kwargs.get('use_sudo', False)
-        
+
     if dryrun:
         context = dict(
             filename=args[0] if len(args) >= 1 else kwargs['filename'],
@@ -1599,20 +1599,20 @@ def local_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
-        
+
     assign_to = kwargs.pop('assign_to', None)
     if assign_to:
         cmd = args[0]
         cmd = '$%s=`%s`' % (assign_to, cmd)
         args = list(args)
         args[0] = cmd
-        
+
     if dryrun:
         cmd = args[0]
         print('[%s@localhost] local: %s' % (getpass.getuser(), cmd))
     else:
         return local(*args, **kwargs)
-        
+
 def run_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
@@ -1644,48 +1644,48 @@ def reboot_or_dryrun(*args, **kwargs):
     An improved version of fabric.operations.reboot with better error handling.
     """
     from fabric.state import connections
-    
+
     verbose = get_verbose()
-    
+
     dryrun = get_dryrun(kwargs.get('dryrun'))
-    
+
     # Use 'wait' as max total wait time
     kwargs.setdefault('wait', 120)
     wait = int(kwargs['wait'])
-    
+
     command = kwargs.get('command', 'reboot')
-    
+
     # Shorter timeout for a more granular cycle than the default.
     timeout = int(kwargs.get('timeout', 30))
-    
+
     reconnect_hostname = kwargs.pop('new_hostname', env.host_string)
-    
+
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
-        
+
     if dryrun:
         print('%s sudo: reboot' % (render_command_prefix(),))
     else:
         if env.is_local:
             if raw_input('reboot localhost now? ').strip()[0].lower() != 'y':
                 return
-                
+
         attempts = int(round(float(wait) / float(timeout)))
         # Don't bleed settings, since this is supposed to be self-contained.
         # User adaptations will probably want to drop the "with settings()" and
         # just have globally set timeout/attempts values.
         with settings(warn_only=True):
             _sudo(command)
-        
+
         env.host_string = reconnect_hostname
         success = False
         for attempt in xrange(attempts):
-            
+
             # Try to make sure we don't slip in before pre-reboot lockdown
             if verbose:
                 print('Waiting for %s seconds, wait %i of %i' % (timeout, attempt+1, attempts))
             time.sleep(timeout)
-            
+
             # This is actually an internal-ish API call, but users can simply drop
             # it in real fabfile use -- the next run/sudo/put/get/etc call will
             # automatically trigger a reconnect.
@@ -1703,10 +1703,10 @@ def reboot_or_dryrun(*args, **kwargs):
                 break
             except Exception as e:
                 print('Exception:', e)
-            
+
         if not success:
             raise Exception('Reboot failed or took longer than %s seconds.' % wait)
-            
+
 # def get_or_dryrun(*args, **kwargs):
 #     dryrun = get_dryrun(kwargs.get('dryrun'))
 #     use_sudo = kwargs.get('use_sudo', False)
@@ -1716,20 +1716,20 @@ def reboot_or_dryrun(*args, **kwargs):
 #     if dryrun:
 #         local_path = kwargs['local_path']
 #         remote_path = kwargs.get('remote_path', None)
-#         
+#
 #         if not local_path:
 #             _, local_path = tempfile.mkstemp()
-#             
+#
 #         if not local_path.startswith('/') and not local_path.startswith('~'):
 #             local_path = '/tmp/' + local_path
-#         
+#
 #         if use_sudo:
 #             real_local_path = local_path
 #             _, local_path = tempfile.mkstemp()
-#         
+#
 #         if real_local_path is None:
 #             real_local_path = local_path
-#         
+#
 #         if env.host_string in LOCALHOSTS:
 #             cmd = 'rsync --progress --verbose %s %s' % (remote_path, local_path)
 #             print('%s get: %s' % (render_command_prefix(is_local=True), cmd))
@@ -1738,11 +1738,11 @@ def reboot_or_dryrun(*args, **kwargs):
 #             cmd = 'rsync --progress --verbose %s %s@%s:%s' % (local_path, env.user, env.host_string, local_path)
 #             env.get_local_path = local_path
 #             print('%s get: %s' % (render_command_prefix(is_local=True), cmd))
-#             
+#
 #         if real_local_path and use_sudo:
 #             sudo_or_dryrun('mv %s %s' % (local_path, real_local_path))
 #             env.get_local_path = real_local_path
-#             
+#
 #         return [real_local_path]
 #     else:
 #         return _get(**kwargs)
@@ -1756,20 +1756,20 @@ def put_or_dryrun(*args, **kwargs):
     if dryrun:
         local_path = kwargs['local_path']
         remote_path = kwargs.get('remote_path', None)
-        
+
         if not remote_path:
             _, remote_path = tempfile.mkstemp()
-            
+
         if not remote_path.startswith('/') and not remote_path.startswith('~'):
             remote_path = '/tmp/' + remote_path
-        
+
         if use_sudo:
             real_remote_path = remote_path
             _, remote_path = tempfile.mkstemp()
-        
+
         if real_remote_path is None:
             real_remote_path = remote_path
-        
+
         if env.host_string in LOCALHOSTS:
             cmd = 'rsync --progress --verbose %s %s' % (local_path, remote_path)
             print('%s put: %s' % (render_command_prefix(is_local=True), cmd))
@@ -1778,11 +1778,11 @@ def put_or_dryrun(*args, **kwargs):
             cmd = 'rsync --progress --verbose %s %s@%s:%s' % (local_path, env.user, env.host_string, remote_path)
             env.put_remote_path = remote_path
             print('%s put: %s' % (render_command_prefix(is_local=True), cmd))
-            
+
         if real_remote_path and use_sudo:
             sudo_or_dryrun('mv %s %s' % (remote_path, real_remote_path))
             env.put_remote_path = real_remote_path
-            
+
         return [real_remote_path]
     else:
         return _put(**kwargs)
@@ -1856,7 +1856,7 @@ def get_last_modified_timestamp(path):
     ret = subprocess.check_output(cmd, shell=True)
     # Note, we round now to avoid rounding errors later on where some formatters
     # use different decimal contexts.
-    try: 
+    try:
         ret = round(float(ret), 2)
     except ValueError:
         return
@@ -1868,22 +1868,22 @@ def check_settings_for_differences(old, new, as_bool=False, as_tri=False):
     Returns a subset of the env dictionary keys that differ,
     either being added, deleted or changed between old and new.
     """
-    
+
     assert not as_bool or not as_tri
-    
+
     old = old or {}
     new = new or {}
-    
+
     changes = set(k for k in set(new.iterkeys()).intersection(old.iterkeys()) if new[k] != old[k])
     if changes and as_bool:
         return True
-    
+
     added_keys = set(new.iterkeys()).difference(old.iterkeys())
     if added_keys and as_bool:
         return True
     if not as_tri:
         changes.update(added_keys)
-    
+
     deled_keys = set(old.iterkeys()).difference(new.iterkeys())
     if deled_keys and as_bool:
         return True
@@ -1891,10 +1891,10 @@ def check_settings_for_differences(old, new, as_bool=False, as_tri=False):
         return False
     if not as_tri:
         changes.update(deled_keys)
-    
+
     if as_tri:
         return added_keys, changes, deled_keys
-    
+
     return changes
 
 
@@ -1949,21 +1949,21 @@ class QueuedCommand(object):
     """
     Represents a fabric command that is pending execution.
     """
-    
+
     def __init__(self, name, args=None, kwargs=None, pre=None, post=None):
         self.name = name
         self.args = args or []
         self.kwargs = kwargs or {}
-        
+
         pre = pre or []
         post = post or []
-        
+
         # Used for ordering commands.
         self.pre = pre # commands that should come before this command
         assert isinstance(self.pre, (tuple, list)), 'Pre must be a list type.'
         self.post = post # commands that should come after this command
         assert isinstance(self.post, (tuple, list)), 'Post must be a list type.'
-    
+
     @property
     def cn(self):
         """
@@ -1973,7 +1973,7 @@ class QueuedCommand(object):
         parts = self.name.split('.')
         if len(parts) >= 2:
             return parts[0]
-    
+
     def __repr__(self):
         kwargs = list(map(str, self.args))
         for k, v in six.iteritems(self.kwargs):
@@ -1989,24 +1989,24 @@ class QueuedCommand(object):
             return ('%s:%s' % params).strip()
         else:
             return (params[0]).strip()
-    
+
     def __cmp__(self, other):
         """
         Return negative if x<y, zero if x==y, positive if x>y.
         """
         if not isinstance(self, type(other)):
             return NotImplemented
-        
+
         x_cn = self.cn
         x_name = self.name
         x_pre = self.pre
         x_post = self.post
-        
+
         y_cn = other.cn
         y_name = other.name
         y_pre = other.pre
         y_post = other.post
-        
+
         if y_cn in x_pre or y_name in x_pre:
             # Other should come first.
             return +1
@@ -2021,10 +2021,10 @@ class QueuedCommand(object):
             return -1
         return 0
         #return cmp(hash(self), hash(other))
-    
+
     def __hash__(self):
         return hash((self.name, tuple(self.args), tuple(self.kwargs.items())))
-    
+
     def __call__(self):
         raise NotImplementedError
 
@@ -2122,21 +2122,21 @@ def get_os_version():
     if common_os_version:
         return common_os_version
     with settings(warn_only=True), hide('running', 'stdout', 'stderr', 'warnings'):
-        
+
         ret = _run('cat /etc/lsb-release')
         if ret.succeeded:
             return OS(
                 type=LINUX,
                 distro=UBUNTU,
                 release=re.findall(r'DISTRIB_RELEASE=([0-9\.]+)', ret)[0])
-                
+
         ret = _run('cat /etc/debian_version')
         if ret.succeeded:
             return OS(
                 type=LINUX,
                 distro=DEBIAN,
                 release=re.findall(r'([0-9\.]+)', ret)[0])
-    
+
         ret = _run('cat /etc/fedora-release')
         if ret.succeeded:
             return OS(
@@ -2158,10 +2158,10 @@ def find_template(template):
                 print('Using template: %s' % (fqfn,))
             final_fqfn = fqfn
             break
-            
+
     if not final_fqfn:
         raise IOError('Template not found: %s' % template)
-         
+
     return final_fqfn
 
 def get_template_contents(template):
@@ -2176,9 +2176,9 @@ def render_to_string(template, extra=None):
     #from django.template import Context, Template
     #from django.template.loader import render_to_string
     from jinja2 import Template
-    
+
     extra = extra or {}
-    
+
     final_fqfn = find_template(template)
     assert final_fqfn, 'Template not found: %s' % template
     #from django.conf import settings
@@ -2186,7 +2186,7 @@ def render_to_string(template, extra=None):
 #         settings.configure()
 #     except RuntimeError:
 #         pass
-    
+
     #content = render_to_string('template.txt', dict(env=env))
     template_content = open(final_fqfn, 'r').read()
     t = Template(template_content)
@@ -2234,7 +2234,7 @@ def render_to_file(template, fn=None, extra=None, **kwargs):
         fout.write(content)
         fout.close()
     assert fn
-    
+
     if style == 'cat':
         cmd = 'cat <<EOF > %s\n%s\nEOF' % (fn, content)
     elif style == 'echo':
@@ -2257,11 +2257,11 @@ def install_script(local_path=None, remote_path=None, render=True, extra=None):
         local_path = render_to_file(template=local_path, extra=extra)
     put_or_dryrun(local_path=local_path, remote_path=remote_path, use_sudo=True)
     sudo_or_dryrun('chmod +x %s' % env.put_remote_path)
-    
+
 def write_to_file(content, fn=None, **kwargs):
     import tempfile
     dryrun = get_dryrun(kwargs.get('dryrun'))
-    
+
     if not fn:
         fd, fn = tempfile.mkstemp()
 
@@ -2289,17 +2289,17 @@ def set_role(role):
     if role is None:
         return
     env[ROLE] = os.environ[ROLE] = role
-    
+
 def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=False, verbose=False):
     """
     Iterates over sites, safely setting environment variables for each site.
     """
     #from burlap.dj import render_remote_paths
-    
+
     hostname = get_current_hostname()
-    
+
     target_sites = env.available_sites_by_host.get(hostname, None)
-            
+
     if sites is None:
         site = site or env.SITE or ALL
         if site == ALL:
@@ -2307,7 +2307,7 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
         else:
             sys.stderr.flush()
             sites = [(site, env.sites.get(site))]
-    
+
     renderer = renderer #or render_remote_paths
     env_default = save_env()
     for site, site_data in sites:
@@ -2343,14 +2343,14 @@ def get_current_hostname():
     if key not in env:
         env[key] = {}
 #    import importlib
-#    
+#
 #    retriever = None
 #    if env.hosts_retriever:
 #        # Dynamically retrieve hosts.
 #        module_name = '.'.join(env.hosts_retriever.split('.')[:-1])
 #        func_name = env.hosts_retriever.split('.')[-1]
 #        retriever = getattr(importlib.import_module(module_name), func_name)
-#    
+#
 #    # Load host translator.
 #    translator = None
 #    if hostname:
@@ -2359,11 +2359,11 @@ def get_current_hostname():
 #        func_name = env.hostname_translator.split('.')[-1]
 #        translator = getattr(importlib.import_module(module_name), func_name)
     #ret = run_or_dryrun('hostname')#)
-    
+
     if env.host_string not in env[key]:
         ret = _run('hostname')
         env[key][env.host_string] = str(ret).strip()
-        
+
     return env[key][env.host_string]
 
 #http://stackoverflow.com/questions/11557241/python-sorting-a-dependency-list
@@ -2375,8 +2375,8 @@ def topological_sort(source):
     """
     if isinstance(source, dict):
         source = source.items()
-    pending = sorted([(name, set(deps)) for name, deps in source]) # copy deps so we can modify set in-place       
-    emitted = []        
+    pending = sorted([(name, set(deps)) for name, deps in source]) # copy deps so we can modify set in-place
+    emitted = []
     while pending:
         next_pending = []
         next_emitted = []
@@ -2384,9 +2384,9 @@ def topological_sort(source):
             name, deps = entry
             deps.difference_update(emitted) # remove deps we emitted last pass
             if deps: # still has deps? recheck during next pass
-                next_pending.append(entry) 
+                next_pending.append(entry)
             else: # no more deps? time to emit
-                yield name 
+                yield name
                 emitted.append(name) # <-- not required, but helps preserve original ordering
                 next_emitted.append(name) # remember what we emitted for difference_update() in next pass
         if not next_emitted: # all entries have unmet deps, one of two things is wrong...
@@ -2423,7 +2423,7 @@ def get_host_ip(hostname):
 def only_hostname(s):
     """
     Given an SSH target, returns only the hostname.
-    
+
     e.g. only_hostname('user@mydomain:port') == 'mydomain'
     """
     return s.split('@')[-1].split(':')[0].strip()
@@ -2451,4 +2451,3 @@ def getoutput(cmd):
 #     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
 #     out, err = process.communicate()
 #     return out
-    
