@@ -97,7 +97,7 @@ class TarballSatchel(Satchel):
             r.local(self.env.rsync_command_template)
             
             # Then rsync from the temp directory as sudo to complete the operation.
-            r.env.rsync_source_dir = tmp_dir
+            r.env.rsync_source_dir = tmp_dir+'/*'
             r.env.rsync_target_dir = real_rsync_target_dir
             r.env.rsync_target_host = ''
             r.env.rsync_auth = ''

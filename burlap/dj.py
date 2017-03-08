@@ -600,7 +600,7 @@ class DjangoSatchel(Satchel):
             pprint(data, indent=4)
         manifest['migrations'] = data
 
-        return latest_timestamp
+        return manifest
     
     @task(precursors=['packager''pip'])
     def configure_media(self, *args, **kwargs):
@@ -609,8 +609,8 @@ class DjangoSatchel(Satchel):
         
     @task(precursors=['packager', 'apache', 'pip', 'tarball', 'postgresql', 'mysql'])
     def configure_migrations(self):
-        last = self.last_manifest or {}
-        current = self.current_manifest or {}
+        last = self.last_manifest.migrations or {}
+        current = self.current_manifest.get('migrations') or {}
         migrate_apps = []
         if last and current:
             if self.verbose:
@@ -623,7 +623,7 @@ class DjangoSatchel(Satchel):
             # Note, Django's migrate command doesn't support multiple app name arguments
             # with all options, so we run it separately for each app.
             for app in migrate_apps:
-                self.update_all(apps=app, ignore_errors=self.env.ignore_errors)
+                self.migrate(app=app, ignore_errors=self.env.ignore_errors)
 
     @task(precursors=['packager'])
     def configure(self, *args, **kwargs):
