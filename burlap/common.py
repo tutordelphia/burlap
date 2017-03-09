@@ -122,11 +122,17 @@ def start_error():
 def end_error():
     print(Colors.ENDC)
 
+def fail_str(s):
+    return Colors.FAIL + str(s) + Colors.ENDC
+
+def success_str(s):
+    return Colors.OKGREEN + str(s) + Colors.ENDC
+
 def print_fail(s, file=None): # pylint: disable=redefined-builtin
-    print(Colors.FAIL + str(s) + Colors.ENDC, file=file or sys.stderr)
+    print(fail_str(s), file=file or sys.stderr)
 
 def print_success(s, file=None): # pylint: disable=redefined-builtin
-    print(Colors.OKGREEN + str(s) + Colors.ENDC, file=file or sys.stdout)
+    print(success_str(s), file=file or sys.stdout)
 
 def create_module(name, code=None):
     """

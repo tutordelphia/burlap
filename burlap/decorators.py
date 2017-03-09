@@ -45,7 +45,20 @@ def task_or_dryrun(*args, **kwargs):
 
 def _task(meth):
     meth.is_task = True
-    return meth
+    
+    def wrapper(self, *args, **kwargs):
+        ret = meth(self, *args, **kwargs)
+        
+        # Ensure each satchels local variable scope is cleared after every server execution.
+        self.clear_local_renderer()
+        
+        return ret
+
+    if hasattr(meth, 'is_deployer') or meth.__name__ == 'configure': 
+        wrapper.__name__ = meth.__name__
+        return wrapper
+    else:
+        return meth
 
 def task(*args, **kwargs):
     """

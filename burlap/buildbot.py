@@ -42,6 +42,8 @@ class BuildBotSatchel(ServiceSatchel):
         
         self.env.extra_deploy_paths = ['buildbot/slave/info/', 'buildbot/slave/buildbot.tac']
         
+        self.env.delete_deploy_paths = []
+
         self.env.check_ok = True
         self.env.check_ok_paths = {} # {branch: (url, text)}
         
@@ -199,6 +201,9 @@ class BuildBotSatchel(ServiceSatchel):
         r.sudo('chown -R {user}:{group} {project_dir}')
         r.sudo('chmod -R {perms} {project_dir}')
         
+        for delete_path in r.env.delete_deploy_paths:
+            r.sudo('rm -Rf %s' % delete_path)
+        
         r.local('rsync '
             '--recursive --verbose --perms --times --links '
             '--compress --copy-links '
@@ -210,7 +215,7 @@ class BuildBotSatchel(ServiceSatchel):
             '--delete --delete-before '
             '--rsh "ssh -t -o StrictHostKeyChecking=no -i {key_filename}" '
             'src {user}@{host_string}:{project_dir}')
-        
+
         for path in self.env.extra_deploy_paths:
             if path.endswith('/'):
                 # Directory.
@@ -231,9 +236,9 @@ class BuildBotSatchel(ServiceSatchel):
                 '--delete --delete-before '
                 '--rsh "ssh -t -o StrictHostKeyChecking=no -i {key_filename}" '
                 'src/{tmp_path} {user}@{host_string}:{project_dir}/src/{tmp_remote_path}')
-        
+
         self.rsync_paths()
-        
+
         self.set_permissions()
     
     @task

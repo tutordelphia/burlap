@@ -38,6 +38,9 @@ class DjangoSatchel(Satchel):
         # The folder containing manage.py.
         self.env.project_dir = None
         
+        # The folder containing manage.py on the local filesystem.
+        self.env.local_project_dir = None
+
         self.env.shell_template = 'cd {project_dir}; /bin/bash -i -c \"{manage_cmd} shell;\"'
         
         # These apps will be migrated on a specific database, while faked
@@ -574,9 +577,7 @@ class DjangoSatchel(Satchel):
                 'export ROLE={ROLE}; cd {project_dir}; '\
                 '{manage_cmd} {command} --traceback; {end_email_command}"; sleep 3;')
 
-    def record_manifest(self):
-        manifest = super(DjangoSatchel, self).record_manifest()
-        
+    def get_media_timestamp(self):
         latest_timestamp = -1e9999999999999999
         for path in self.iter_static_paths():
             if self.verbose:
@@ -586,8 +587,18 @@ class DjangoSatchel(Satchel):
                 get_last_modified_timestamp(path) or latest_timestamp)
         if self.verbose:
             print('latest_timestamp:', latest_timestamp)
-        manifest['latest_timestamp'] = latest_timestamp
+        return latest_timestamp
+        
+    @property
+    def media_changed(self):
+        lm = self.last_manifest
+        last_timestamp = lm.latest_timestamp
+        current_timestamp = self.get_media_timestamp()
+        self.vprint('last_timestamp:', last_timestamp)
+        self.vprint('current_timestamp:', current_timestamp)
+        return last_timestamp != current_timestamp
 
+    def get_migration_fingerprint(self):
         data = {} # {app: latest_migration_name}
         for app_name, _dir in self.iter_app_directories():
             migration_dir = os.path.join(_dir, 'migrations')
@@ -598,14 +609,20 @@ class DjangoSatchel(Satchel):
         if self.verbose:
             print('%s.migrations:' % self.name)
             pprint(data, indent=4)
-        manifest['migrations'] = data
+        return data
 
+    def record_manifest(self):
+        manifest = super(DjangoSatchel, self).record_manifest()
+        manifest['latest_timestamp'] = self.get_media_timestamp()
+        manifest['migrations'] = self.get_migration_fingerprint()
         return manifest
     
-    @task(precursors=['packager''pip'])
+    @task(precursors=['packager', 'pip'])
     def configure_media(self, *args, **kwargs):
-        r = self.local_renderer
-        r.local('cd {project_dir}; {manage_cmd} collectstatic --noinput')
+        if self.media_changed:
+            r = self.local_renderer
+            assert r.env.local_project_dir
+            r.local('cd {local_project_dir}; {manage_cmd} collectstatic --noinput')
         
     @task(precursors=['packager', 'apache', 'pip', 'tarball', 'postgresql', 'mysql'])
     def configure_migrations(self):

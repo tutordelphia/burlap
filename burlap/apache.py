@@ -552,7 +552,7 @@ class ApacheSatchel(ServiceSatchel):
         
         site = site or self.genv.SITE
         
-        if int(delete_old):
+        if int(delete_old) and site == ALL:
             # Delete all existing enabled and available sites.
             r.sudo('rm -f {sites_available}/*')
             r.sudo('rm -f {sites_enabled}/*')
