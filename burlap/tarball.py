@@ -62,19 +62,33 @@ class TarballSatchel(Satchel):
         
         self.env.set_permissions = True
     
+    @property
+    def timestamp(self):
+        from burlap.common import get_last_modified_timestamp
+        fn = self.env.rsync_source_dir
+        if self.verbose:
+            print('tarball.fn:', fn)
+        return get_last_modified_timestamp(fn)
+    
+    @task
+    def changed(self):
+        lm = self.last_manifest
+        last_timestamp = lm.timestamp
+        current_timestamp = self.timestamp
+        self.vprint('last_timestamp:', last_timestamp)
+        self.vprint('current_timestamp:', current_timestamp)
+        ret = last_timestamp == current_timestamp
+        print('NO change' if ret else 'CHANGED!')
+        return ret
+        
     def record_manifest(self):
         """
         Called after a deployment to record any data necessary to detect changes
         for a future deployment.
         """
-        from burlap.common import get_last_modified_timestamp
-        fn = self.env.rsync_source_dir
-        if self.verbose:
-            print('tarball.fn:', fn)
-        data = get_last_modified_timestamp(fn)
-        if self.verbose:
-            print(data)
-        return data
+        manifest = super(TarballSatchel, self).record_manifest()
+        manifest['timestamp'] = self.timestamp
+        return manifest
     
     @task
     def set_permissions(self):
