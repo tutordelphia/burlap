@@ -4,7 +4,7 @@ import sys
 import unittest
 # from pprint import pprint
 
-from burlap.common import set_state, get_state, clear_state, init_env, default_env, env, all_satchels
+from burlap.common import set_state, get_state, clear_state, init_env, default_env, env, all_satchels, get_dryrun, set_dryrun, get_verbose, set_verbose
 from burlap.deploy import init_env as deploy_init_env
 
 def clear_runs_once(func):
@@ -74,6 +74,9 @@ class TestCase(unittest.TestCase):
         # Save burlap state.
         self._burlap_state = get_state()
         
+        self._dryrun = get_dryrun()
+        self._verbose = get_verbose()
+        
         # Clear runs_once on legacy runs_once methods.
         from burlap import deploy, manifest
         modules = [deploy, manifest]
@@ -101,6 +104,9 @@ class TestCase(unittest.TestCase):
         super(TestCase, self).setUp()
 
     def tearDown(self):
+        
+        set_dryrun(self._dryrun)
+        set_verbose(self._verbose)
         
         # Restore fabric state.
         self.clear_env()

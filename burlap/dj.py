@@ -112,6 +112,15 @@ class DjangoSatchel(Satchel):
                         
                 if r.env.settings_module in sys.modules:
                     del sys.modules[r.env.settings_module]
+                    
+                #TODO:fix r.env.settings_module not loading from settings?
+#                 print('r.genv.django_settings_module:', r.genv.django_settings_module, file=_stdout)
+#                 print('r.genv.dj_settings_module:', r.genv.dj_settings_module, file=_stdout)
+#                 print('r.env.settings_module:', r.env.settings_module, file=_stdout)
+                if 'django_settings_module' in r.genv:
+                    r.env.settings_module = r.genv.django_settings_module
+                else:
+                    r.env.settings_module = r.env.settings_module or r.genv.dj_settings_module 
                 module = import_module(r.format(r.env.settings_module))
         
                 # Works as long as settings.py doesn't also reload anything.

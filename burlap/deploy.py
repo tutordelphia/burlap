@@ -881,7 +881,6 @@ def preview(**kwargs):
     """
     Lists the likely pending deployment steps.
     """
-    print('preview!!!!')
     return auto(preview=1, **kwargs)
 
 def get_last_current_diffs(target_component):
@@ -922,7 +921,6 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
     force := If true and specific components are specified, treats them as changed, even if no changes have been found
     """
     verbose = common.get_verbose()
-    print('auto.0.verbose:', verbose)
     
     explain = int(explain)
     only_components = components or []
@@ -964,7 +962,6 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
     fake = int(fake)
     preview = int(preview)
     check_outstanding = int(check_outstanding)
-    print('auto.1')
     
     all_services = set(_.strip().upper() for _ in env.services)
     if verbose:
@@ -984,7 +981,6 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
             ) % env.ROLE))
             sys.exit(1)
     
-    print('auto.2')
     if verbose:
         print('iter_thumbprint_differences')
     diffs = list(iter_thumbprint_differences(only_components=only_components))
@@ -1006,7 +1002,6 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
     if force and only_components:
         components.update(only_components)
     component_dependences = {}
-    print('components.0:', components)
     
     if verbose:
         print('all_services:', all_services)
@@ -1036,7 +1031,6 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
             print(_c, component_dependences[_c])
         
     components = list(common.topological_sort(component_dependences.items()))
-    print('components.1:', components)
     plan_funcs = list(get_deploy_funcs(components))
     if components and plan_funcs:
         print('These components have changed:\n')

@@ -1318,8 +1318,6 @@ class Service(object):
 
     name = None
 
-    commands = {} # {action: {os_version_distro: command}}
-
     # If true, any warnings or errors encountered during commands will be ignored.
     ignore_errors = False
 
@@ -1338,9 +1336,9 @@ class Service(object):
 
         services[self.name.strip().upper()] = self
 
-        _key = '%s_service_commands' % self.name
-        if _key in env:
-            self.commands = env[_key]
+#         _key = '%s_service_commands' % self.name
+#         if _key in env:
+#             self.commands = env[_key]
 
         #DEPRECATED
         tasks = (
@@ -1360,6 +1358,18 @@ class Service(object):
                 module_alias=self.name,
             )
 
+    @property
+    def commands(self):
+        # {action: {os_version_distro: command}}
+        key = '%s_service_commands' % self.name
+        if key in env:
+            return env[key]
+         
+        key = 'service_commands'
+        r = self.local_renderer
+        if key in r.env:
+            return r.env[key]
+
     def get_command(self, action):
         os_version = self.os_version # OS(type=LINUX, distro=UBUNTU, release='14.04')
 #         print('os_version:', os_version)
@@ -1369,7 +1379,10 @@ class Service(object):
             (os_version.type, os_version.distro),
             (os_version.distro,),
             os_version.distro,
-        ]
+        ]        
+        if get_verbose():
+            print('commands:')
+            pprint(self.commands, indent=4)
         for pattern in patterns:
             if pattern in self.commands[action]:
                 return self.commands[action][pattern]

@@ -239,7 +239,6 @@ class ServiceManagementSatchel(Satchel):
         """
         Applies routine, typically application-level changes to the service.
         """
-        
         for service in self.genv.services:
             service = service.strip().upper()
             funcs = common.service_deployers.get(service)
@@ -254,15 +253,12 @@ class ServiceManagementSatchel(Satchel):
         """
         Runs methods services have requested be run before after deployment.
         """
-        verbose = common.get_verbose()
         for service in self.genv.services:
             service = service.strip().upper()
-            if verbose:
-                print('post_deploy:', service)
+            self.vprint('post_deploy:', service)
             funcs = common.service_post_deployers.get(service)
             if funcs:
-                if verbose:
-                    print('Running post-deployments for service %s...' % (service,))
+                self.vprint('Running post-deployments for service %s...' % (service,))
                 for func in funcs:
                     try:
                         func()
