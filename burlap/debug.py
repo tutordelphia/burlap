@@ -226,7 +226,7 @@ class DebugSatchel(ContainerSatchel):
             r.env.shell_interactive_cmd_str = r.format(r.env.shell_interactive_cmd)
         
         r.env.shell_default_options_str = ' '.join(r.env.shell_default_options)
-        if r.genv.is_local:
+        if self.is_local:
             self.vprint('Using direct local.')
             cmd = '{shell_interactive_cmd_str}'
         elif r.genv.key_filename:

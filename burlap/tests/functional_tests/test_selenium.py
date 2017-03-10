@@ -1,10 +1,10 @@
-import unittest
 
 from fabric.contrib.files import exists
 
 from burlap.selenium import selenium
+from burlap.tests.functional_tests.base import TestCase
 
-class SeleniumTests(unittest.TestCase):
+class SeleniumTests(TestCase):
 
     def test_selenium(self):
 

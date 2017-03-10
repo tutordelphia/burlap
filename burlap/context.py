@@ -12,7 +12,10 @@ def set_cwd(new_path):
         with set_cwd('/some/dir'):
             walk_around_the_filesystem()
     """
-    curdir = os.getcwd()
+    try:
+        curdir = os.getcwd()
+    except OSError:
+        curdir = new_path
     try:
         os.chdir(new_path)
         yield

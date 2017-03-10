@@ -229,7 +229,7 @@ class DjangoSatchel(Satchel):
                     self.vprint('skipping because app_name %s not in apps' % app_name)
                     continue
                 with self.settings(warn_only=True):
-                    if r.genv.is_local:
+                    if self.is_local:
                         r.env.sql_path = path
                     else:
                         r.env.sql_path = '/tmp/%s' % os.path.split(path)[-1]

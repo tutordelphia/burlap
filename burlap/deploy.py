@@ -13,9 +13,7 @@ from pprint import pprint
 
 import yaml
 
-from fabric.api import (
-    env, runs_once, sudo as _sudo, get as _get,
-)
+from fabric.api import env, sudo as _sudo, get as _get
 import fabric.contrib.files
 import fabric.api
 
@@ -25,8 +23,10 @@ from burlap.common import (
     put_or_dryrun,
     sudo_or_dryrun,
 )
-from burlap.decorators import task_or_dryrun
+from burlap.decorators import task_or_dryrun, runs_once
 from burlap import exceptions
+
+LOCALHOSTS = ('localhost', '127.0.0.1')
 
 STORAGE_LOCAL = 'local'
 STORAGE_REMOTE = 'remote'
@@ -37,18 +37,21 @@ STORAGES = (
 
 default_remote_path = '/var/local/burlap'
 
-# Prevent globals from being reset by duplicate imports.
-if not 'plan_init' in env:
+def init_env():
     env.plan_init = True
     env.plan_root = None
     env.plan_originals = {}
     env.plan_storage = STORAGE_REMOTE
     env.plan_lockfile_path = '/var/lock/burlap_deploy.lock'
-_originals = env.plan_originals
+    env.plan = None
+    env.plan_data_dir = '%(burlap_data_dir)s/plans'
+    env.plan_digits = 3
 
-env.plan = None
-env.plan_data_dir = '%(burlap_data_dir)s/plans'
-env.plan_digits = 3
+# Prevent globals from being reset by duplicate imports.
+if not 'plan_init' in env:
+    init_env()
+    
+_originals = env.plan_originals
 
 RUN = 'run'
 SUDO = 'sudo'
@@ -62,7 +65,7 @@ _fs_cache = defaultdict(dict) # {func_name:{path:ret}}
 
 def make_dir(d):
     if d not in _fs_cache['make_dir']:
-        if env.plan_storage == STORAGE_REMOTE:
+        if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
             sudo_or_dryrun('mkdir -p "%s"' % d)
         else:
             if not os.path.isdir(d):
@@ -74,7 +77,7 @@ def make_dir(d):
 def list_dir(d):
     if d not in _fs_cache['list_dir']:
         verbose = common.get_verbose()
-        if env.plan_storage == STORAGE_REMOTE:
+        if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
             #output = sudo_or_dryrun('ls "%s"' % d)
             output = _sudo('ls "%s"' % d)
             output = output.split()
@@ -90,7 +93,7 @@ def list_dir(d):
 def is_dir(d):
     if d not in _fs_cache['is_dir']:
         verbose = common.get_verbose()
-        if env.plan_storage == STORAGE_REMOTE:
+        if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
             cmd = 'if [ -d "%s" ]; then echo 1; else echo 0; fi' % d
             output = _sudo(cmd)
             if verbose:
@@ -106,7 +109,7 @@ def is_dir(d):
 def is_file(fqfn):
     if fqfn not in _fs_cache['is_file']:
         verbose = common.get_verbose()
-        if env.plan_storage == STORAGE_REMOTE:
+        if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
             cmd = 'if [ -f "%s" ]; then echo 1; else echo 0; fi' % fqfn
             output = _sudo(cmd)
             if verbose:
@@ -230,7 +233,7 @@ class RemoteFile(object):
 
 def open_file(fqfn, mode='r'):
     verbose = common.get_verbose()
-    if env.plan_storage == STORAGE_REMOTE:
+    if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
         return RemoteFile(fqfn, mode)
     else:
         return open(fqfn, mode)
@@ -718,9 +721,6 @@ def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None
     only_components = [_.upper() for _ in only_components]
     data = {} # {component:data}
     manifest_data = (last and last.copy()) or {}
-#     print('manifest_data:', manifest_data.keys())
-#     print('only_components:', only_components)
-#     raw_input('enter')
     for component_name, func in sorted(common.manifest_recorder.iteritems()):
         component_name = component_name.upper()
         #print('component_name:', component_name)
@@ -737,7 +737,6 @@ def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None
             
         try:
             manifest_data[component_name] = func()
-#             print('manifest:', component_name, manifest_data[component_name])
         except exceptions.AbortDeployment as e:
             raise
         except Exception as e:
@@ -836,7 +835,7 @@ def reset():
     This will cause the planner to think everything needs to be re-deployed.
     """
     d = os.path.join(init_plan_data_dir(), env.ROLE)
-    if env.plan_storage == STORAGE_REMOTE:
+    if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
         sudo_or_dryrun('rm -Rf "%s"' % d)
         sudo_or_dryrun('mkdir -p "%s"' % d)
     elif env.plan_storage == STORAGE_LOCAL:
@@ -882,6 +881,7 @@ def preview(**kwargs):
     """
     Lists the likely pending deployment steps.
     """
+    print('preview!!!!')
     return auto(preview=1, **kwargs)
 
 def get_last_current_diffs(target_component):
@@ -904,7 +904,7 @@ def get_last_current_diffs(target_component):
     return last, current
 
 @task_or_dryrun
-def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
+def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, enable_plans=True, force=False):
     """
     Generates a plan based on the components that have changed since the last deployment.
     
@@ -919,7 +919,10 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
     
     components := list of names of components found in the services list
     
+    force := If true and specific components are specified, treats them as changed, even if no changes have been found
     """
+    verbose = common.get_verbose()
+    print('auto.0.verbose:', verbose)
     
     explain = int(explain)
     only_components = components or []
@@ -957,29 +960,31 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
                             yield func_name, functools.partial(func, last=last, current=current)
                         else:
                             yield func_name, functools.partial(func)
-    
-    verbose = common.get_verbose()
+
     fake = int(fake)
     preview = int(preview)
     check_outstanding = int(check_outstanding)
+    print('auto.1')
     
     all_services = set(_.strip().upper() for _ in env.services)
     if verbose:
         print('&'*80)
         print('services:', env.services)
     
-    last_plan = get_last_completed_plan()
-    outstanding = has_outstanding_plans()
-    if verbose:
-        print('outstanding plans:', outstanding)
-    if check_outstanding and outstanding:
-        print(fail((
-            'There are outstanding plans pending execution! '
-            'Run `fab %s deploy.status` for details.\n'
-            'To ignore these, re-run with :check_outstanding=0.'
-        ) % env.ROLE))
-        sys.exit(1)
+    if enable_plans:
+        last_plan = get_last_completed_plan()
+        outstanding = has_outstanding_plans()
+        if verbose:
+            print('outstanding plans:', outstanding)
+        if check_outstanding and outstanding:
+            print(fail((
+                'There are outstanding plans pending execution! '
+                'Run `fab %s deploy.status` for details.\n'
+                'To ignore these, re-run with :check_outstanding=0.'
+            ) % env.ROLE))
+            sys.exit(1)
     
+    print('auto.2')
     if verbose:
         print('iter_thumbprint_differences')
     diffs = list(iter_thumbprint_differences(only_components=only_components))
@@ -998,7 +1003,10 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
 #             continue
         component_thumbprints[component] = last, current
         components.add(component)
+    if force and only_components:
+        components.update(only_components)
     component_dependences = {}
+    print('components.0:', components)
     
     if verbose:
         print('all_services:', all_services)
@@ -1009,9 +1017,8 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
     all_components = set(common.all_satchels)
     if only_components and not all_components.issuperset(only_components):
         unknown_components = set(only_components).difference(all_components)
-        raise Exception('Unknown components: %s' \
-            % ', '.join(sorted(unknown_components)))
-    
+        raise Exception('Unknown components: %s' % ', '.join(sorted(unknown_components)))
+
     for _c in components:
         if verbose:
             print('checking:', _c)
@@ -1029,8 +1036,7 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
             print(_c, component_dependences[_c])
         
     components = list(common.topological_sort(component_dependences.items()))
-#     print('components:',components)
-#     raw_input('enter')
+    print('components.1:', components)
     plan_funcs = list(get_deploy_funcs(components))
     if components and plan_funcs:
         print('These components have changed:\n')
@@ -1072,7 +1078,7 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0):
             fout.flush()
     
     # Create thumbprint.
-    if not common.get_dryrun():
+    if enable_plans and not preview and not common.get_dryrun():
         plan = Plan.get_or_create_next(last_plan=last_plan)
         plan.record_thumbprint(only_components=only_components)
 

@@ -133,7 +133,7 @@ class PIPSatchel(Satchel):
         print('Creating new virtual environment...')
         with self.settings(warn_only=True):
             cmd = '[ ! -d {virtualenv_dir} ] && virtualenv --no-site-packages {virtualenv_dir} || true'
-            if r.genv.is_local:
+            if self.is_local:
                 r.run(cmd)
             else:
                 r.sudo(cmd)
@@ -141,7 +141,7 @@ class PIPSatchel(Satchel):
     @task
     def set_permissions(self):
         r = self.local_renderer
-        if not r.genv.is_local and r.env.check_permissions:
+        if not self.is_local and r.env.check_permissions:
             r.sudo('chown -R {pip_user}:{pip_group} {virtualenv_dir}')
             r.sudo('chmod -R {pip_perms} {virtualenv_dir}')
     
@@ -203,18 +203,18 @@ class PIPSatchel(Satchel):
         )
         
         # Ensure we're always using the latest pip.
-        if r.genv.is_local:
+        if self.is_local:
             r.run('{virtualenv_dir}/bin/pip install -U pip')
         else:
             r.sudo('{virtualenv_dir}/bin/pip install -U pip')
         
         cmd = "{virtualenv_dir}/bin/pip install -r {pip_remote_requirements_fn}"
-        if r.genv.is_local:
+        if self.is_local:
             r.run(cmd)
         else:
             r.sudo(cmd)
             
-        if not r.genv.is_local and r.env.check_permissions:
+        if not self.is_local and r.env.check_permissions:
             self.set_permissions()
 
     @task

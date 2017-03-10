@@ -272,7 +272,8 @@ class ApacheSatchel(ServiceSatchel):
         
         # Dynamically set values based on target operating system.
         os_version = self.os_version
-        apache_specifics = r.genv.apache_specifics[os_version.type][os_version.distro]
+        #apache_specifics = r.genv.apache_specifics[os_version.type][os_version.distro]
+        apache_specifics = r.env.specifics[os_version.type][os_version.distro]
         r.env.update(apache_specifics)
 #         r.env.root = apache_specifics.root
 #         r.env.conf = apache_specifics.conf

@@ -55,16 +55,55 @@ BURLAP_COMMAND_PREFIX = int(os.environ.get('BURLAP_COMMAND_PREFIX', '1'))
 
 OS = namedtuple('OS', ['type', 'distro', 'release'])
 
-ROLE_DIR = env.ROLES_DIR = 'roles'
+ROLE_DIR = 'roles'
 
-if 'services' not in env:
+default_env = None
 
+def init_env():
+    """
+    Populates the global env variables with custom default settings.
+    """
+    env.ROLES_DIR = ROLE_DIR
     env.services = []
     env.confirm_deployment = False
     env.is_local = None
     env.base_config_dir = '.'
     env.src_dir = 'src' # The path relative to fab where the code resides.
     env.sites = {} # {site:site_settings}
+    env[SITE] = None
+    env[ROLE] = None
+    
+    env.hosts_retriever = None
+    env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,
+    
+    env.hostname_translator = 'default'
+    env.hostname_translators = type(env)()
+    env.hostname_translators.default = lambda hostname: hostname
+    
+    env.default_site = None
+    
+    # A list of all site names that should be available on the current host.
+    env.available_sites = []
+    
+    # A list of all site names per host.
+    # {hostname: [sites]}
+    # If no entry found, will use available_sites.
+    env.available_sites_by_host = {}
+    
+    # The command run to determine the percent of disk usage.
+    env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{print $5 " " $1}'"
+    
+    env.burlap_data_dir = '.burlap'
+
+    env.setdefault('roledefs', {})
+    env.setdefault('roles', [])
+    env.setdefault('hosts', [])
+    env.setdefault('exclude_hosts', [])
+
+
+if 'services' not in env:
+    default_env = env.copy()
+    init_env()
 
 env[SITE] = None
 env[ROLE] = None
@@ -76,6 +115,37 @@ _dryrun = False
 _verbose = False
 
 _show_command_output = True
+
+state_variables = [
+    'required_system_packages',
+    'required_python_packages',
+    'required_ruby_packages',
+    
+    'service_configurators',
+    'service_pre_deployers',
+    'service_pre_db_dumpers',
+    'service_deployers',
+    'service_post_deployers',
+    'service_post_db_loaders',
+    'service_restarters',
+    'service_stoppers',
+    'services',
+    
+    'manifest_recorder',
+    'manifest_comparer',
+    'manifest_deployers',
+    'manifest_deployers_befores',
+    'manifest_deployers_takes_diff',
+    
+    'post_callbacks',
+    'post_role_load_callbacks',
+    
+    'post_import_modules',
+    
+    'all_satchels',
+    
+    'runs_once_methods',
+]
 
 required_system_packages = type(env)() # {service:{os:[packages]}
 required_python_packages = type(env)() # {service:{os:[packages]}
@@ -101,7 +171,54 @@ manifest_deployers_takes_diff = type(env)()
 post_callbacks = []
 post_role_load_callbacks = []
 
-_post_import_modules = set()
+runs_once_methods = []
+
+post_import_modules = set()
+
+all_satchels = {}
+
+SATCHEL_NAME_PATTERN = re.compile(r'^[a-z][a-z0-9]*$')
+
+# CMD_VAR_REGEX = re.compile(r'(?:^|[^{]+)(?<!\\){([^{}]+)}')
+#CMD_VAR_REGEX = re.compile(r'(?:^|[^{\\]+){([^{}]+)}')
+CMD_VAR_REGEX = re.compile(r'(?<!\{){([^\{\}]+)}')
+CMD_ESCAPED_VAR_REGEX = re.compile(r'\{{2}[^\{\}]+\}{2}')
+
+def get_state():
+    d = {}
+    for k in state_variables:
+        v = globals()[k]
+        if isinstance(v, (dict, set)):
+            v = v.copy()
+        elif isinstance(v, list):
+            v = list(v)
+        else:
+            raise NotImplementedError('State variable %s has unknown type %s' % (k, type(v)))
+        d[k] = v
+    return d
+        
+def clear_state():
+    d = {}
+    for k in state_variables:
+        v = globals()[k]
+        if isinstance(v, (set, dict)):
+            v.clear()
+        elif isinstance(v, list):
+            while v:
+                v.pop()
+        else:
+            raise NotImplementedError('State variable %s has unknown type %s' % (k, type(v)))
+
+def set_state(d):
+    assert isinstance(d, dict), 'State must be a dictionary.'
+    for k in state_variables:
+        v = d[k]
+        if isinstance(v, (set, dict)):
+            globals()[k].update(v)
+        elif isinstance(v, list):
+            globals()[k].extend(v)
+        else:
+            raise NotImplementedError('State variable %s has unknown type %s' % (k, type(v)))
 
 def deprecation(message):
     warnings.warn(message, DeprecationWarning, stacklevel=2)
@@ -204,7 +321,7 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
             _module_obj = module_obj
             module_obj = create_module(module_alias)
             setattr(module_obj, method_name, func)
-            _post_import_modules.add(module_alias)
+            post_import_modules.add(module_alias)
 
         fabric_name = '%s.%s' % (module_alias or module_name, method_name)
         func.wrapped.__func__.fabric_name = fabric_name
@@ -305,19 +422,14 @@ class _EnvProxy(object):
             return super(_EnvProxy, self).__setattr__(k, v)
         env[self.satchel.env_prefix + k] = v
 
-SATCHEL_NAME_PATTERN = re.compile(r'^[a-z][a-z0-9]*$')
-
-all_satchels = {}
-
 def assert_valid_satchel(name):
     name = name.strip().upper()
     assert name in all_satchels
     return name
 
-# CMD_VAR_REGEX = re.compile(r'(?:^|[^{]+)(?<!\\){([^{}]+)}')
-#CMD_VAR_REGEX = re.compile(r'(?:^|[^{\\]+){([^{}]+)}')
-CMD_VAR_REGEX = re.compile(r'(?<!\{){([^\{\}]+)}')
-CMD_ESCAPED_VAR_REGEX = re.compile(r'\{{2}[^\{\}]+\}{2}')
+def is_local():
+    env.is_local = env.host_string in ('localhost', '127.0.0.1')
+    return env.is_local
 
 def format(s, lenv, genv, prefix=None, ignored_variables=None): # pylint: disable=redefined-builtin
 
@@ -572,8 +684,6 @@ class Satchel(object):
 
         self._os_version_cache = {} # {host:info}
 
-        all_satchels[self.name.upper()] = self
-
         # Global environment.
         self.genv = env
 
@@ -591,19 +701,12 @@ class Satchel(object):
 
         self.settings = settings
 
-        _prefix = '%s_enabled' % self.name
-        if _prefix not in env:
-            env[_prefix] = True
-            self.set_defaults()
-
-        manifest_recorder[self.name] = self.record_manifest
+        self._enabled_key = '%s_enabled' % self.name
 
         super(Satchel, self).__init__()
 
-        # Register service commands.
-        if self.required_system_packages:
-            required_system_packages[self.name.upper()] = self.required_system_packages
-
+        self.register()
+        
         # Add built-in tasks.
         if 'install_packages' not in self.tasks:
             self.tasks += ('install_packages',)
@@ -643,6 +746,61 @@ class Satchel(object):
                     after=deployer.after,
                     takes_diff=deployer.takes_diff)
 
+    def register(self):
+        """
+        Adds this satchel to the global registeries for fast lookup from other satchels.
+        """
+        
+        env[self._enabled_key] = True
+        # Note, the EnvProxy will copy all local variables into the global env.
+        self.set_defaults()
+        
+        all_satchels[self.name.upper()] = self
+        
+        manifest_recorder[self.name] = self.record_manifest
+        
+        # Register service commands.
+        if self.required_system_packages:
+            required_system_packages[self.name.upper()] = self.required_system_packages
+        
+    def unregister(self):
+        """
+        Removes this satchel from global registeries.
+        """
+        
+        for k in env.keys():
+            if k.startswith(self.env_prefix):
+                del env[k]
+
+        try:
+            del all_satchels[self.name.upper()]
+        except KeyError:
+            pass
+
+        try:
+            del manifest_recorder[self.name]
+        except KeyError:
+            pass
+
+        try:
+            del manifest_deployers[self.name.upper()]
+        except KeyError:
+            pass
+
+        try:
+            del manifest_deployers_befores[self.name.upper()]
+        except KeyError:
+            pass
+
+        try:
+            del required_system_packages[self.name.upper()]
+        except KeyError:
+            pass
+
+    @property
+    def is_local(self):
+        return is_local()
+
     @property
     def current_hostname(self):
         return get_current_hostname()
@@ -667,9 +825,11 @@ class Satchel(object):
                 tasks.add(_name)
         return sorted(tasks)
 
+    #DEPRECATED
     def push_genv(self):
         self._genv = type(self.genv)(self.genv.copy())
 
+    #DEPRECATED
     def pop_genv(self):
         if self._genv is not None:
             _genv = self._genv
@@ -1019,7 +1179,7 @@ class Satchel(object):
         return run_or_dryrun(*args, **kwargs)
 
     def run_or_local(self, *args, **kwargs):
-        if self.genv.is_local:
+        if is_local():
             return local_or_dryrun(*args, **kwargs)
         else:
             return run_or_dryrun(*args, **kwargs)
@@ -1060,7 +1220,7 @@ class Satchel(object):
         return sudo_or_dryrun(*args, **kwargs)
 
     def sudo_or_local(self, *args, **kwargs):
-        if self.genv.is_local:
+        if is_local():
             return local_or_dryrun(*args, **kwargs)
         else:
             return sudo_or_dryrun(*args, **kwargs)
@@ -1083,7 +1243,7 @@ class Satchel(object):
         return print_command(*args, **kwargs)
 
     def get_templates(self):
-        return self.templates or []
+        return [_ for _ in list(self.templates or []) if _]
 
     def record_manifest(self):
         """
@@ -1096,6 +1256,10 @@ class Satchel(object):
             # Dereference brace notation. e.g. convert '{var}' to `env[var]`.
             if template and template.startswith('{') and template.endswith('}'):
                 template = self.env[template[1:-1]]
+            
+            if not template:
+                continue
+             
             if template.startswith('%s/' % self.name):
                 fqfn = self.find_template(template)
             else:
@@ -1280,28 +1444,6 @@ class ContainerSatchel(Satchel):
 
     def configure(self):
         pass
-
-env.hosts_retriever = None
-env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,
-
-env.hostname_translator = 'default'
-env.hostname_translators = type(env)()
-env.hostname_translators.default = lambda hostname: hostname
-
-env.default_site = None
-
-# A list of all site names that should be available on the current host.
-env.available_sites = []
-
-# A list of all site names per host.
-# {hostname: [sites]}
-# If no entry found, will use available_sites.
-env.available_sites_by_host = {}
-
-# The command run to determine the percent of disk usage.
-env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{print $5 " " $1}'"
-
-env.burlap_data_dir = '.burlap'
 
 def env_hosts_retriever(*args, **kwargs):
     data = {}
@@ -1672,7 +1814,7 @@ def reboot_or_dryrun(*args, **kwargs):
     if dryrun:
         print('%s sudo: reboot' % (render_command_prefix(),))
     else:
-        if env.is_local:
+        if is_local():
             if raw_input('reboot localhost now? ').strip()[0].lower() != 'y':
                 return
 
@@ -2079,7 +2221,7 @@ except (ImportError, RuntimeError):
 def _put(**kwargs):
     local_path = kwargs['local_path']
     fd, fn = tempfile.mkstemp()
-    if not env.is_local:
+    if not is_local():
         os.remove(fn)
     #kwargs['remote_path'] = kwargs.get('remote_path', '/tmp/%s' % os.path.split(local_path)[-1])
     kwargs['remote_path'] = kwargs.get('remote_path', fn)

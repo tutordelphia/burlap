@@ -366,13 +366,13 @@ class MySQLSatchel(DatabaseSatchel):
         )
         
         # Copy snapshot file to target.
-        if r.genv.is_local:
+        if self.is_local:
             r.env.remote_dump_fn = dump_fn
         else:
             r.env.remote_dump_fn = '/tmp/' + os.path.split(r.env.dump_fn)[-1]
         
         if not prep_only:
-            if int(force_upload) or (not r.genv.is_local and not r.file_exists(r.env.remote_dump_fn)):
+            if int(force_upload) or (not self.is_local and not r.file_exists(r.env.remote_dump_fn)):
                 if not self.dryrun:
                     assert os.path.isfile(r.env.dump_fn), \
                         missing_local_dump_error
@@ -382,7 +382,7 @@ class MySQLSatchel(DatabaseSatchel):
                     local_path=r.env.dump_fn,
                     remote_path=r.env.remote_dump_fn)
         
-        if r.genv.is_local and not prep_only and not self.dryrun:
+        if self.is_local and not prep_only and not self.dryrun:
             assert os.path.isfile(r.env.dump_fn), \
                 missing_local_dump_error
         

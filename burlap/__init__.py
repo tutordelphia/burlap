@@ -69,7 +69,7 @@ except (ImportError, NameError) as e:
     print('Unable to initialize debug: %s' % e, file=sys.stderr)
     debug = None
 
-VERSION = (0, 9, 10)
+VERSION = (0, 9, 11)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -317,7 +317,7 @@ def populate_fabfile():
         locals_['shell'] = shell#debug.debug.shell
         
         # Put all virtual satchels in the global namespace so Fabric can find them.
-        for _module_alias in common._post_import_modules:
+        for _module_alias in common.post_import_modules:
             exec("import %s" % _module_alias) # pylint: disable=exec-used
             locals_[_module_alias] = locals()[_module_alias]
 

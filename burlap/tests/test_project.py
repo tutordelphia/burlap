@@ -3,19 +3,17 @@ import os
 import sys
 # import tempfile
 import shutil
-import unittest
 
 from burlap import common
-# try:
-#     import pytest
-# except ImportError:
-#     pass
+from burlap.tests.base import TestCase
 
 CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
 
-class ProjectTests(unittest.TestCase):
+class ProjectTests(TestCase):
     
     def setUp(self):
+        super(ProjectTests, self).setUp()
+        
         common.set_verbose(True)
         # Ensure we're in burlap's root directory.
         os.chdir(os.path.abspath(os.path.join(CURRENT_DIR, '../..')))

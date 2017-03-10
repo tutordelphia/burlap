@@ -184,10 +184,13 @@ def _set_fabric_env(host, port, user, key_filename):
         env.host_string = env.host = "%s:%s" % (host, port)
     else:
         env.host_string = env.host = host
+    env.hosts = [env.host_string]
     env.user = user
     env.key_filename = key_filename
     env.disable_known_hosts = True
     env.abort_on_prompts = True
+    #http://docs.fabfile.org/en/1.6/faq.html#init-scripts-don-t-work
+    env.always_use_pty = False
 
 
 def _set_optional_http_proxy():

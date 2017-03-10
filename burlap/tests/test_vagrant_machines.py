@@ -1,9 +1,9 @@
-import unittest
 
 from mock import patch
 
+from burlap.tests.base import TestCase
 
-class TestVagrantMachines(unittest.TestCase):
+class TestVagrantMachines(TestCase):
 
     def test_machines_one(self):
         with patch('burlap.vagrant.vagrant._status') as mock_status:

@@ -1,10 +1,10 @@
 import textwrap
-import unittest
 
 from mock import patch
 
+from burlap.tests.base import TestCase
 
-class TestParseVagrantMachineReadableBoxList(unittest.TestCase):
+class TestParseVagrantMachineReadableBoxList(TestCase):
 
     def test_machine_readable_box_list(self):
         with patch('burlap.vagrant.vagrant.local') as mock_local:
@@ -21,7 +21,7 @@ class TestParseVagrantMachineReadableBoxList(unittest.TestCase):
             ])
 
 
-class TestParseVagrantBoxListWithProvider(unittest.TestCase):
+class TestParseVagrantBoxListWithProvider(TestCase):
 
     def test_parse_box_list(self):
         with patch('burlap.vagrant.vagrant.local') as mock_local:
@@ -37,7 +37,7 @@ class TestParseVagrantBoxListWithProvider(unittest.TestCase):
             ])
 
 
-class TestParseVagrantBoxListWithoutProvider(unittest.TestCase):
+class TestParseVagrantBoxListWithoutProvider(TestCase):
 
     def test_parse_box_list(self):
         with patch('burlap.vagrant.vagrant.local') as mock_local:
@@ -52,7 +52,7 @@ class TestParseVagrantBoxListWithoutProvider(unittest.TestCase):
             ])
 
 
-class TestVagrantBaseBoxes(unittest.TestCase):
+class TestVagrantBaseBoxes(TestCase):
  
     def test_vagrant_base_boxes(self):
         with patch('burlap.vagrant.vagrant._box_list') as mock_list:

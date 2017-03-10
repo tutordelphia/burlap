@@ -1,14 +1,16 @@
 from __future__ import print_function
 import os
-import unittest
 
 from burlap import common
+from burlap.tests.base import TestCase
 
 CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
 
-class DebugTests(unittest.TestCase):
+class DebugTests(TestCase):
     
     def setUp(self):
+        super(DebugTests, self).setUp()
+        
         common.set_verbose(True)
         # Ensure we're in burlap's root directory.
         os.chdir(os.path.abspath(os.path.join(CURRENT_DIR, '../..')))

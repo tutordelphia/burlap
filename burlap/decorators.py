@@ -43,6 +43,8 @@ def task_or_dryrun(*args, **kwargs):
 
     return wrapper if invoked else wrapper(func)
 
+_METHOD_ATTRIBUTES = ['deploy_before', 'is_post_callback']
+
 def _task(meth):
     meth.is_task = True
     
@@ -54,8 +56,12 @@ def _task(meth):
         
         return ret
 
-    if hasattr(meth, 'is_deployer') or meth.__name__ == 'configure': 
+    if hasattr(meth, 'is_deployer') or meth.__name__ == 'configure':
+        # Copy the wrapped method's attributes to the wrapper. 
         wrapper.__name__ = meth.__name__
+        for attr in _METHOD_ATTRIBUTES:
+            if hasattr(meth, attr):
+                setattr(wrapper, attr, getattr(meth, attr))
         return wrapper
     else:
         return meth
@@ -96,9 +102,10 @@ def runs_once(meth):
     """
     A wrapper around Fabric's runs_once() to support our dryrun feature.
     """
-    from burlap.common import get_dryrun
+    from burlap.common import get_dryrun, runs_once_methods
     if get_dryrun():
         pass
     else:
+        runs_once_methods.append(meth)
         _runs_once(meth)
     return meth

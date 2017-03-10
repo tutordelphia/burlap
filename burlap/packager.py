@@ -52,7 +52,7 @@ class PackagerSatchel(Satchel):
         """
         r = self.local_renderer
         assert self.genv[ROLE]
-        apt_req_fqfn = fn or self.find_template(self.env.apt_requirments_fn)
+        apt_req_fqfn = fn or (self.env.apt_requirments_fn and self.find_template(self.env.apt_requirments_fn))
         if not apt_req_fqfn:
             return []
         assert os.path.isfile(apt_req_fqfn)

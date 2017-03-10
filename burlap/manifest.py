@@ -5,13 +5,10 @@ from __future__ import print_function
 
 #TODO: remove? largely deprecated, use the deploy module instead
 
-from fabric.api import (
-    env,
-    runs_once,
-)
+from fabric.api import env
 
 from burlap import common
-from burlap.decorators import task_or_dryrun
+from burlap.decorators import task_or_dryrun, runs_once
 
 @task_or_dryrun
 @runs_once

@@ -1,8 +1,6 @@
 #!/bin/bash
 # Creates a local PIP-aware shell.
-#set -e
-if [ $_ == $0 ]
-then
+if [[ "$0" == "$BASH_SOURCE" ]]; then
     echo "Please source this script. Do not execute."
     exit 1
 fi

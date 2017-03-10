@@ -364,13 +364,12 @@ class PostgreSQLSatchel(DatabaseSatchel):
         )
         
         # Copy snapshot file to target.
-        if r.genv.is_local:
+        if self.is_local:
             r.env.remote_dump_fn = dump_fn
         else:
             r.env.remote_dump_fn = '/tmp/' + os.path.split(r.env.dump_fn)[-1]
         
-        #print('r.genv.is_local:', r.genv.is_local, r.genv.hosts)
-        if not prep_only and not r.genv.is_local:
+        if not prep_only and not self.is_local:
             if not self.dryrun:
                 assert os.path.isfile(r.env.dump_fn), \
                     missing_local_dump_error
@@ -382,7 +381,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
                 '--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" '
                 '{dump_fn} {user}@{host_string}:{remote_dump_fn}')
         
-        if r.genv.is_local and not prep_only and not self.dryrun:
+        if self.is_local and not prep_only and not self.dryrun:
             assert os.path.isfile(r.env.dump_fn), \
                 missing_local_dump_error
         
