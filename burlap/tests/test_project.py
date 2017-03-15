@@ -1,10 +1,11 @@
 from __future__ import print_function
 import os
 import sys
-import yaml
 # import tempfile
 import shutil # pylint: disable=unused-import
 from commands import getstatusoutput
+
+import yaml
 
 from burlap.common import set_verbose, find_template, render_to_string
 from burlap.tests.base import TestCase

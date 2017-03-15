@@ -1,10 +1,7 @@
 from __future__ import print_function
 
-from mock import patch
-
 from burlap.tests.base import TestCase
 from burlap.jirahelper import jirahelper
-from burlap.git import gittracker
 
 class JiraHelperTests(TestCase):
     

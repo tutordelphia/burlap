@@ -15,7 +15,7 @@ from fabric.api import run
 from fabric.api import sudo
 from fabric.context_managers import cd
 
-from burlap import Satchel
+from burlap import Satchel, ContainerSatchel
 from burlap.constants import *
 from burlap.decorators import task
 from burlap.exceptions import AbortDeployment
@@ -23,7 +23,7 @@ from burlap.utils import run_as_root
 
 CURRENT_COMMIT = 'current_commit'
 
-class GitSatchel(Satchel):
+class GitSatchel(ContainerSatchel):
     
     name = 'git'
     
