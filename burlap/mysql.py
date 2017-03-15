@@ -28,6 +28,10 @@ class MySQLSatchel(DatabaseSatchel):
     
     name = 'mysql'
     
+    def __init__(self, *args, **kwargs):
+        super(MySQLSatchel, self).__init__(*args, **kwargs)
+        self._conf_cache = {}
+    
     @property
     def packager_system_packages(self):
         return {
@@ -46,7 +50,6 @@ class MySQLSatchel(DatabaseSatchel):
         self.env.max_allowed_packet = 524288000 # 500M
         
         self.env.net_buffer_length = 1000000
-        self.env.conf = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
         
         self.env.dump_command = 'mysqldump --opt --compress --max_allowed_packet={max_allowed_packet} ' \
             '--force --single-transaction --quick --user {db_user} ' \
@@ -85,6 +88,30 @@ class MySQLSatchel(DatabaseSatchel):
                 UBUNTU: 'service mysql status',
             },
         }
+        
+        self.env.conf_default = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
+        #self.env.conf = '/etc/mysql/my.cnf' # /etc/my.cnf on fedora
+        self.env.conf_specifics = {
+            (UBUNTU, '14.04'): '/etc/mysql/my.cnf',
+            (UBUNTU, '16.04'): '/etc/mysql/mysql.conf.d/mysqld.cnf',
+            FEDORA: '/etc/my.cnf',
+        }
+    
+    @property
+    def conf_path(self):
+        """
+        Retrieves the path to the MySQL configuration file.
+        """
+        from burlap.system import distrib_id, distrib_release
+        hostname = self.current_hostname
+        if hostname not in self._conf_cache:
+            self.env.conf_specifics[hostname] = self.env.conf_default
+            d_id = distrib_id()
+            d_release = distrib_release()
+            for key in ((d_id, d_release), (d_id,)):
+                if key in self.env.conf_specifics:
+                    self._conf_cache[hostname] = self.env.conf_specifics[key]
+        return self._conf_cache[hostname]
         
     @task
     def execute(self, sql, name='default', site=None, **kwargs):
@@ -132,7 +159,8 @@ class MySQLSatchel(DatabaseSatchel):
         Called before packager.configure is run.
         """
         self.prep_root_password()
-        
+    
+    #DEPRECATED: no longer works with MySQL > 5.6
     @task
     def prep_root_password(self, password=None, **kwargs):
         """
@@ -248,9 +276,7 @@ class MySQLSatchel(DatabaseSatchel):
         """
         Drops all views.
         """
-        
         r = self.database_renderer
-            
         result = r.sudo("mysql --batch -v -h {db_host} "
             #"-u {db_root_username} -p'{db_root_password}' "
             "-u {db_user} -p'{db_password}' "
@@ -266,27 +292,22 @@ class MySQLSatchel(DatabaseSatchel):
         #cmd = ("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' " \
         r.sudo("mysql -v -h {db_host} -u {db_user} -p'{db_password}' " \
             "--execute=\"DROP VIEW {db_view_list} CASCADE;\"")
-        
+
     @task
     @runs_once
     def exists(self, **kwargs):
         """
         Returns true if a database with the given name exists. False otherwise.
         """
-        
         name = kwargs.pop('name', 'default')
         site = kwargs.pop('site', None)
-        
         r = self.database_renderer(name=name, site=site)
-        
         ret = r.run('mysql -h {db_host} -u {db_root_username} '\
             '-p"{db_root_password}" -N -B -e "SELECT IF(\'{db_name}\''\
             ' IN(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA), '\
             '\'exists\', \'notexists\') AS found;"')
-            
         if ret is not None:
             ret = 'notexists' not in (ret or 'notexists')
-        
         if ret is not None:
             msg = '%s database on site %s %s exist.' \
                 % (name.title(), env.SITE, 'DOES' if ret else 'DOES NOT')
@@ -299,36 +320,35 @@ class MySQLSatchel(DatabaseSatchel):
     @task
     @runs_once
     def create(self, **kwargs):
-        
         name = kwargs.pop('name', 'default')
         site = kwargs.pop('site', None)
         drop = int(kwargs.pop('drop', 0))
         #post_process = int(kwargs.pop('post_process', 0))
-        
+
         r = self.database_renderer(name=name, site=site)
-        
+
         # Do nothing if we're not dropping and the database already exists.
         print('Checking to see if database already exists...')
         if self.exists(name=name, site=site) and not drop:
             print('Database already exists. Aborting creation. '\
                 'Use drop=1 to override.')
             return
-            
+
         r.env.db_drop_flag = '--drop' if drop else ''
-        
+
         if int(drop):
             r.sudo("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "\
                 "--execute='DROP DATABASE IF EXISTS {db_name}'")
-            
+
         r.sudo("mysqladmin -h {db_host} -u {db_root_username} -p'{db_root_password}' create {db_name}")
- 
+
         self.set_collation(name=name, site=site)
-            
+
         # Create user.
         with self.settings(warn_only=True):
             r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "\
                 "--execute=\"GRANT USAGE ON *.* TO {db_user}@'%%'; DROP USER {db_user}@'%%';\"")
-        
+
         # Grant user access to the database.
         r.run("mysql -v -h {db_host} -u {db_root_username} "\
             "-p'{db_root_password}' --execute=\"GRANT ALL PRIVILEGES "\
@@ -340,7 +360,7 @@ class MySQLSatchel(DatabaseSatchel):
             "-p'{db_root_password}' --execute=\"GRANT ALL PRIVILEGES "\
             "ON {db_name}.* TO {db_user}@{db_host} IDENTIFIED BY "\
             "'{db_password}'; FLUSH PRIVILEGES;\"")
-        
+
     @task
     @runs_once
     def load(self, dump_fn='', prep_only=0, force_upload=0, from_local=0, name=None, site=None, dest_dir=None):
@@ -361,9 +381,7 @@ class MySQLSatchel(DatabaseSatchel):
         
         prep_only = int(prep_only)
         
-        missing_local_dump_error = r.format(
-            "Database dump file {dump_fn} does not exist."
-        )
+        missing_local_dump_error = r.format("Database dump file {dump_fn} does not exist.")
         
         # Copy snapshot file to target.
         if self.is_local:
@@ -385,15 +403,14 @@ class MySQLSatchel(DatabaseSatchel):
         if self.is_local and not prep_only and not self.dryrun:
             assert os.path.isfile(r.env.dump_fn), \
                 missing_local_dump_error
-        
-        
+
         # Drop the database if it's there.
         r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "
             "--execute='DROP DATABASE IF EXISTS {db_name}'")
-        
+
         # Now, create the database.
         r.run("mysqladmin -h {db_host} -u {db_root_username} -p'{db_root_password}' create {db_name}")
-        
+
         # Create user
         with settings(warn_only=True):
             r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "
@@ -401,18 +418,18 @@ class MySQLSatchel(DatabaseSatchel):
                 "GRANT ALL PRIVILEGES ON *.* TO '{db_user}'@'%%' WITH GRANT OPTION; "
                 "FLUSH PRIVILEGES;\"")
         self.set_collation(name=name, site=site)
-        
+
         self.set_max_packet_size(name=name, site=site)
-        
+
         # Run any server-specific commands (e.g. to setup permissions) before
         # we load the data.
         for command in r.env.preload_commands:
             r.run(command)
-        
+
         # Restore the database content from the dump file.
         if not prep_only:
             r.run(r.env.load_command)
-        
+
         self.set_collation(name=name, site=site)
 
     @task
@@ -428,13 +445,13 @@ class MySQLSatchel(DatabaseSatchel):
     def configure(self, do_packages=0, name='default', site=None):
 
         r = self.database_renderer(name=name, site=site)
-        
+
         if int(do_packages):
             self.prep_root_password()
             self.install_packages()
-            
+
         self.set_root_password()
-        
+
         if r.env.custom_mycnf:
             fn = r.render_to_file('mysql/my.template.cnf', extra=r.env)
             r.put(
@@ -442,18 +459,18 @@ class MySQLSatchel(DatabaseSatchel):
                 remote_path=r.env.conf,
                 use_sudo=True,
             )
-        
+
         if r.env.allow_remote_connections:
-            
+
             # Enable remote connections.
             r.sudo("sed -i 's/127.0.0.1/0.0.0.0/g' {conf}")
-            
+
             # Enable root logins from remote connections.
             r.sudo('mysql -u {db_root_username} -p"{db_root_password}" '
                 '--execute="USE mysql; '
                 'GRANT ALL ON *.* to {db_root_username}@\'%%\' IDENTIFIED BY \'{db_root_password}\'; '
                 'FLUSH PRIVILEGES;"')
-            
+
             self.restart()
 
 class MySQLClientSatchel(Satchel):

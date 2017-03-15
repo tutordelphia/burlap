@@ -10,19 +10,14 @@ from tempfile import mkstemp
 from urlparse import urlparse
 import hashlib
 
-from fabric.api import (
-    abort,
-    #env,
-    #sudo,
-    warn,
-)
+from fabric.api import run as _run, sudo as _sudo, abort, warn
 from fabric.api import hide
 from fabric.contrib.files import upload_template as _upload_template
 from fabric.contrib.files import exists
 
 from burlap.decorators import task
 from burlap.utils import run_as_root
-from burlap import Satchel
+from burlap import ContainerSatchel
 
 BLOCKSIZE = 2 ** 20 # 1MB
 
@@ -94,19 +89,21 @@ class watch(object):
         if self.changed and self.callback:
             self.callback()
 
-class FileSatchel(Satchel):
+class FileSatchel(ContainerSatchel):
+    """
+    Wrapper around common file operations.
+    
+    Note, most readonly actions ignore the global dryrun setting.
+    """
     
     name = 'file'
-    
-    def configure(self):
-        pass
     
     @task
     def is_file(self, path, use_sudo=False):
         """
         Check if a path exists, and is a file.
         """
-        func = use_sudo and run_as_root or self.run
+        func = use_sudo and _sudo or _run
         with self.settings(hide('running', 'warnings'), warn_only=True):
             return func('[ -f "%(path)s" ]' % locals()).succeeded
     
@@ -115,7 +112,7 @@ class FileSatchel(Satchel):
         """
         Check if a path exists, and is a directory.
         """
-        func = use_sudo and run_as_root or self.run
+        func = use_sudo and _sudo or _run
         with self.settings(hide('running', 'warnings'), warn_only=True):
             return func('[ -d "%(path)s" ]' % locals()).succeeded
     
@@ -124,7 +121,7 @@ class FileSatchel(Satchel):
         """
         Check if a path exists, and is a symbolic link.
         """
-        func = use_sudo and run_as_root or self.run
+        func = use_sudo and _sudo or _run
         with self.settings(hide('running', 'warnings'), warn_only=True):
             return func('[ -L "%(path)s" ]' % locals()).succeeded
     

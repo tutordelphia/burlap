@@ -4,7 +4,31 @@ APT_KEY = 'apt-key'
 APT_SOURCE = 'apt-source'
 
 OS_TYPES = LINUX, WINDOWS = ('linux', 'windows')
-OS_DISTRO = FEDORA, UBUNTU, DEBIAN, RASPBIAN, CENTOS = ('fedora', 'ubuntu', 'debian', 'raspbian', 'centos')
+OS_DISTRO = (
+    FEDORA,
+    UBUNTU,
+    DEBIAN,
+    RASPBIAN,
+    CENTOS,
+    SUNOS,
+    ARCH,
+    REDHAT,
+    SLES,
+    GENTOO,
+) = (
+    'fedora',
+    'ubuntu',
+    'debian',
+    'raspbian',
+    'centos',
+    'sunos',
+    'arch',
+    'redhat',
+    'sles',
+    'gentoo',
+)
+
+SUN = 'sun'
 
 WHEEZY = 'wheezy'
 JESSIE = 'jessie'

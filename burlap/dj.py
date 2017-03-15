@@ -506,6 +506,7 @@ class DjangoSatchel(Satchel):
         r.env.migrate_database = '--database=%s' % database if database else ''
         r.env.migrate_merge = '--merge' if not post_south else ''
         r.env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts and not post_south else ''
+        print('project_dir0:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
         for site, site_data in self.iter_unique_databases(site=site):
     #         print('-'*80, file=sys.stderr)
     #         print('site:', site, file=sys.stderr)
@@ -525,6 +526,7 @@ class DjangoSatchel(Satchel):
     #             print('app:', app)
                 r.env.migrate_app = app
     #             print('r.env.migrate_app:', r.env.migrate_app)
+                print('project_dir1:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
                 r.env.SITE = site
                 with self.settings(warn_only=ignore_errors):
                     r.run_or_local(

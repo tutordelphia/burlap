@@ -701,7 +701,7 @@ class Satchel(object):
 
         self.settings = settings
 
-        self._enabled_key = '%s_enabled' % self.name
+        self._set_defaults()
 
         super(Satchel, self).__init__()
 
@@ -746,14 +746,29 @@ class Satchel(object):
                     after=deployer.after,
                     takes_diff=deployer.takes_diff)
 
+    def _set_defaults(self):
+        """
+        Wrapper around the overrideable set_defaults().
+        """
+        
+        # Register an "enabled" flag on all satchels.
+        # How this flag is interpreted depends on the individual satchel.
+        _prefix = '%s_enabled' % self.name
+        if _prefix not in env:
+            env[_prefix] = True
+        
+        # Do a one-time init of custom defaults. 
+        _key = '_%s' % self.name
+        if _key not in env:
+            env[_key] = True
+            self.set_defaults()
+
     def register(self):
         """
         Adds this satchel to the global registeries for fast lookup from other satchels.
         """
         
-        env[self._enabled_key] = True
-        # Note, the EnvProxy will copy all local variables into the global env.
-        self.set_defaults()
+        self._set_defaults()
         
         all_satchels[self.name.upper()] = self
         

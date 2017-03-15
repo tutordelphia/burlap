@@ -445,6 +445,16 @@ class PostgreSQLSatchel(DatabaseSatchel):
         print(v)
         return v
 
+    @task
+    def load_table(self, table_name, src, dst='localhost'):
+        """
+        Directly transfers a table between two databases.
+        """
+        r = self.database_renderer(name=name, site=site)
+        r.env.table_name = table_name
+        r.run('psql --user={dst_db_user} --host={dst_db_host} --command="DROP TABLE IF EXISTS {table_name} CASCADE;"')
+        r.run('pg_dump -t {table_name} --user={dst_db_user} --host={dst_db_host} | psql --user={src_db_user} --host={src_db_host}')
+
     @task(precursors=['packager', 'user'])
     def configure(self, *args, **kwargs):
         #TODO:set postgres user password?

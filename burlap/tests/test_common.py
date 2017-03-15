@@ -300,8 +300,19 @@ set_by_include3: 'some special setting'
     def test_state_clearing(self):
         from burlap.common import get_state, clear_state, set_state, all_satchels
         
-        print('all_satchels.a:', sorted(all_satchels.keys()))
-        assert len(all_satchels) == 50
+        actual = sorted(all_satchels.keys())
+        print('all_satchels.a:', actual)
+        expected = [
+            'APACHE', 'AVAHI', 'BLUETOOTH', 'BUILDBOT', 'CELERY', 'CLOUDFRONT', 'CRON',
+            'DEBUG', 'DEPLOYMENTNOTIFIER', 'DJ', 'EC2MONITOR', 'ELASTICSEARCH', 'FILE',
+            'GITCHECKER', 'GITTRACKER', 'GPSD', 'GROUP', 'HOST', 'HOSTNAME', 'HOSTSFILE',
+            'IP', 'JIRAHELPER', 'LOGINNOTIFIER', 'MOTION', 'MYSQL', 'MYSQLCLIENT', 'NM',
+            'NTPCLIENT', 'PACKAGER', 'PIP', 'POSTFIX', 'POSTGRESQL', 'POSTGRESQLCLIENT',
+            'RABBITMQ', 'RPI', 'RSYNC', 'S3', 'SELENIUM', 'SERVICE', 'SNORT', 'SOFTWARERAID',
+            'SSHNICE', 'SSL', 'SUPERVISOR', 'TARBALL', 'TIMEZONE', 'UBUNTUMULTIVERSE',
+            'UNATTENDEDUPGRADES', 'USER', 'VAGRANT', 'VIRTUALBOX',
+        ]
+        assert actual == expected
         
         burlap_state = get_state()
         print('burlap_state:')
@@ -313,7 +324,7 @@ set_by_include3: 'some special setting'
         
         set_state(burlap_state)
         print('all_satchels.c:', sorted(all_satchels.keys()))
-        assert len(all_satchels) == 50
+        assert len(all_satchels) == len(expected)
         
     def test_runs_once_clear(self):
         from fabric.api import runs_once

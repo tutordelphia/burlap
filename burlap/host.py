@@ -153,7 +153,7 @@ class HostSatchel(Satchel):
                         r.env.password = password
                         r.env.user = username
                         ret = r._local("sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {user}@{host_string} echo hello", capture=True)
-                        print('ret.return_code:', ret.return_code)
+                        #print('ret.return_code:', ret.return_code)
             #             print('ret000:[%s]' % ret)
                         #code 1 = good password, but prompts needed
                         #code 5 = bad password
@@ -407,12 +407,12 @@ class HostnameSatchel(Satchel):
                 r.sudo('hostname {hostname}')
                 r.reboot()#new_hostname=hostname)
 
-class HostsSatchel(Satchel):
+class HostsFileSatchel(Satchel):
     """
     Manages customizations to /etc/hosts.
     """
     
-    name = 'hosts'
+    name = 'hostsfile'
     
     def set_defaults(self):
         self.env.ipdomains = [] # [[ip, domain]]
@@ -481,5 +481,5 @@ class TimezoneSatchel(Satchel):
 
 host = HostSatchel()
 hostname = HostnameSatchel()
-hosts = HostsSatchel()
+hostsfile = HostsFileSatchel()
 timezone = TimezoneSatchel()

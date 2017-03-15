@@ -53,6 +53,7 @@ setup(
     package_data={
         'burlap': [
             'templates/*.*',
+            'fixtures/*.*',
         ],
     },
     author="Chris Spencer",
@@ -87,7 +88,7 @@ setup(
     ],
     zip_safe=False,
     include_package_data=True,
-    install_requires=get_reqs('requirements.txt'),
+    install_requires=get_reqs('burlap/fixtures/requirements.txt'),
     setup_requires=[],
     tests_require=get_reqs('requirements-test.txt'),
     cmdclass={

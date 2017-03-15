@@ -881,7 +881,10 @@ def preview(**kwargs):
     """
     Lists the likely pending deployment steps.
     """
-    return auto(preview=1, **kwargs)
+    try:
+        return auto(preview=1, **kwargs)
+    except exceptions.AbortDeployment as e:
+        common.print_fail('\n%s\n' % str(e))
 
 def get_last_current_diffs(target_component):
     """
@@ -1097,7 +1100,10 @@ def run(*args, **kwargs):
     #TODO:support ordering?
     for name, satchel in all_satchels.iteritems():
         if hasattr(satchel, 'deploy_pre_run'):
-            satchel.deploy_pre_run()
+            try:
+                satchel.deploy_pre_run()
+            except Exception as e:
+                print('Error running %s pre-runner: %s' % (name, e))
     
     if env.host_string == env.hosts[0]:
         pending = preview(*args, **kwargs)

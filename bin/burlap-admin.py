@@ -251,9 +251,9 @@ if __name__ == "__main__":
             os.system('. %s/bin/activate; pip install %s; deactivate' % (args.virtualenv_dir, package))
 
         # Install burlap dependencies.
-        burlap_pip_requirements = os.path.join(os.path.dirname(burlap.__file__), '../requirements.txt')
+        burlap_pip_requirements = os.path.join(os.path.dirname(burlap.__file__), 'fixtures/requirements.txt')
         print('burlap_pip_requirements:', burlap_pip_requirements)
-        assert os.path.exists(burlap_pip_requirements)
+        assert os.path.exists(burlap_pip_requirements), 'Missing requirements file: %s' % burlap_pip_requirements
         for package in open(burlap_pip_requirements, 'r').readlines():
             if not package.strip():
                 continue
@@ -262,8 +262,6 @@ if __name__ == "__main__":
             assert not os.system(cmd)
 
         open('setup.bash', 'w').write(common.render_to_string('burlap/setup.bash.template'))
-        
-        os.system('chmod +x shell')
         
         open('.gitignore', 'w').write(common.render_to_string('burlap/gitignore.template'))
         

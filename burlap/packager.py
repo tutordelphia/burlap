@@ -19,6 +19,7 @@ class PackagerSatchel(Satchel):
         self.env.apt_packages = None
         self.env.yum_packages = None
         self.env.do_reboots = True
+        self.env.blacklisted_packages = []
     
     def record_manifest(self):
         """
@@ -374,6 +375,24 @@ class PackagerSatchel(Satchel):
             else:
                 raise NotImplementedError
         return lst
+    
+    @task
+    def uninstall_blacklisted(self):
+        """
+        Uninstalls all blacklisted packages.
+        """
+        from burlap.system import distrib_family
+        blacklisted_packages = self.env.blacklisted_packages
+        if not blacklisted_packages:
+            print('No blacklisted packages.')
+            return
+        else:
+            family = distrib_family()
+            if family == DEBIAN:
+                self.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq purge %s' % ' '.join(blacklisted_packages))
+            else:
+                raise NotImplementedError('Unknown family: %s' % family)
+        
 
     @task(precursors=['user', 'ubuntumultiverse'])
     def configure(self, **kwargs):
@@ -402,6 +421,7 @@ class PackagerSatchel(Satchel):
         self.install_repositories(service=service, **kwargs)
         self.install_required(type=SYSTEM, service=service, **kwargs)
         self.install_custom(**kwargs)
+        self.uninstall_blacklisted()
 
 class UbuntuMultiverseSatchel(Satchel):
      

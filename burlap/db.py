@@ -198,6 +198,13 @@ class DatabaseSatchel(ServiceSatchel):
         raise NotImplementedError
 
     @task
+    def load_table(self, table_name, src, dst='localhost', name=None, site=None):
+        """
+        Directly transfers a table between two databases.
+        """
+        raise NotImplementedError
+
+    @task
     def load_db_set(self, name, r=None):
         """
         Loads database parameters from a specific named set.

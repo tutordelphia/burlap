@@ -22,6 +22,11 @@ class BuildBotSatchel(ServiceSatchel):
         
         self.env.project_dir = '/usr/local/myproject'
         self.env.virtualenv_dir = '/usr/local/myproject/.env'
+        self.env.homedir = '/var/lib/{bb_user}'
+        self.env.ssh_bin = '{homedir}/bin'
+        self.env.ssh_dir = '{homedir}/.ssh'
+        self.env.ssh_private_key = None # should be a *.pem file
+        self.env.ssh_public_key = None # should be a *.pub file
         
         # Must match the main user, or otherwise we get rsync errors.
         self.env.user = 'ubuntu'
@@ -40,7 +45,7 @@ class BuildBotSatchel(ServiceSatchel):
         self.env.cron_group = 'root'
         self.env.cron_perms = '600'
         
-        self.env.extra_deploy_paths = ['buildbot/slave/info/', 'buildbot/slave/buildbot.tac']
+        self.env.extra_deploy_paths = ['buildbot/worker/info/', 'buildbot/worker/buildbot.tac']
         
         self.env.delete_deploy_paths = []
 
@@ -52,6 +57,8 @@ class BuildBotSatchel(ServiceSatchel):
         self.env.enable_apache_site = True
         
         self.env.requirements = 'pip-requirements.txt'
+        
+        self.env.use_ssh_key = False
         
         self.env.service_commands = {
 #             START:{
@@ -81,7 +88,7 @@ class BuildBotSatchel(ServiceSatchel):
     def restart(self):
         self.set_permissions()
         self.restart_master(ignore_errors=True)
-        self.restart_slave(ignore_errors=True)
+        self.restart_worker(ignore_errors=True)
     
     @task
     def restart_master(self, ignore_errors=None):
@@ -94,14 +101,14 @@ class BuildBotSatchel(ServiceSatchel):
                 '{virtualenv_dir}/bin/buildbot restart master"')
         
     @task
-    def restart_slave(self, ignore_errors=None):
+    def restart_worker(self, ignore_errors=None):
         ignore_errors = self.ignore_errors if ignore_errors is None else ignore_errors
         r = self.local_renderer
         s = {'warn_only':True} if ignore_errors else {}
         with settings(**s):
             r.run(
                 'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
-                '{virtualenv_dir}/bin/buildslave restart slave"')
+                '{virtualenv_dir}/bin/buildbot-worker restart worker"')
     
     @task
     def start(self):
@@ -111,6 +118,9 @@ class BuildBotSatchel(ServiceSatchel):
             r.run(
                 'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
                 '{virtualenv_dir}/bin/buildbot start master"')
+            r.run(
+                'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
+                '{virtualenv_dir}/bin/buildbot-worker start worker"')
     
     @task
     def stop(self):
@@ -122,7 +132,7 @@ class BuildBotSatchel(ServiceSatchel):
                 '{virtualenv_dir}/bin/buildbot stop master"')
             r.run(
                 'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
-                '{virtualenv_dir}/bin/buildbot stop slave"')
+                '{virtualenv_dir}/bin/buildbot-worker stop worker"')
     
     @task
     def reload(self):
@@ -139,7 +149,7 @@ class BuildBotSatchel(ServiceSatchel):
         r = self.local_renderer
         r.sudo('chown -R {bb_user}:{bb_group} {project_dir}')
         #r.sudo('chown -R {bb_user}:{bb_group} {project_dir}/src/buildbot/master')
-        #r.sudo('chown -R {bb_user}:{bb_group} {project_dir}/src/buildbot/slave')
+        #r.sudo('chown -R {bb_user}:{bb_group} {project_dir}/src/buildbot/worker')
         r.sudo('chmod -R {perms} {project_dir}')
     
     @task
@@ -187,7 +197,7 @@ class BuildBotSatchel(ServiceSatchel):
             'printf \'SHELL=/bin/bash\\nPATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin\\n@reboot '
             'buildbot bash -c "cd {project_dir}/src/buildbot; '
             '{project_dir}/.env/bin/buildbot start master; '
-            '{project_dir}/.env/bin/buildslave start slave"\\n\' > {cron_path}')
+            '{project_dir}/.env/bin/buildbot-worker start worker"\\n\' > {cron_path}')
         r.sudo('chown {cron_user}:{cron_group} {cron_path}')
         # Must be 600, otherwise gives INSECURE MODE error.
         # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
@@ -210,7 +220,7 @@ class BuildBotSatchel(ServiceSatchel):
             '--exclude=*.pyc --exclude=gitpoller-workdir --exclude=*.log --exclude=twistd.pid '
             '--exclude=*.sqlite '
             '--exclude=build '
-            '--exclude=slave '
+            '--exclude=worker '
             '--exclude=*_runtests '
             '--delete --delete-before '
             '--rsh "ssh -t -o StrictHostKeyChecking=no -i {key_filename}" '
@@ -293,7 +303,37 @@ class BuildBotSatchel(ServiceSatchel):
     
     def deploy_pre_run(self):
         self.check_ok()
-        
+    
+    @task
+    def configure_ssh_key(self):
+        r = self.local_renderer
+        r.env.private_remote_path = '{ssh_dir}/id_rsa'
+        r.env.public_remote_path = '{ssh_dir}/id_rsa.pub'
+        if r.env.use_ssh_key:
+            #https://www.cyberciti.biz/faq/how-to-set-up-ssh-keys-on-linux-unix/
+            assert r.env.ssh_private_key, 'No SSH private key specified!'
+            assert r.env.ssh_public_key, 'No SSH public key specified!'
+            r.sudo('mkdir -p {ssh_dir}')
+            r.put(local_path=r.env.ssh_private_key, remote_path=r.env.private_remote_path, use_sudo=True)
+            r.put(local_path=r.env.ssh_public_key, remote_path=r.env.public_remote_path, use_sudo=True)
+            r.sudo('chown -R {bb_user}:{bb_group} {ssh_dir}')
+            r.sudo('chmod -R 700 {ssh_dir}')
+            r.sudo('chmod -R 600 {ssh_dir}/*')
+        else:
+            r.sudo('rm -F {private_remote_path}')
+            r.sudo('rm -F {public_remote_path}')
+    
+    @task
+    def delete_logs(self):
+        r = self.local_renderer
+        names = ('master', 'worker')
+        logs = ('twistd.log', 'http.log')
+        for name in names:
+            r.env.name = name
+            for log in logs:
+                r.env.log = log
+                r.sudo('rm -f {project_dir}/src/buildbot/{name}/{log}')
+    
     @task(precursors=['packager', 'user', 'apache'])
     def configure(self):
         packager = self.get_satchel('packager')
@@ -317,5 +357,7 @@ class BuildBotSatchel(ServiceSatchel):
         self.deploy_code()
         
         self.install_cron()
+        
+        self.configure_ssh_key()
         
 buildbot = BuildBotSatchel()

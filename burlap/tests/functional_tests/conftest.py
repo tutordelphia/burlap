@@ -126,7 +126,7 @@ def _start_vagrant_machine(provider):
     with lcd(HERE):
         with settings(warn_only=True):
             ret = local('vagrant up' + options)
-            print('ret.return_code:', ret.return_code)
+            #print('ret.return_code:', ret.return_code)
             if ret.return_code:
                 # Vagrant is in an inconsistent state, probably because the VM was deleted outside of Vagrant
                 # but Vagrant still has the VM's config laying around.
