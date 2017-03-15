@@ -53,10 +53,10 @@ class MySQLSatchel(DatabaseSatchel):
         
         self.env.dump_command = 'mysqldump --opt --compress --max_allowed_packet={max_allowed_packet} ' \
             '--force --single-transaction --quick --user {db_user} ' \
-            '--password={db_password} -h {db_host} {db_name} | gzip > {dump_fn}'
+            '--password="{db_password}" -h {db_host} {db_name} | gzip > {dump_fn}'
         
         self.env.load_command = 'gunzip < {remote_dump_fn} | mysql -u {db_root_username} ' \
-            '--password={db_root_password} --host={db_host} -D {db_name}'
+            '--password="{db_root_password}" --host={db_host} -D {db_name}'
         
         self.env.preload_commands = []
         self.env.character_set = 'utf8'

@@ -1,5 +1,5 @@
 recursive-include burlap/templates *
 recursive-include burlap/fixtures *
-include requirements.txt
+include burlap/fixtures/requirements.txt
 include requirements-test.txt
 include README.md
