@@ -419,21 +419,29 @@ class HostsFileSatchel(Satchel):
         self.env.ipdomain_retriever = None
     
     @task(precursors=['packager'])
-    def configure(self):
+    def configure(self, force=0):
+        force = int(force)
         last_hosts = set(tuple(_) for _ in (self.last_manifest.ipdomains or []))
         ipdomains = list(self.env.ipdomains or [])
         
         current_hosts = set(tuple(_) for _ in ipdomains)
         if self.env.ipdomain_retriever:
+            self.vprint('Looking up hosts with:', self.env.ipdomain_retriever) 
             current_hosts.update(str_to_callable(self.env.ipdomain_retriever)(role=self.genv.ROLE) or [])
-
-        added_hosts = current_hosts.difference(last_hosts)
-        removed_hosts = last_hosts.difference(current_hosts)
+        self.vprint('current hosts:', sorted(current_hosts))
+            
+        if force:
+            added_hosts = current_hosts
+            removed_hosts = last_hosts.difference(current_hosts)
+        else:
+            added_hosts = current_hosts.difference(last_hosts)
+            removed_hosts = last_hosts.difference(current_hosts)
+        
         r = self.local_renderer
         if self.verbose:
-            print('ipdomains:', ipdomains)
-            print('added_hosts:', added_hosts)
-            print('removed_hosts:', removed_hosts)
+            print('ipdomains:', sorted(ipdomains))
+            print('added_hosts:', sorted(added_hosts))
+            print('removed_hosts:', sorted(removed_hosts))
             
         for _ip, _domain in sorted(added_hosts):
             r.env.ip = _ip
