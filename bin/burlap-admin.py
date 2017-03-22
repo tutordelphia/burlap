@@ -11,7 +11,6 @@ from __future__ import print_function
 import argparse
 import os
 import sys
-import re
 
 _path = os.path.normpath(os.path.join(os.path.realpath(__file__), '../..'))
 sys.path.insert(0, _path)
@@ -88,7 +87,7 @@ if __name__ == "__main__":
     if args.action == SKEL:
         project.create_skeleton(**args.__dict__)
     elif args.action == ADD_ROLE:
-        project.add_roles(**args.__dict__)
+        project.add_roles(args.roles)
     elif args.action == CREATE_SATCHEL:
         project.create_satchel(args.name)
     else:

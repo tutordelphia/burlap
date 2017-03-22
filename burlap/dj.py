@@ -35,10 +35,10 @@ class DjangoSatchel(Satchel):
         # This is the import path to your Django settings file.
         self.env.settings_module = '{app_name}.settings'
         
-        # The folder containing manage.py.
+        # The folder containing manage.py on the remote host. Must be absolute.
         self.env.project_dir = None
         
-        # The folder containing manage.py on the local filesystem.
+        # The folder containing manage.py on the local filesystem. May be relative to the fabfile directory.
         self.env.local_project_dir = None
 
         self.env.shell_template = 'cd {project_dir}; /bin/bash -i -c \"{manage_cmd} shell;\"'
@@ -462,11 +462,15 @@ class DjangoSatchel(Satchel):
             yield fn
     
     def iter_unique_databases(self, site=None):
+        site = site or ALL
         r = self.local_renderer
         prior_database_names = set()
+        print('iter_unique_databases.begin')
         for site, site_data in self.iter_sites(site=site, no_secure=True):
+            print('iter_unique_databases.site:', site)
             self.set_db(site=site)
             key = (r.env.db_name, r.env.db_user, r.env.db_host, r.env.db_engine)
+            print('iter_unique_databases.site:', site, key)
             if key in prior_database_names:
                 continue
             prior_database_names.add(key)
@@ -520,7 +524,7 @@ class DjangoSatchel(Satchel):
     #         e.g.
     #         
     #             fab staging dj.migrate:migrate_apps=oneapp\,twoapp\,threeapp
-        
+        print('migrate.begin')
         r = self.local_renderer
         
         ignore_errors = int(ignore_errors)
@@ -556,7 +560,7 @@ class DjangoSatchel(Satchel):
         self.vprint('project_dir0:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
         self.vprint('migrate_apps:', migrate_apps)
         databases = list(self.iter_unique_databases(site=site))
-        self.vprint('databases:', databases)
+        print('databases:', databases)
         for site, site_data in databases:
             self.vprint('-'*80, file=sys.stderr)
             self.vprint('site:', site, file=sys.stderr)
@@ -574,7 +578,9 @@ class DjangoSatchel(Satchel):
                 
             for app in migrate_apps:
     #             print('app:', app)
-                r.env.migrate_app = app
+                # In cases where we're migrating built-in apps or apps with dotted names
+                # e.g. django.contrib.auth, extract the name used for the migrate command.
+                r.env.migrate_app = app.split('.')[-1]
     #             print('r.env.migrate_app:', r.env.migrate_app)
                 self.vprint('project_dir1:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
                 r.env.SITE = site
@@ -694,7 +700,7 @@ class DjangoSatchel(Satchel):
         current = self.current_manifest.get('migrations') or {}
         migrate_apps = []
 
-        if self.verbose:
+        if self.verbose or 1:
             print('djangomigrations.last:')
             pprint(last, indent=4)
             print('djangomigrations.current:')

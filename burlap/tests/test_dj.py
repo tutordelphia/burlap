@@ -11,7 +11,6 @@ from fabric.contrib.files import append
 import burlap
 from burlap.common import env
 from burlap.tests.base import TestCase
-from burlap.dj import dj
 from burlap.project import project
 from burlap.context import set_cwd
 from burlap.deploy import STORAGE_LOCAL
@@ -41,6 +40,9 @@ class DjTests(TestCase):
                 components='dj',
             )
             
+            assert not os.path.isfile('/tmp/test_dj_migrate/plans/prod/000/thumbprints/test-dj-migrate-1')
+            assert not os.path.isfile('/tmp/test_dj_migrate/plans/prod/000/thumbprints/test-dj-migrate-2')
+            
             # Simulate multiple remote hosts my creating aliases of localhost.
             # Note, for testing this on your localhost for a user without passwordless sudo,
             # you may have to run: `sudo chmod 777 /etc/hosts`
@@ -60,20 +62,56 @@ class DjTests(TestCase):
                     'plan_data_dir': os.path.join(d, 'plans'),
                     'services': ['dj'],
                     'dj_settings_module': 'test_dj_migrate.settings',
-                    'default_site': 'test_dj_migrate',
+                    'default_site': 'testsite1',
                     'default_role': 'prod',
                     'dj_local_project_dir': 'src',
-                    'dj_project_dir': 'src',
+                    'dj_project_dir': '%s/src' % d,
                     'dj_manage_media': False,
                     'dj_manage_migrations': True,
+                    'dj_manage_cmd': '%s/.env/bin/python manage.py' % d,
+                    'dj_version': [1, 10, 6],
+                    # This is necessary to stop get_current_hostname() from attempting to lookup our actual hostname.
+                    '_ip_to_hostname': {
+                        'test-dj-migrate-1': 'test-dj-migrate-1',
+                        'test-dj-migrate-2': 'test-dj-migrate-2',
+                    },
                 },
                 role='all')
                 
             project.update_settings(
                 {
                     'hosts': ['test-dj-migrate-1', 'test-dj-migrate-2'],
+                    'available_sites_by_host':{
+                        'test-dj-migrate-1': [
+                            'testsite1',
+                        ],
+                        'test-dj-migrate-2': [
+                            'testsite2',
+                        ]
+                    },
+                    'sites': {
+                        'testsite1': {
+                            'apache_domain_template': 'testsite1.test-dj-migrate-1.com',
+                        },
+                        'testsite2': {
+                            'apache_domain_template': 'testsite2.test-dj-migrate-2.com',
+                        },
+                    },
+
                 },
                 role='prod')
+            
+            # Migrate built-in apps.
+            kwargs = dict(
+                activate_cmd=activate_cmd,
+            )
+            status, output = self.getstatusoutput('{activate_cmd} fab prod deploy.run:yes=1'.format(**kwargs))
+            assert not status
+            # The migrations should have been run on both hosts.
+            assert '[test-dj-migrate-1] run:' in output
+            assert '[test-dj-migrate-2] run:' in output
+            assert os.path.isfile('/tmp/test_dj_migrate/plans/prod/000/thumbprints/test-dj-migrate-1')
+            assert os.path.isfile('/tmp/test_dj_migrate/plans/prod/000/thumbprints/test-dj-migrate-2')
             
             # Create custom app.
             kwargs = dict(
@@ -117,8 +155,14 @@ class MyModel(models.Model):
             )
             #cmd = '{activate_cmd} fab prod deploy.show_diff'.format(activate_cmd=activate_cmd)
             #cmd = '{activate_cmd} fab prod deploy.run'.format(activate_cmd=activate_cmd)
-            status, output = self.getstatusoutput('{activate_cmd} fab prod dj.configure:dryrun=1,verbose=1'.format(**kwargs))
+            #status, output = self.getstatusoutput('{activate_cmd} fab prod dj.configure:dryrun=1,verbose=1'.format(**kwargs))
+            status, output = self.getstatusoutput('{activate_cmd} fab prod deploy.run:yes=1'.format(**kwargs))
             assert not status
             # The migrations should have been run on both hosts.
-            assert '@test-dj-migrate-1] run: ' in output
-            assert '@test-dj-migrate-2] run: ' in output
+            assert ('test-dj-migrate-1] run: export SITE=testsite1; export ROLE=prod; cd /tmp/test_dj_migrate/src; '
+                '/tmp/test_dj_migrate/.env/bin/python manage.py migrate') in output
+            assert ('test-dj-migrate-2] run: export SITE=testsite2; export ROLE=prod; cd /tmp/test_dj_migrate/src; '
+                '/tmp/test_dj_migrate/.env/bin/python manage.py migrate') in output
+
+            assert os.path.isfile('/tmp/test_dj_migrate/plans/prod/001/thumbprints/test-dj-migrate-1')
+            assert os.path.isfile('/tmp/test_dj_migrate/plans/prod/001/thumbprints/test-dj-migrate-2')

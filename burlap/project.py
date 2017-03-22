@@ -3,8 +3,6 @@ from __future__ import print_function
 import os
 import re
 
-import yaml
-
 import burlap
 from burlap import ContainerSatchel
 from burlap.constants import *
@@ -55,6 +53,12 @@ SITES = (
             _top.append("    ROLE_%s," % (_role.upper(),))
         _top.append(')')
         _index = _content.find('"""\n\n')+4
+        
+        bottom_args = dict(
+            app_name=project_name,
+            app_name_title=project_name.title() + ' Administration',
+            app_name_simple=project_name.title()
+        )
         _bottom = '''
 PROJECT_DIR = os.path.abspath(os.path.join(os.path.split(__file__)[0], '..', '..'))
 
@@ -75,26 +79,23 @@ TEMPLATE_DIRS = (
 '%s/src/{app_name}/templates' % PROJECT_DIR,
 )
 TEMPLATES = [
-    {
+    {{
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': TEMPLATE_DIRS,
         'APP_DIRS': True,
-        'OPTIONS': {
+        'OPTIONS': {{
             'context_processors': [
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
-        },
-    },
+        }},
+    }},
 ]
 ADMIN_TITLE = '{app_name_title}'
 ADMIN_TITLE_SIMPLE = '{app_name_simple}'
-'''.format(
-    app_name=project_name,
-    app_name_title=project_name.title() + ' Administration',
-    app_name_simple=project_name.title())
+'''.format(**bottom_args)
         open(_settings_fn, 'w').write(_content[:_index]+_sites+('\n'.join(_top))+_content[_index:]+_bottom)
     
     print('Creating Django helper scripts...')
@@ -251,7 +252,7 @@ class ProjectSatchel(ContainerSatchel):
         print()
 
     @task
-    def add_roles(self, name, roles):
+    def add_roles(self, roles):
         for role in roles:
             _role = role.strip().lower()
             fn = 'roles/%s/settings.yaml' % _role
