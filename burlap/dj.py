@@ -465,12 +465,12 @@ class DjangoSatchel(Satchel):
         site = site or ALL
         r = self.local_renderer
         prior_database_names = set()
-        print('iter_unique_databases.begin')
+#         print('iter_unique_databases.begin')
         for site, site_data in self.iter_sites(site=site, no_secure=True):
-            print('iter_unique_databases.site:', site)
+#             print('iter_unique_databases.site:', site)
             self.set_db(site=site)
             key = (r.env.db_name, r.env.db_user, r.env.db_host, r.env.db_engine)
-            print('iter_unique_databases.site:', site, key)
+#             print('iter_unique_databases.site:', site, key)
             if key in prior_database_names:
                 continue
             prior_database_names.add(key)
@@ -524,7 +524,7 @@ class DjangoSatchel(Satchel):
     #         e.g.
     #         
     #             fab staging dj.migrate:migrate_apps=oneapp\,twoapp\,threeapp
-        print('migrate.begin')
+
         r = self.local_renderer
         
         ignore_errors = int(ignore_errors)
@@ -560,7 +560,7 @@ class DjangoSatchel(Satchel):
         self.vprint('project_dir0:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
         self.vprint('migrate_apps:', migrate_apps)
         databases = list(self.iter_unique_databases(site=site))
-        print('databases:', databases)
+#         print('databases:', databases)
         for site, site_data in databases:
             self.vprint('-'*80, file=sys.stderr)
             self.vprint('site:', site, file=sys.stderr)
@@ -700,7 +700,7 @@ class DjangoSatchel(Satchel):
         current = self.current_manifest.get('migrations') or {}
         migrate_apps = []
 
-        if self.verbose or 1:
+        if self.verbose:
             print('djangomigrations.last:')
             pprint(last, indent=4)
             print('djangomigrations.current:')
