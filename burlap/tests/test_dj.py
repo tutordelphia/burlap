@@ -7,6 +7,7 @@ import getpass
 from commands import getstatusoutput
 
 from fabric.contrib.files import append
+from fabric.api import settings
 
 import burlap
 from burlap.common import env
@@ -46,13 +47,15 @@ class DjTests(TestCase):
             # Simulate multiple remote hosts my creating aliases of localhost.
             # Note, for testing this on your localhost for a user without passwordless sudo,
             # you may have to run: `sudo chmod 777 /etc/hosts`
+            print('Modifying /etc/hosts...')
             env.host_string = 'localhost'
             env.hosts = [env.host_string]
             env.user = getpass.getuser()
-            for use_sudo in (False, True):
-                append(filename='/etc/hosts', text='127.0.0.1 test-dj-migrate-1', use_sudo=use_sudo)
-                append(filename='/etc/hosts', text='127.0.0.1 test-dj-migrate-2', use_sudo=use_sudo)
-                break
+            with settings(warn_only=True):
+                for use_sudo in (False, True):
+                    ret = append(filename='/etc/hosts', text='127.0.0.1 test-dj-migrate-1\n127.0.0.1 test-dj-migrate-2', use_sudo=use_sudo)
+                    if ret is None:
+                        break
             
             os.system('ln -s %s %s/' % (burlap_dir, d))
             
