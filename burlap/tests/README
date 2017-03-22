@@ -1,0 +1,4 @@
+Note, after adding a new satchel, update the tests:
+
+    CommonTests.test_state_clearing
+    functional_tests.DeployTests.test_deploy
