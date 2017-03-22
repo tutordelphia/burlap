@@ -1098,7 +1098,13 @@ def run(*args, **kwargs):
     
     # Allow satchels to configure connection parameters before we try contacting the hosts.
     #TODO:support ordering?
+    services_set = set(env.services)
     for name, satchel in all_satchels.iteritems():
+
+        # Skip satchels that we're not using.
+        if name.lower() not in services_set:
+            continue
+
         if hasattr(satchel, 'deploy_pre_run'):
             try:
                 satchel.deploy_pre_run()
