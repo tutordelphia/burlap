@@ -22,14 +22,15 @@ class SeleniumSatchel(Satchel):
 
     def set_defaults(self):        
         # See https://github.com/mozilla/geckodriver/releases for other versions and architectures.
-        self.env.geckodriver_version = '0.13.0'
+        # If none provided, will track the most recent tagged release.
+        self.env.geckodriver_version = None # '0.13.0'
         self.env.geckodriver_arch = 'linux64'
         self.env.geckodriver_url_template = \
             'https://github.com/mozilla/geckodriver/releases/download/' \
             'v{geckodriver_version}/geckodriver-v{geckodriver_version}-{geckodriver_arch}.tar.gz'
         self.env.geckodriver_install_bin_path = '/usr/local/bin'
         self.env.geckodriver_bin_name = 'geckodriver'
-        self.env.geckodriver_fingerprint_path = '/usr/local/lib/geckodriver/fingerprint.txt'
+        #self.env.geckodriver_fingerprint_path = '/usr/local/lib/geckodriver/fingerprint.txt'
 
     @property
     def geckodriver_path(self):
@@ -39,6 +40,7 @@ class SeleniumSatchel(Satchel):
     @task
     def install_geckodriver(self):
         r = self.local_renderer
+        r.env.geckodriver_version = r.env.geckodriver_version or self.get_target_geckodriver_version_number()
         r.run(
             'cd /tmp; '
             'wget -O geckodriver.tar.gz {geckodriver_url_template}; '
@@ -58,19 +60,30 @@ class SeleniumSatchel(Satchel):
         r = self.local_renderer
         lm = self.last_manifest
         last_fingerprint = lm.fingerprint
-        current_fingerprint = self.get_fingerprint()
-        print('last_fingerprint:', last_fingerprint)
-        print('current_fingerprint:', current_fingerprint)
+        current_fingerprint = self.get_target_geckodriver_version_number()
+        self.vprint('last_fingerprint:', last_fingerprint)
+        self.vprint('current_fingerprint:', current_fingerprint)
         if last_fingerprint != current_fingerprint:
             print('A new release is available.')
+            return True
         else:
             print('No updates found.')
+            return False
         
     @task
-    def get_fingerprint(self):
-        fingerprint = feedparser.parse('https://github.com/mozilla/geckodriver/tags.atom')['entries'][0]['link']
-        self.vprint('fingerprint:', fingerprint)
-        return fingerprint
+    def get_latest_geckodriver_version_number(self):
+        """
+        Retrieves the version number from the latest tagged release.
+        """
+        latest_url = feedparser.parse('https://github.com/mozilla/geckodriver/tags.atom')['entries'][0]['link']
+        self.vprint('latest_url:', latest_url)
+        version = latest_url.split('/')[-1][1:]
+        self.vprint('version:', version)
+        return version
+        
+    @task
+    def get_target_geckodriver_version_number(self):
+        return self.env.geckodriver_version or self.get_latest_geckodriver_version_number()
 
     def record_manifest(self):
         """
@@ -78,7 +91,7 @@ class SeleniumSatchel(Satchel):
         for a future deployment.
         """
         manifest = super(SeleniumSatchel, self).record_manifest()
-        manifest['fingerprint'] = self.get_fingerprint()
+        manifest['fingerprint'] = str(self.get_target_geckodriver_version_number())
         return manifest
 
     @task(precursors=['packager'])

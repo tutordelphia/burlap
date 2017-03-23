@@ -199,20 +199,18 @@ set_by_include3: 'some special setting'
         assert len(lst) == 1
      
     def test_append(self):
-        
+
         test = self.get_test_satchel()
-         
+
         test.genv.host_string = 'localhost'
-         
+
         _, fn = tempfile.mkstemp()
-         
         text = '[{rabbit, [{loopback_users, []}]}].'
-         
         test.append(filename=fn, text=text)
         content = open(fn).read()
         print('content0:', content)
         assert content.count(text) == 1
-         
+
         # Confirm duplicate lines are appended.
         test.append(filename=fn, text=text)
         content = open(fn).read()

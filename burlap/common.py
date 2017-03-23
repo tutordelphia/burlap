@@ -763,6 +763,11 @@ class Satchel(object):
             env[_key] = True
             self.set_defaults()
 
+    def clear_caches(self):
+        self._local_renderer = None
+        self._last_manifest = None
+        self._os_version_cache = {}
+
     def register(self):
         """
         Adds this satchel to the global registeries for fast lookup from other satchels.
