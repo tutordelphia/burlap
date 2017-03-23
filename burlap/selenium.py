@@ -4,6 +4,7 @@ Wrapper around the Motion service.
 http://www.lavrsen.dk/foswiki/bin/view/Motion/WebHome
 """
 from __future__ import print_function
+import re
 
 import feedparser
 
@@ -40,7 +41,9 @@ class SeleniumSatchel(Satchel):
     @task
     def install_geckodriver(self):
         r = self.local_renderer
+        self.vprint('Checking geckdriver %s...' % r.env.geckodriver_version)
         r.env.geckodriver_version = r.env.geckodriver_version or self.get_target_geckodriver_version_number()
+        self.vprint('Installing geckdriver %s...' % r.env.geckodriver_version)
         r.run(
             'cd /tmp; '
             'wget -O geckodriver.tar.gz {geckodriver_url_template}; '
@@ -69,7 +72,17 @@ class SeleniumSatchel(Satchel):
         else:
             print('No updates found.')
             return False
-        
+
+    @task
+    def get_most_recent_version(self):
+        link = feedparser.parse('https://github.com/mozilla/geckodriver/tags.atom')['entries'][0]['link']
+        self.vprint('link:', link)
+        matches = re.findall(r'v([0-9]+.[0-9]+.[0-9]+)', link)
+        if matches:
+            version = matches[0]
+            self.vprint('version:', version)
+            return version
+
     @task
     def get_latest_geckodriver_version_number(self):
         """
