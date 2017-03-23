@@ -1,11 +1,12 @@
 from __future__ import print_function
 
+import os
 import sys
 import unittest
 # from pprint import pprint
 
 from burlap.common import set_state, get_state, clear_state, init_env, default_env, env, all_satchels, get_dryrun, set_dryrun, get_verbose, set_verbose
-from burlap.deploy import init_env as deploy_init_env
+from burlap.deploy import init_env as deploy_init_env, delete_plan_data_dir, clear_fs_cache
 
 def clear_runs_once(func):
     if hasattr(func, 'return_value'):
@@ -54,8 +55,9 @@ class TestCase(unittest.TestCase):
     
     def setUp(self):
         # Always print the current test name before the test.
+        rows, columns = map(int, os.popen('stty size', 'r').read().split())
         kwargs = dict(
-            bar='#'*80,
+            bar='#'*columns,
             name=self._testMethodName,
         )
         print(self.test_name_format.format(**kwargs), file=self.test_name_fout)
@@ -95,11 +97,16 @@ class TestCase(unittest.TestCase):
         # Ensure all satchels re-push all their local variables back into the global env.
         for satchel in all_satchels.values():
             satchel.register()
+            satchel.clear_caches()
 
         # Since these tests are automated, if we ever get a prompt, we should immediately fail,
         # because no action should ever be user-interactive.
         env.abort_on_prompts = True
         env.always_use_pty = False
+
+        delete_plan_data_dir()
+
+        clear_fs_cache()
         
         super(TestCase, self).setUp()
 

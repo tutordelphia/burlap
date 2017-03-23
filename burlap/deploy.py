@@ -8,6 +8,7 @@ import tempfile
 import json
 import functools
 import traceback
+import shutil
 from collections import defaultdict
 from pprint import pprint
 
@@ -63,6 +64,10 @@ INITIAL = 'initial'
 
 _fs_cache = defaultdict(dict) # {func_name:{path:ret}}
 
+def clear_fs_cache():
+    _fs_cache.clear()
+    RemoteFile._file_cache.clear()
+
 def make_dir(d):
     if d not in _fs_cache['make_dir']:
         if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
@@ -75,9 +80,11 @@ def make_dir(d):
 
 @task_or_dryrun
 def list_dir(d):
+    #print('list_dir.existing:', d, _fs_cache['list_dir'].get(d))
     if d not in _fs_cache['list_dir']:
         verbose = common.get_verbose()
         if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
+            #print('listing remote path:', d)
             #output = sudo_or_dryrun('ls "%s"' % d)
             output = _sudo('ls "%s"' % d)
             output = output.split()
@@ -85,6 +92,7 @@ def list_dir(d):
                 print('output:', output)
             ret = output
         else:
+            #print('listing local path:', d)
             ret = os.listdir(d)
         _fs_cache['list_dir'][d] = ret
     return _fs_cache['list_dir'][d]
@@ -215,6 +223,8 @@ class RemoteFile(object):
         _, tmp_fn = tempfile.mkstemp()
         os.remove(tmp_fn)
         fout = open(tmp_fn, 'w')
+        #print('content:')
+        #print(self.content)
         fout.write(self.content)
         fout.close()
         put_or_dryrun(
@@ -238,11 +248,22 @@ def open_file(fqfn, mode='r'):
     else:
         return open(fqfn, mode)
 
-def init_plan_data_dir():
+def get_plan_data_dir():
     common.init_burlap_data_dir()
     d = env.plan_data_dir % env
+    return d
+
+def init_plan_data_dir():
+    d = get_plan_data_dir()
     make_dir(d)
     return d
+
+def delete_plan_data_dir():
+    d = get_plan_data_dir()
+    if env.plan_storage == STORAGE_REMOTE and env.host_string:
+        _sudo('rm -Rf %s' % d)
+    elif env.plan_storage == STORAGE_LOCAL:
+        shutil.rmtree(d)
 
 class Colors:
     HEADER = '\033[95m'
@@ -265,16 +286,21 @@ def ongoing(s):
 
 def iter_plan_names(role=None):
     d = get_plan_dir(role=role)
+    #print('iter_plan_names.d:', d)
     try:
         assert is_dir(d), 'Plan directory %s does not exist.' % d
-    except AssertionError:
+    except AssertionError as e:
+        #print('iter_plan_names.e:', e)
         if common.get_dryrun():
             # During dryrun, and the directory is missing, assume the host has been reset
             # and there are no prior plan files.
             return
         else:
             raise
-    for name in sorted(list_dir(d)):
+    plan_subfolders = sorted(list_dir(d))
+    #print('iter_plan_names.subfolders:', plan_subfolders)
+    for name in plan_subfolders:
+        #print('iter_plan_names.name:', iter_plan_names)
         fqfn = os.path.join(d, name)
         if not is_dir(fqfn):
             continue
@@ -359,10 +385,12 @@ class Step(object):
 HISTORY_HEADERS = ['step', 'start', 'end']
 
 def get_plan_dir(role, name=None):
+    role = role or env.ROLE
+    assert role, 'No role defined.'
     if name:
-        d = os.path.join(init_plan_data_dir(), role or env.ROLE, name)
+        d = os.path.join(init_plan_data_dir(), role, name)
     else:
-        d = os.path.join(init_plan_data_dir(), role or env.ROLE)
+        d = os.path.join(init_plan_data_dir(), role)
     make_dir(d)
     return d
 
@@ -513,10 +541,11 @@ class Plan(object):
         """
         Creates a thumbprint file for the current host in the current role and name.
         """
+        #print('record_thumbprint.only_components:', only_components)
         only_components = only_components or []
         data = get_current_thumbprint(role=self.role, name=self.name, only_components=only_components)
-        print('Recording thumbprint for host %s with deployment %s on %s.' \
-            % (env.host_string, self.name, self.role))
+        print('Recording thumbprint for host %s with deployment %s on %s.' % (env.host_string, self.name, self.role))
+        #print('data:', data)
         self.thumbprint = data
     
     @property
@@ -660,6 +689,7 @@ def get_last_completed_plan():
     if verbose:
         print('get_last_completed_plan')
     for _name in reversed(sorted(list(iter_plan_names()))):
+        #print('get_last_completed_plan._name:', _name)
         plan = Plan.load(_name)
         if verbose:
             print('plan:', plan.name)
@@ -753,7 +783,8 @@ def get_last_thumbprint():
     """
     verbose = common.get_verbose()
     plan = get_last_completed_plan()
-    if verbose and plan: print('get_last_thumbprint.last completed plan:', plan.name)
+    #print('get_last_thumbprint.last_completed_plan:', plan)
+    if verbose: print('get_last_thumbprint.last completed plan:', plan and plan.name)
     last_thumbprint = (plan and plan.thumbprint) or {}
     if verbose: print('get_last_thumbprint.last_thumbprint:', last_thumbprint)
     return last_thumbprint
