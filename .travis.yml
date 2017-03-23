@@ -17,6 +17,13 @@ matrix:
             sudo: required
             python: 2.7
 
+# https://docs.travis-ci.com/user/hosts
+# Needed by DjTests.test_migrate
+addons:
+    hosts:
+    -   test-dj-migrate-1
+    -   test-dj-migrate-2
+
 env:
     global:
     -   BURLAP_TEST_BOX=localhost
@@ -35,7 +42,7 @@ install:
 #-  pip install -e .
 # Deal with issue on Travis builders re: multiprocessing.Queue :(
 #-   "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
-#-  "pip install jinja2"
+#-   "pip install jinja2"
   
 before_script:
 # Allow us to SSH passwordless to localhost

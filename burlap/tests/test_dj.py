@@ -47,6 +47,7 @@ class DjTests(TestCase):
             # Simulate multiple remote hosts my creating aliases of localhost.
             # Note, for testing this on your localhost for a user without passwordless sudo,
             # you may have to run: `sudo chmod 777 /etc/hosts`
+            # This won't work on Travis, where these will instead be set in .travis.yml.
             print('Modifying /etc/hosts...')
             env.host_string = 'localhost'
             env.hosts = [env.host_string]
@@ -59,8 +60,7 @@ class DjTests(TestCase):
             
             os.system('ln -s %s %s/' % (burlap_dir, d))
             
-            project.update_settings(
-                {
+            project.update_settings({
                     'plan_storage': STORAGE_LOCAL,
                     'plan_data_dir': os.path.join(d, 'plans'),
                     'services': ['dj'],
@@ -81,8 +81,7 @@ class DjTests(TestCase):
                 },
                 role='all')
                 
-            project.update_settings(
-                {
+            project.update_settings({
                     'hosts': ['test-dj-migrate-1', 'test-dj-migrate-2'],
                     'available_sites_by_host':{
                         'test-dj-migrate-1': [
@@ -100,7 +99,6 @@ class DjTests(TestCase):
                             'apache_domain_template': 'testsite2.test-dj-migrate-2.com',
                         },
                     },
-
                 },
                 role='prod')
             
