@@ -4,6 +4,7 @@ Wrapper around the Motion service.
 http://www.lavrsen.dk/foswiki/bin/view/Motion/WebHome
 """
 from __future__ import print_function
+import re
 
 import feedparser
 
@@ -22,7 +23,9 @@ class SeleniumSatchel(Satchel):
 
     def set_defaults(self):        
         # See https://github.com/mozilla/geckodriver/releases for other versions and architectures.
-        self.env.geckodriver_version = '0.13.0'
+        # Set version to None will default to most recent version.
+        self.env.geckodriver_version = None#'0.13.0'
+        
         self.env.geckodriver_arch = 'linux64'
         self.env.geckodriver_url_template = \
             'https://github.com/mozilla/geckodriver/releases/download/' \
@@ -39,6 +42,10 @@ class SeleniumSatchel(Satchel):
     @task
     def install_geckodriver(self):
         r = self.local_renderer
+        self.vprint('Checking geckdriver %s...' % r.env.geckodriver_version)
+        if not r.env.geckodriver_version:
+            r.env.geckodriver_version = self.get_most_recent_version()
+        self.vprint('Installing geckdriver %s...' % r.env.geckodriver_version)
         r.run(
             'cd /tmp; '
             'wget -O geckodriver.tar.gz {geckodriver_url_template}; '
@@ -57,6 +64,7 @@ class SeleniumSatchel(Satchel):
         """
         r = self.local_renderer
         lm = self.last_manifest
+        print('lm:', lm)
         last_fingerprint = lm.fingerprint
         current_fingerprint = self.get_fingerprint()
         print('last_fingerprint:', last_fingerprint)
@@ -65,7 +73,17 @@ class SeleniumSatchel(Satchel):
             print('A new release is available.')
         else:
             print('No updates found.')
-        
+    
+    @task
+    def get_most_recent_version(self):
+        link = feedparser.parse('https://github.com/mozilla/geckodriver/tags.atom')['entries'][0]['link']
+        self.vprint('link:', link)
+        matches = re.findall(r'v([0-9]+.[0-9]+.[0-9]+)', link)
+        if matches:
+            version = matches[0]
+            self.vprint('version:', version)
+            return version
+    
     @task
     def get_fingerprint(self):
         fingerprint = feedparser.parse('https://github.com/mozilla/geckodriver/tags.atom')['entries'][0]['link']
