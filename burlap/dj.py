@@ -67,7 +67,7 @@ class DjangoSatchel(Satchel):
         
         self.env.manage_dir = 'src'
         
-        self.env.ignore_errors = 0
+        self.env.ignore_migration_errors = 0
         
         # Modules whose name start with one of these values will be deleted before settings are imported.
         self.env.delete_module_with_prefixes = []
@@ -656,8 +656,8 @@ class DjangoSatchel(Satchel):
             print('latest_timestamp:', latest_timestamp)
         return latest_timestamp
         
-    @property
-    def media_changed(self):
+    @task
+    def has_media_changed(self):
         lm = self.last_manifest
         last_timestamp = lm.latest_timestamp
         current_timestamp = self.get_media_timestamp()
@@ -687,7 +687,7 @@ class DjangoSatchel(Satchel):
     
     @task(precursors=['packager', 'pip'])
     def configure_media(self, *args, **kwargs):
-        if self.media_changed:
+        if self.has_media_changed():
             r = self.local_renderer
             assert r.env.local_project_dir
             r.local('cd {local_project_dir}; {manage_cmd} collectstatic --noinput')
@@ -713,10 +713,11 @@ class DjangoSatchel(Satchel):
         if migrate_apps:
             self.vprint('%i apps with new migrations found!' % len(migrate_apps))
             self.vprint('migrate_apps:', migrate_apps)
+            self.vprint('ignore_migration_errors:', self.env.ignore_migration_errors)
             # Note, Django's migrate command doesn't support multiple app name arguments
             # with all options, so we run it separately for each app.
             for app in migrate_apps:
-                self.migrate(app=app, ignore_errors=self.env.ignore_errors)
+                self.migrate(app=app, ignore_errors=self.env.ignore_migration_errors)
         else:
             self.vprint('No new migrations.')
 
