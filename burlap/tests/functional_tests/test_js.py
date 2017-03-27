@@ -30,6 +30,9 @@ class JSTests(TestCase):
         
         # Confirm jshint was installed.
         assert exists('/usr/local/bin/jshint')
+        output = jshint.run('jshint --version')
+        print('output:', output)
+        assert 'jshint v' in output
         
         print('Disabling jshint...')
         jshint.env.enabled = False
