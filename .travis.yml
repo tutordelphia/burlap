@@ -33,6 +33,8 @@ install:
 -   sudo apt-get -yq update
 -   sudo apt-get -yq purge postgr*
 -   sudo apt-get -yq purge virtualbox*
+# The Oracle Java install routinely times out, and we're not using it, so uninstall it.
+-   sudo apt-get -yq purge oracle-java*
 -   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
 -   sudo apt-get -yq install build-essential
 -   sudo apt-get -yq --force-yes install linux-headers-`uname -r`
