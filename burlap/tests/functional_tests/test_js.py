@@ -15,8 +15,8 @@ class JSTests(TestCase):
         jshint.genv.services = ['jshint']
         jshint.clear_caches()
         
-        packager.update()
-        packager.upgrade(full=1)
+#         packager.update()
+#         packager.upgrade(full=1)
 
         print('Installing jshint...')
         jshint.env.enabled = True
