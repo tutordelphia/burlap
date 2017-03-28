@@ -1,3 +1,4 @@
+import os
 
 from burlap import Satchel
 from burlap.constants import *
@@ -71,12 +72,16 @@ class EC2MonitorSatchel(Satchel):
     @task
     def install(self):
         r = self._get_renderer()
+
+        local_path = self.env.awscreds.format(role=self.genv.ROLE)
+        assert os.path.isfile(local_path), 'Missing cred file: %s' % local_path
+
         r.sudo('apt-get install --yes unzip libwww-perl libdatetime-perl')
         r.run('cd ~; curl http://aws-cloudwatch.s3.amazonaws.com/downloads/CloudWatchMonitoringScripts-1.2.1.zip -O')
         r.run('cd ~; unzip -o CloudWatchMonitoringScripts-1.2.1.zip')
         r.run('cd ~; rm CloudWatchMonitoringScripts-1.2.1.zip')
         r.put(
-            local_path=self.env.awscreds.format(role=self.genv.ROLE),
+            local_path=local_path,
             remote_path=r.env.awscreds_install_path,
         )
         self.install_cron_job(
