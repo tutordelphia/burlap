@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 from fabric.contrib.files import exists
  
 from burlap.common import set_verbose
@@ -20,7 +22,6 @@ class JSTests(TestCase):
 
         print('Installing jshint...')
         jshint.env.enabled = True
-        jshint.env.geckodriver_version = '0.13.0'
         jshint.clear_local_renderer()
         #jshint.install_packages() # fails on Ubuntu 14 under Travis-CI?
         #jshint.sudo('apt-get purge nodejs-legacy nodejs')
