@@ -24,7 +24,7 @@ class JSHintSatchel(ServiceSatchel):
         if r.env.enabled:
             r.sudo('npm install -g jshint')
             # The Ubuntu 14 package is malformed and refers to "node" instead of "nodejs".
-            r.sudo('ln -s /usr/bin/nodejs /usr/bin/node')
+            r.sudo('[ ! -f /usr/bin/node ] && ln -s /usr/bin/nodejs /usr/bin/node || true')
         else:
             r.sudo('npm uninstall -g jshint')
     
