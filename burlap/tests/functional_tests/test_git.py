@@ -19,14 +19,14 @@ class GitTests(TestCase):
         git.genv.services = ['git']
         git.clear_caches()
 
+        print('Installing git...')
+        git.install_packages() # fails on Ubuntu 14 under Travis-CI?
+
         print('Setting up sample git repo...')
         run('mkdir /tmp/mygithookrepo')
         with cd('/tmp/mygithookrepo'):
             run('git init')
         assert not exists('/tmp/mygithookrepo/.git/hooks/post-checkout')
-
-        print('Installing git...')
-        git.install_packages() # fails on Ubuntu 14 under Travis-CI?
 
         print('Configuring git...')
         git.env.enabled = True
