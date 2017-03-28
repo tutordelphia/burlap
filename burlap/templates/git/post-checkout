@@ -1,0 +1,18 @@
+#! /bin/sh
+# https://gist.github.com/linssen/5729266
+# Removes .pyc files, which may be stale, and will be regenerated.
+
+green='\033[0;32m'
+nc='\033[0m'
+
+# Start from the repository root.
+cd ./$(git rev-parse --show-cdup)
+
+# Delete .pyc files and empty directories.
+echo "${green}Deleting PYC files...${nc}"
+find . -name "*.pyc" -delete
+find . -type d -empty -delete
+
+echo "${green}Resetting submodules...${nc}"
+git submodule foreach git reset --hard HEAD
+git submodule update

@@ -11,22 +11,53 @@ should normally not use them directly but rather use the high-level wrapper
 """
 from __future__ import print_function
 
+import os
+
 from fabric.api import run
 from fabric.api import sudo
 from fabric.context_managers import cd
 
-from burlap import Satchel, ContainerSatchel
+from burlap import Satchel
 from burlap.constants import *
 from burlap.decorators import task
 from burlap.exceptions import AbortDeployment
 from burlap.utils import run_as_root
+from burlap.files import file # pylint: disable=redefined-builtin
 
 CURRENT_COMMIT = 'current_commit'
 
-class GitSatchel(ContainerSatchel):
+class GitSatchel(Satchel):
     
     name = 'git'
-    
+
+    @property
+    def packager_system_packages(self):
+        return {
+            UBUNTU: ['git'],
+        }
+
+    def set_defaults(self):
+        self.env.hooks = {
+            #path/to/git/repo': ['local/path/to/hook']
+        }
+
+    @task
+    def install_hooks(self):
+        r = self.local_renderer
+        for repo_path, hook_paths in r.env.hooks.items():
+            r.env.repo_path_dot_git = '%s/.git' % repo_path
+            assert file.is_dir(r.env.repo_path_dot_git), 'Repo %s does not exist.' % r.env.repo_path_dot_git
+            for hook_path in hook_paths:
+                r.env.local_hook_path = fqfn = self.find_template(hook_path)
+                r.env.remote_hook_path = '%s/.git/hooks/%s' % (repo_path, os.path.split(hook_path)[-1])
+                #r.env.remote_hook_dir = '%s/.git/hooks/' % (repo_path,)
+                r.put(local_path=r.env.local_hook_path, remote_path=r.env.remote_hook_path)
+                r.run_or_local('chmod +x {remote_hook_path}')
+
+    @task
+    def uninstall_hooks(self, hooks):
+        raise NotImplementedError
+
     def clone(self, remote_url, path=None, use_sudo=False, user=None):
         """
         Clone a remote Git repository into a new directory.
@@ -228,6 +259,38 @@ class GitSatchel(ContainerSatchel):
             else:
                 run(cmd)
 
+    def get_changed_hooks(self):
+        lm = self.last_manifest
+        cm = self.current_manifest
+        current_hooks = cm['hooks']
+        last_hooks = lm.hooks or {}
+        
+        hooks_added = {} # {repo: [hooks]}, in current but not last
+        for repo_path in current_hooks:
+            hooks_added.setdefault(repo_path, [])
+            added = set(current_hooks.get(repo_path, [])).difference(last_hooks.get(repo_path, []))
+            hooks_added[repo_path].extend(added)
+        
+        hooks_removed = {} # {repo: [hooks]}, in last but not current
+        for repo_path in last_hooks:
+            hooks_removed.setdefault(repo_path, [])
+            removed = set(last_hooks.get(repo_path, [])).difference(current_hooks.get(repo_path, []))
+            hooks_removed[repo_path].extend(removed)
+            
+        return hooks_added, hooks_removed
+
+    @task
+    def update_hooks(self):
+        added_hooks, removed_hooks = self.get_changed_hooks()
+        if removed_hooks:
+            self.uninstall_hooks(removed_hooks)
+        if added_hooks:
+            self.install_hooks()
+
+    @task(precursors=['packager'])
+    def configure(self):
+        self.update_hooks()
+            
 
 class GitCheckerSatchel(Satchel):
     """
@@ -244,7 +307,7 @@ class GitCheckerSatchel(Satchel):
             (UBUNTU, '14.04'): ['git'],
             (UBUNTU, '16.04'): ['git'],
         }
-    
+
     def set_defaults(self):
         self.env.branch = 'master'
     

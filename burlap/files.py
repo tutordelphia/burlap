@@ -103,18 +103,24 @@ class FileSatchel(ContainerSatchel):
         """
         Check if a path exists, and is a file.
         """
-        func = use_sudo and _sudo or _run
-        with self.settings(hide('running', 'warnings'), warn_only=True):
-            return func('[ -f "%(path)s" ]' % locals()).succeeded
+        if self.is_local:
+            return os.path.isfile(path)
+        else:
+            func = use_sudo and _sudo or _run
+            with self.settings(hide('running', 'warnings'), warn_only=True):
+                return func('[ -f "%(path)s" ]' % locals()).succeeded
     
     @task
     def is_dir(self, path, use_sudo=False):
         """
         Check if a path exists, and is a directory.
         """
-        func = use_sudo and _sudo or _run
-        with self.settings(hide('running', 'warnings'), warn_only=True):
-            return func('[ -d "%(path)s" ]' % locals()).succeeded
+        if self.is_local:
+            return os.path.isdir(path)
+        else:
+            func = use_sudo and _sudo or _run
+            with self.settings(hide('running', 'warnings'), warn_only=True):
+                return func('[ -d "%(path)s" ]' % locals()).succeeded
     
     @task
     def is_link(self, path, use_sudo=False):
