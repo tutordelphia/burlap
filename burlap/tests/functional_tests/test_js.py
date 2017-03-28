@@ -16,13 +16,15 @@ class JSTests(TestCase):
         jshint.clear_caches()
         
         packager.update()
-        packager.upgrade(full=0)
+        packager.upgrade(full=1)
 
         print('Installing jshint...')
         jshint.env.enabled = True
         jshint.env.geckodriver_version = '0.13.0'
         jshint.clear_local_renderer()
-        jshint.install_packages()
+        #jshint.install_packages() # fails on Ubuntu 14 under Travis-CI?
+        jshint.sudo('apt-get purge nodejs-legacy nodejs')
+        jshint.sudo('apt-get update --fix-missing; DEBIAN_FRONTEND=noninteractive apt-get -f -o Dpkg::Options::="--force-overwrite" install --yes npm')
         jshint.configure()
         clear_fs_cache()
         delete_plan_data_dir()
