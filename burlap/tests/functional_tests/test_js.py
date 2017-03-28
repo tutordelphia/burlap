@@ -4,6 +4,7 @@ from burlap.common import set_verbose
 from burlap.js import jshint
 from burlap.tests.functional_tests.base import TestCase
 from burlap.deploy import thumbprint, clear_fs_cache, delete_plan_data_dir
+from burlap.packager import packager
 
 class JSTests(TestCase):
     
@@ -13,6 +14,9 @@ class JSTests(TestCase):
         jshint.genv.ROLE = 'local'
         jshint.genv.services = ['jshint']
         jshint.clear_caches()
+        
+        packager.update()
+        packager.upgrade(full=0)
 
         print('Installing jshint...')
         jshint.env.enabled = True
