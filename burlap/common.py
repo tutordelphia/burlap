@@ -702,6 +702,8 @@ class Satchel(object):
         self.settings = settings
 
         self._set_defaults()
+        
+        self._verbose = None
 
         super(Satchel, self).__init__()
 
@@ -762,6 +764,11 @@ class Satchel(object):
         if _key not in env:
             env[_key] = True
             self.set_defaults()
+
+    def clear_caches(self):
+        self._local_renderer = None
+        self._last_manifest = None
+        self._os_version_cache = {}
 
     def register(self):
         """
@@ -904,6 +911,7 @@ class Satchel(object):
         )
 
     def iter_sites(self, *args, **kwargs):
+        kwargs.setdefault('verbose', self.verbose)
         return iter_sites(*args, **kwargs)
 
     @property
@@ -1315,11 +1323,20 @@ class Satchel(object):
 
     @property
     def verbose(self):
-        return get_verbose()
+        if self._verbose is None:
+            return get_verbose()
+        else:
+            return self._verbose
 
     @verbose.setter
     def verbose(self, v):
-        return set_verbose(v)
+        # 1 or True=local verbose only, 2=global verbose, None=clears local 
+        if v == 1:
+            self._verbose = True
+        elif v is None:
+            self._verbose = None
+        else:
+            set_verbose(v)
 
     @property
     def dryrun(self):
@@ -2466,23 +2483,30 @@ def set_role(role):
         return
     env[ROLE] = os.environ[ROLE] = role
 
-def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=False, verbose=False):
+def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=False, verbose=None):
     """
     Iterates over sites, safely setting environment variables for each site.
     """
-    #from burlap.dj import render_remote_paths
+    if verbose is None:
+        verbose = get_verbose()
 
     hostname = get_current_hostname()
+#     print('iter_sites.hostname:', hostname)
 
     target_sites = env.available_sites_by_host.get(hostname, None)
+#     print('iter_sites.site:', site)
+#     print('iter_sites.target_sites:', target_sites)
 
     if sites is None:
         site = site or env.SITE or ALL
+#         print('iter_sites.site2:', site)
         if site == ALL:
-            sites = six.iteritems(env.sites)
+#             sites = six.iteritems(env.sites)
+            sites = list(six.iteritems(env.sites))
         else:
             sys.stderr.flush()
             sites = [(site, env.sites.get(site))]
+#     print('iter_sites.sites:', sites)
 
     renderer = renderer #or render_remote_paths
     env_default = save_env()
@@ -2496,6 +2520,8 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
         else:
             assert isinstance(target_sites, (tuple, list))
             if site not in target_sites:
+                if verbose:
+                    print('Skipping site %s because not in among target sites.' % site)
                 continue
 
         env.update(env_default)

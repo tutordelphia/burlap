@@ -199,20 +199,18 @@ set_by_include3: 'some special setting'
         assert len(lst) == 1
      
     def test_append(self):
-        
+
         test = self.get_test_satchel()
-         
+
         test.genv.host_string = 'localhost'
-         
+
         _, fn = tempfile.mkstemp()
-         
         text = '[{rabbit, [{loopback_users, []}]}].'
-         
         test.append(filename=fn, text=text)
         content = open(fn).read()
         print('content0:', content)
         assert content.count(text) == 1
-         
+
         # Confirm duplicate lines are appended.
         test.append(filename=fn, text=text)
         content = open(fn).read()
@@ -306,8 +304,8 @@ set_by_include3: 'some special setting'
             'APACHE', 'AVAHI', 'BLUETOOTH', 'BUILDBOT', 'CELERY', 'CLOUDFRONT', 'CRON',
             'DEBUG', 'DEPLOYMENTNOTIFIER', 'DJ', 'EC2MONITOR', 'ELASTICSEARCH', 'FILE',
             'GIT', 'GITCHECKER', 'GITTRACKER', 'GPSD', 'GROUP', 'HOST', 'HOSTNAME', 'HOSTSFILE',
-            'IP', 'JIRAHELPER', 'LOGINNOTIFIER', 'MOTION', 'MYSQL', 'MYSQLCLIENT', 'NM',
-            'NTPCLIENT', 'PACKAGER', 'PIP', 'POSTFIX', 'POSTGRESQL', 'POSTGRESQLCLIENT',
+            'IP', 'JIRAHELPER', 'JSHINT', 'LOGINNOTIFIER', 'MOTION', 'MYSQL', 'MYSQLCLIENT', 'NM',
+            'NTPCLIENT', 'PACKAGER', 'PHANTOMJS', 'PIP', 'POSTFIX', 'POSTGRESQL', 'POSTGRESQLCLIENT', 'PROJECT',
             'RABBITMQ', 'RPI', 'RSYNC', 'S3', 'SELENIUM', 'SERVICE', 'SNORT', 'SOFTWARERAID',
             'SSHNICE', 'SSL', 'SUPERVISOR', 'TARBALL', 'TIMEZONE', 'UBUNTUMULTIVERSE',
             'UNATTENDEDUPGRADES', 'USER', 'VAGRANT', 'VIRTUALBOX',
