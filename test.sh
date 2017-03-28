@@ -6,4 +6,5 @@
 #
 set -e
 time ./pep8.sh
+rm -Rf ./burlap/*.pyc
 time tox -c tox-full.ini
