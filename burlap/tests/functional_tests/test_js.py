@@ -1,12 +1,12 @@
 from __future__ import print_function
 
-from fabric.contrib.files import exists
+#from fabric.contrib.files import exists
  
 from burlap.common import set_verbose
 from burlap.js import jshint
 from burlap.tests.functional_tests.base import TestCase
 from burlap.deploy import thumbprint, clear_fs_cache, delete_plan_data_dir
-from burlap.packager import packager
+#from burlap.packager import packager
 
 class JSTests(TestCase):
     
