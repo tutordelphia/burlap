@@ -34,7 +34,7 @@ class PackagerSatchel(Satchel):
         return data
     
     @task
-    def prepare(self):
+    def update(self):
         """
         Preparse the packaging system for installations.
         """
