@@ -1979,7 +1979,10 @@ def put_or_dryrun(*args, **kwargs):
         return [real_remote_path]
     else:
         if env.host_string in LOCALHOSTS or env.is_local:
-            local_or_dryrun('cp {local_path} {remote_path}'.format(**kwargs))
+            if use_sudo:
+                sudo_or_dryrun('cp {local_path} {remote_path}'.format(**kwargs))
+            else:
+                local_or_dryrun('cp {local_path} {remote_path}'.format(**kwargs))
             env.put_remote_path = kwargs.get('remote_path')
         else:
             return _put(**kwargs)
