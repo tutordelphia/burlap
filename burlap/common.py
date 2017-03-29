@@ -1272,7 +1272,7 @@ class Satchel(object):
         """
         Returns a dictionary representing a serialized state of the service.
         """
-        manifest = get_component_settings(self.name)
+        manifest = get_component_settings(prefixes=[self.name])
 
         # Record a signature of each template so we know to redeploy when they change.
         for template in self.get_templates():
@@ -1953,7 +1953,7 @@ def put_or_dryrun(*args, **kwargs):
         if not remote_path:
             _, remote_path = tempfile.mkstemp()
 
-        if not remote_path.startswith('/') and not remote_path.startswith('~'):
+        if not env.is_local and not remote_path.startswith('/') and not remote_path.startswith('~'):
             remote_path = '/tmp/' + remote_path
 
         if use_sudo:
@@ -1978,7 +1978,14 @@ def put_or_dryrun(*args, **kwargs):
 
         return [real_remote_path]
     else:
-        return _put(**kwargs)
+        if env.host_string in LOCALHOSTS or env.is_local:
+            if use_sudo:
+                sudo_or_dryrun('cp {local_path} {remote_path}'.format(**kwargs))
+            else:
+                local_or_dryrun('cp {local_path} {remote_path}'.format(**kwargs))
+            env.put_remote_path = kwargs.get('remote_path')
+        else:
+            return _put(**kwargs)
 
 
 def get_or_dryrun(**kwargs):
@@ -2029,12 +2036,14 @@ def get_component_settings(prefixes=None):
     only those keys with the name prefix.
     """
     prefixes = prefixes or []
+    assert isinstance(prefixes, (tuple, list)), 'Prefixes must be a sequence type, not %s.' % type(prefixes)
     data = {}
     for name in prefixes:
         name = name.lower().strip()
-        for k in env:
+        for k in sorted(env):
             if k.startswith('%s_' % name):
-                data[k] = env[k]
+                new_k = k[len(name)+1:]
+                data[new_k] = env[k]
     return data
 
 
