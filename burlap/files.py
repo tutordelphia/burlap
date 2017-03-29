@@ -103,7 +103,7 @@ class FileSatchel(ContainerSatchel):
         """
         Check if a path exists, and is a file.
         """
-        if self.is_local:
+        if self.is_local and not use_sudo:
             return os.path.isfile(path)
         else:
             func = use_sudo and _sudo or _run
@@ -115,7 +115,7 @@ class FileSatchel(ContainerSatchel):
         """
         Check if a path exists, and is a directory.
         """
-        if self.is_local:
+        if self.is_local and not use_sudo:
             return os.path.isdir(path)
         else:
             func = use_sudo and _sudo or _run
