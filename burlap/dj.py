@@ -559,9 +559,12 @@ class DjangoSatchel(Satchel):
         r.env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts and not post_south else ''
         self.vprint('project_dir0:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
         self.vprint('migrate_apps:', migrate_apps)
-        databases = list(self.iter_unique_databases(site=site))
+        
+        # CS 2017-3-29 Don't bypass the iterator. That causes reversion to the global env that could corrupt the generated commands.
+#         databases = list(self.iter_unique_databases(site=site))
 #         print('databases:', databases)
-        for site, site_data in databases:
+
+        for site, site_data in self.iter_unique_databases(site=site):
             self.vprint('-'*80, file=sys.stderr)
             self.vprint('site:', site, file=sys.stderr)
             

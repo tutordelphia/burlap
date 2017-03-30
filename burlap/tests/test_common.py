@@ -16,7 +16,7 @@ from pprint import pprint
 #     pass
 
 from burlap import load_yaml_settings
-from burlap.common import CMD_VAR_REGEX, CMD_ESCAPED_VAR_REGEX, shellquote, all_satchels, Satchel, env, get_satchel, clear_state
+from burlap.common import CMD_VAR_REGEX, CMD_ESCAPED_VAR_REGEX, shellquote, all_satchels, Satchel, env, get_satchel, clear_state, save_env
 from burlap.decorators import task
 from burlap.tests.base import TestCase
 
@@ -182,22 +182,26 @@ set_by_include3: 'some special setting'
         assert r.format(r.env.wsgi_path) == '/usr/local/someappname/src/wsgi/sitename.wsgi'
 
     def test_iter_sites(self):
-        
+
         test = self.get_test_satchel()
-         
+
+        env0 = save_env()
         env.sites = {
-            'site1': {'apache_ssl': False},
+            'site1': {'apache_ssl': False, 'site': 'mysite'},
             'site2': {'apache_ssl': True},
         }
-         
+
         lst = list(test.iter_sites())
         print('lst:', lst)
         assert len(lst) == 2
-         
+
         lst = list(test.iter_sites(site='site2'))
         print('lst:', lst)
         assert len(lst) == 1
-     
+
+        # Confirm all non-default keys were removed.
+        assert set(env0) == set(env)
+
     def test_append(self):
 
         test = self.get_test_satchel()

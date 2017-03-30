@@ -2500,22 +2500,16 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
         verbose = get_verbose()
 
     hostname = get_current_hostname()
-#     print('iter_sites.hostname:', hostname)
 
     target_sites = env.available_sites_by_host.get(hostname, None)
-#     print('iter_sites.site:', site)
-#     print('iter_sites.target_sites:', target_sites)
 
     if sites is None:
         site = site or env.SITE or ALL
-#         print('iter_sites.site2:', site)
         if site == ALL:
-#             sites = six.iteritems(env.sites)
             sites = list(six.iteritems(env.sites))
         else:
             sys.stderr.flush()
             sites = [(site, env.sites.get(site))]
-#     print('iter_sites.sites:', sites)
 
     renderer = renderer #or render_remote_paths
     env_default = save_env()
@@ -2541,7 +2535,14 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
         if setter:
             setter(site)
         yield site, site_data
+
+    # Revert modified keys.
     env.update(env_default)
+
+    # Remove keys that were added, not simply updated.
+    added_keys = set(env).difference(env_default)
+    for key in added_keys:
+        del env[key]
 
 def pc(*args):
     """

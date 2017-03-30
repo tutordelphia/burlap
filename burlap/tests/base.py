@@ -3,6 +3,7 @@ from __future__ import print_function
 import os
 import sys
 import unittest
+from commands import getstatusoutput
 # from pprint import pprint
 
 from burlap.common import set_state, get_state, clear_state, init_env, default_env, env, all_satchels, get_dryrun, set_dryrun, get_verbose, set_verbose
@@ -27,15 +28,21 @@ def clear_runs_once(func):
         assert not hasattr(func, 'return_value'), 'Unable to clear runs_once on %s' % func
 
 class TestCase(unittest.TestCase):    
-       
+
     test_name_fout = sys.stdout
- 
+
     test_name_format = '\n{bar}\nRunning test: {name}\n{bar}\n'
-    
+
     # These keys will not be cleared between tests.
     # This is useful for keeping the Vagrant login, which is only set once before all the tests are run.
     keep_env_keys = []
-    
+
+    def getstatusoutput(self, cmd):
+        print(cmd)
+        status, output = getstatusoutput(cmd)
+        print('output:', output)
+        return status, output
+
     def get_keep_env_keys(self):
         return list(self.keep_env_keys)
     

@@ -280,4 +280,21 @@ class DebugSatchel(ContainerSatchel):
     def test_sudo(self):
         self.sudo("echo hello")
 
+    @task
+    def set_satchel_value(self, satchel, key, value):
+        """
+        Sets a key/value pair in a satchel's local renderer.
+        """
+        satchel = self.get_satchel(satchel)
+        r = satchel.local_renderer
+        setattr(r.env, key, value)
+        print('Set %s=%s in satchel %s.' % (key, value, satchel.name))
+        
+    @task
+    def show_satchel_items(self, satchel):
+        satchel = self.get_satchel(satchel)
+        r = satchel.local_renderer
+        for k, v in sorted(r.env.items()):
+            print('%s = %s' % (k, v))
+
 debug = DebugSatchel()
