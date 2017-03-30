@@ -65,10 +65,11 @@ class TarballSatchel(Satchel):
     @property
     def timestamp(self):
         from burlap.common import get_last_modified_timestamp
-        fn = self.env.rsync_source_dir
+        r = self.local_renderer
+        fn = r.env.rsync_source_dir
         if self.verbose:
             print('tarball.fn:', fn)
-        return get_last_modified_timestamp(fn)
+        return get_last_modified_timestamp(fn, ignore=r.env.exclusions)
     
     @task
     def changed(self):
