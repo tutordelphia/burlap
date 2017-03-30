@@ -379,7 +379,7 @@ class ApacheSatchel(ServiceSatchel):
         r = self.local_renderer
         
         clean = int(clean)
-        print('Getting site data for %s...' % self.genv.SITE)
+        self.vprint('Getting site data for %s...' % self.genv.SITE)
         
         self.set_site_specifics(self.genv.SITE)
         #site_data = self.genv.sites[self.genv.SITE]

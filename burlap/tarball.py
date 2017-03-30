@@ -69,7 +69,7 @@ class TarballSatchel(Satchel):
         fn = r.env.rsync_source_dir
         if self.verbose:
             print('tarball.fn:', fn)
-        return get_last_modified_timestamp(fn, ignore=r.env.exclusions)
+        return get_last_modified_timestamp(fn, ignore=[_ for _ in r.env.exclusions if '/' not in _])
     
     @task
     def changed(self):

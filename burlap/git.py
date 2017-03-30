@@ -13,8 +13,7 @@ from __future__ import print_function
 
 import os
 
-from fabric.api import run
-from fabric.api import sudo
+from fabric.api import run, sudo, hide
 from fabric.context_managers import cd
 
 from burlap import Satchel
@@ -313,12 +312,13 @@ class GitCheckerSatchel(Satchel):
     
     @task
     def check(self):
-        print('Checking GIT branch...')
-        branch_name = self._local('git rev-parse --abbrev-ref HEAD', capture=True).strip()
-        if not self.env.branch == branch_name:
-            raise AbortDeployment(
-                'You\'re trying to deploy branch "%s" but the target role "%s" only accepts branch "%s".' \
-                    % (branch_name, self.genv.ROLE, self.env.branch))
+        self.vprint('Checking GIT branch...')
+        with hide('running', 'stdout', 'stderr', 'warnings'):
+            branch_name = self._local('git rev-parse --abbrev-ref HEAD', capture=True).strip()
+            if not self.env.branch == branch_name:
+                raise AbortDeployment(
+                    'You\'re trying to deploy branch "%s" but the target role "%s" only accepts branch "%s".' \
+                        % (branch_name, self.genv.ROLE, self.env.branch))
     
     def record_manifest(self):
         self.check()
@@ -363,10 +363,10 @@ class GitTrackerSatchel(Satchel):
         """
         Retrieves the git commit number of the current head branch.
         """
-        s = str(self.local('git rev-parse HEAD', capture=True))
-        if self.verbose:
-            print('current commit:', s)
-        return s
+        with hide('running', 'stdout', 'stderr', 'warnings'):
+            s = str(self.local('git rev-parse HEAD', capture=True))
+            self.vprint('current commit:', s)
+            return s
     
     def record_manifest(self):
         """

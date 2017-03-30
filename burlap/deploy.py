@@ -1098,7 +1098,7 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
         for func_name, _ in plan_funcs:
             print(success((' '*4)+func_name))
     else:
-        print('Nothing to do!')
+        print(success_str('\nNothing to do!\n'))
         return False
     
     # Execute plan. 
