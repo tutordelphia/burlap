@@ -2283,9 +2283,12 @@ def _put(**kwargs):
     return __put(**kwargs)
 
 def get_rc(k):
-    return env._rc.get(env[ROLE], type(env)()).get(k)
+    if '_rc' in env:
+        return env._rc.get(env[ROLE], type(env)()).get(k)
 
 def set_rc(k, v):
+    if '_rc' not in env:
+        env._rc = type(env)()
     env._rc.setdefault(env[ROLE], type(env)())
     env._rc[env[ROLE]][k] = v
 
