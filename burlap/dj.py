@@ -465,12 +465,12 @@ class DjangoSatchel(Satchel):
         site = site or ALL
         r = self.local_renderer
         prior_database_names = set()
-#         print('iter_unique_databases.begin')
+        #print('iter_unique_databases.begin.site_default:', site)
         for site, site_data in self.iter_sites(site=site, no_secure=True):
-#             print('iter_unique_databases.site:', site)
+            #print('iter_unique_databases.site:', site)
             self.set_db(site=site)
             key = (r.env.db_name, r.env.db_user, r.env.db_host, r.env.db_engine)
-#             print('iter_unique_databases.site:', site, key)
+            #print('iter_unique_databases.site:', site, key)
             if key in prior_database_names:
                 continue
             prior_database_names.add(key)
@@ -561,10 +561,10 @@ class DjangoSatchel(Satchel):
         self.vprint('migrate_apps:', migrate_apps)
         
         # CS 2017-3-29 Don't bypass the iterator. That causes reversion to the global env that could corrupt the generated commands.
-#         databases = list(self.iter_unique_databases(site=site))
+        #databases = list(self.iter_unique_databases(site=site))#TODO:remove
+        databases = self.iter_unique_databases(site=site)
 #         print('databases:', databases)
-
-        for site, site_data in self.iter_unique_databases(site=site):
+        for site, site_data in databases:
             self.vprint('-'*80, file=sys.stderr)
             self.vprint('site:', site, file=sys.stderr)
             
@@ -586,6 +586,7 @@ class DjangoSatchel(Satchel):
                 r.env.migrate_app = app.split('.')[-1]
     #             print('r.env.migrate_app:', r.env.migrate_app)
                 self.vprint('project_dir1:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
+                #print('dj.SITE:', site)
                 r.env.SITE = site
                 with self.settings(warn_only=ignore_errors):
                     r.run_or_local(

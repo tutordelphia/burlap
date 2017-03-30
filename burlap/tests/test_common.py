@@ -16,7 +16,7 @@ from pprint import pprint
 #     pass
 
 from burlap import load_yaml_settings
-from burlap.common import CMD_VAR_REGEX, CMD_ESCAPED_VAR_REGEX, shellquote, all_satchels, Satchel, env, get_satchel, clear_state, save_env
+from burlap.common import CMD_VAR_REGEX, CMD_ESCAPED_VAR_REGEX, shellquote, all_satchels, Satchel, env, get_satchel, clear_state, save_env, env
 from burlap.decorators import task
 from burlap.tests.base import TestCase
 
@@ -200,7 +200,15 @@ set_by_include3: 'some special setting'
         assert len(lst) == 1
 
         # Confirm all non-default keys were removed.
-        assert set(env0) == set(env)
+        assert set(_ for _ in env0 if not _.startswith('_')) == set(_ for _ in env if not _.startswith('_'))
+
+        site_iter = test.iter_sites()
+        site_iter.next()
+        print('env.SITE:', env.SITE)
+        assert env.SITE == 'site1'
+        site_iter.next()
+        print('env.SITE:', env.SITE)
+        assert env.SITE == 'site2'
 
     def test_append(self):
 

@@ -2508,20 +2508,28 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
         verbose = get_verbose()
 
     hostname = get_current_hostname()
+    #print('iter_sites.hostname:', hostname)
 
     target_sites = env.available_sites_by_host.get(hostname, None)
+
+    #print('iter_sites.site:', site)
+    #print('iter_sites.sites:', sites)
+    #print('iter_sites.target_sites:', target_sites)
 
     if sites is None:
         site = site or env.SITE or ALL
         if site == ALL:
             sites = list(six.iteritems(env.sites))
+            #print('iter_sites.sites2a:', sites)
         else:
             sys.stderr.flush()
             sites = [(site, env.sites.get(site))]
+            #print('iter_sites.sites2b:', sites)
 
     renderer = renderer #or render_remote_paths
     env_default = save_env()
-    for site, site_data in sites:
+    for site, site_data in sorted(sites):
+        #print('iter_sites.sites3a:', site)
         if no_secure and site.endswith('_secure'):
             continue
 
@@ -2538,6 +2546,7 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
         env.update(env_default)
         env.update(env.sites.get(site, {}))
         env.SITE = site
+        #print('iter_sites.sites3b:', site)
         if callable(renderer):
             renderer()
         if setter:
@@ -2550,6 +2559,10 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
     # Remove keys that were added, not simply updated.
     added_keys = set(env).difference(env_default)
     for key in added_keys:
+        # Don't remove internally maintained variables, because these are used to cache hostnames
+        # used by iter_sites().
+        if key.startswith('_'):
+            pass
         del env[key]
 
 def pc(*args):
