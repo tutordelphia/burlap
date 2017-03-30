@@ -4,7 +4,6 @@ import os
 import re
 import shutil
 import getpass
-from commands import getstatusoutput
 
 from fabric.contrib.files import append
 from fabric.api import settings
@@ -17,12 +16,6 @@ from burlap.context import set_cwd
 from burlap.deploy import STORAGE_LOCAL
 
 class DjTests(TestCase):
-    
-    def getstatusoutput(self, cmd):
-        print(cmd)
-        status, output = getstatusoutput(cmd)
-        print('output:', output)
-        return status, output
     
     def test_migrate(self):
         
@@ -158,6 +151,7 @@ class MyModel(models.Model):
             #cmd = '{activate_cmd} fab prod deploy.run'.format(activate_cmd=activate_cmd)
             #status, output = self.getstatusoutput('{activate_cmd} fab prod dj.configure:dryrun=1,verbose=1'.format(**kwargs))
             status, output = self.getstatusoutput('{activate_cmd} fab prod deploy.run:yes=1'.format(**kwargs))
+            print('output:', output)
             assert not status
             # The migrations should have been run on both hosts.
             assert ('test-dj-migrate-1] run: export SITE=testsite1; export ROLE=prod; cd /tmp/test_dj_migrate/src; '

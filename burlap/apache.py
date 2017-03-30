@@ -240,8 +240,9 @@ class ApacheSatchel(ServiceSatchel):
         Based on the number of sites per server and the number of resources on the server,
         calculates the optimal number of processes that should be allocated for each WSGI site.
         """
-        #self.env.wsgi_processes = 5
-        self.env.wsgi_server_memory_gb = 8
+        r = self.local_renderer
+        #r.env.wsgi_processes = 5
+        r.env.wsgi_server_memory_gb = 8
         
         verbose = self.verbose
         
@@ -272,18 +273,9 @@ class ApacheSatchel(ServiceSatchel):
         
         # Dynamically set values based on target operating system.
         os_version = self.os_version
-        #apache_specifics = r.genv.apache_specifics[os_version.type][os_version.distro]
         apache_specifics = r.env.specifics[os_version.type][os_version.distro]
         r.env.update(apache_specifics)
-#         r.env.root = apache_specifics.root
-#         r.env.conf = apache_specifics.conf
-#         r.env.sites_available = apache_specifics.sites_available
-#         r.env.sites_enabled = apache_specifics.sites_enabled
-#         r.env.log_dir = apache_specifics.log_dir
-#         r.env.pid = apache_specifics.pid
-        #r.env.ports = r.env.ports_path % self.genv
-        #r.env.ssl_dir = r.env.ssl_path % self.genv
-        
+
         return r
         
 #     def iter_certificates(self):
@@ -524,7 +516,8 @@ class ApacheSatchel(ServiceSatchel):
             self.enable_mod('evasive')
             self.enable_mod('headers')
         elif not self.env.modsecurity_enabled and self.last_manifest.modsecurity_enabled:
-                self.disable_mod('modsecurity')
+            self.disable_mod('modsecurity')
+
     @task
     def configure_modrpaf(self):
         """

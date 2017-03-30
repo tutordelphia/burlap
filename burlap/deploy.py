@@ -23,6 +23,9 @@ from burlap.common import (
     local_or_dryrun,
     put_or_dryrun,
     sudo_or_dryrun,
+    fail_str,
+    success_str,
+    get_current_hostname,
 )
 from burlap.decorators import task_or_dryrun, runs_once
 from burlap import exceptions
@@ -838,20 +841,35 @@ def show_diff(only=None):
     """
     Inspects differences between the last deployment and the current code state.
     """
+    print('-'*80)
+    hostname = get_current_hostname() or env.host_string
+    print('Checking for changes on host %s...' % hostname)
+    changes = False
     for k, (last, current) in iter_thumbprint_differences():
         if only and k.lower() != only.lower():
             continue
         print('Component %s has changed.' % k)
+        changes = True
         last = last.get(k)
         current = current.get(k)
         if isinstance(last, dict) and isinstance(current, dict):
-            for _k in set(last).union(current):
+            for _k in sorted(set(last).union(current)):
                 _a = last.get(_k)
                 _b = current.get(_k)
                 if _a != _b:
-                    print('DIFF: %s =' % _k, _a, _b)
+                    print('DIFF: %s: %s -> %s' % (_k, _a, _b))
         else:
             print('DIFF:', last, current)
+    if changes:
+        print(fail_str('Changes found for host %s.' % hostname))
+    else:
+        print(success_str('No changes found for host %s.' % hostname))
+
+@task_or_dryrun
+def show_last(name):
+    last = get_last_thumbprint()[name.upper()]
+    print('Last thumbprint for %s.' % name)
+    pprint(last)
 
 @task_or_dryrun
 def info():
@@ -886,7 +904,7 @@ def truncate():
         fabric.api.execute(thumbprint, hosts=env.hosts)
 
 @task_or_dryrun
-def thumbprint(name=None, components=None):
+def thumbprint(components=None, set_satchels=None):
     """
     Creates a manifest file for the current host, listing all current settings
     so that a future deployment can use it as a reference to perform an
@@ -896,14 +914,20 @@ def thumbprint(name=None, components=None):
     only_components = components or []
     if isinstance(only_components, basestring):
         only_components = [_.strip() for _ in only_components.split(',') if _.strip()]
-    
-    if name:
-        plan = Plan.load(name=name)
-    else:
-        plan = get_last_plan()
-        print('last plan:', plan)
-        if not plan:
-            plan = Plan.get_or_create_next()
+
+    if set_satchels:
+        from burlap.debug import debug
+        parts = set_satchels.split(';')
+        for part in parts:
+            print('part:', part)
+            satchel_name, _key, _value = part.split('-')
+            print('satchel_name, _key, _value:', satchel_name, _key, _value)
+            debug.set_satchel_value(satchel_name, _key, _value)
+
+    plan = get_last_plan()
+    #print('last plan:', plan)
+    if not plan:
+        plan = Plan.get_or_create_next()
     plan.record_thumbprint(only_components=only_components)
     
 @task_or_dryrun

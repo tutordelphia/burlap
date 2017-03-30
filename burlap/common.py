@@ -2047,13 +2047,18 @@ def get_component_settings(prefixes=None):
     return data
 
 
-def get_last_modified_timestamp(path):
+def get_last_modified_timestamp(path, ignore=None):
     """
     Recursively finds the most recent timestamp in the given directory.
     """
+    ignore = ignore or []
     if not isinstance(path, basestring):
         return
-    cmd = 'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
+    ignore_str = ''
+    if ignore:
+        assert isinstance(ignore, (tuple, list))
+        ignore_str = ' '.join("! -name '%s'" % _ for _ in ignore)
+    cmd = 'find '+path+' ' + ignore_str + ' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
          #'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d " " -f1
     ret = subprocess.check_output(cmd, shell=True)
     # Note, we round now to avoid rounding errors later on where some formatters
@@ -2283,9 +2288,12 @@ def _put(**kwargs):
     return __put(**kwargs)
 
 def get_rc(k):
-    return env._rc.get(env[ROLE], type(env)()).get(k)
+    if '_rc' in env:
+        return env._rc.get(env[ROLE], type(env)()).get(k)
 
 def set_rc(k, v):
+    if '_rc' not in env:
+        env._rc = type(env)()
     env._rc.setdefault(env[ROLE], type(env)())
     env._rc[env[ROLE]][k] = v
 
@@ -2500,22 +2508,16 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
         verbose = get_verbose()
 
     hostname = get_current_hostname()
-#     print('iter_sites.hostname:', hostname)
 
     target_sites = env.available_sites_by_host.get(hostname, None)
-#     print('iter_sites.site:', site)
-#     print('iter_sites.target_sites:', target_sites)
 
     if sites is None:
         site = site or env.SITE or ALL
-#         print('iter_sites.site2:', site)
         if site == ALL:
-#             sites = six.iteritems(env.sites)
             sites = list(six.iteritems(env.sites))
         else:
             sys.stderr.flush()
             sites = [(site, env.sites.get(site))]
-#     print('iter_sites.sites:', sites)
 
     renderer = renderer #or render_remote_paths
     env_default = save_env()
@@ -2541,7 +2543,14 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
         if setter:
             setter(site)
         yield site, site_data
+
+    # Revert modified keys.
     env.update(env_default)
+
+    # Remove keys that were added, not simply updated.
+    added_keys = set(env).difference(env_default)
+    for key in added_keys:
+        del env[key]
 
 def pc(*args):
     """
