@@ -1005,6 +1005,17 @@ class Satchel(object):
             self._os_version_cache[hs] = get_os_version()
         return self._os_version_cache[hs]
 
+    def param_changed_to(self, key, to_value, from_value=None):
+        """
+        Returns true if the given parameter, with name key, has transitioned to the given value.
+        """
+        last_value = getattr(self.last_manifest, key)
+        current_value = self.current_manifest.get(key)
+        if from_value is not None:
+            return last_value == from_value and current_value == to_value
+        else:
+            return last_value != to_value and current_value == to_value
+
     def sleep(self, seconds):
         if self.dryrun:
             cmd = 'sleep %s' % seconds

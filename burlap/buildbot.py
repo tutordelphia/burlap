@@ -60,6 +60,17 @@ class BuildBotSatchel(ServiceSatchel):
         
         self.env.use_ssh_key = False
         
+        self.env.pid_path = 'buildbot/{type}/twistd.pid'
+        
+        self.env.cron_check_enabled = False
+        self.env.cron_check_schedule = '0,30 * * * *'
+        self.env.cron_check_user = 'root'
+        self.env.cron_cron_check_worker_pid_path = None
+        self.env.cron_check_command_template = 'buildbot/check_buildbot.sh.template'
+        self.env.cron_check_command_path = '/usr/local/bin/check_buildbot.sh'
+        self.env.cron_check_crontab_template = 'buildbot/etc_crond_buildbot.template'
+        self.env.cron_check_crontab_path = '/etc/cron.d/buildbot'
+        
         self.env.service_commands = {
 #             START:{
 #                 UBUNTU: 'service apache2 start',
@@ -90,25 +101,37 @@ class BuildBotSatchel(ServiceSatchel):
         self.restart_master(ignore_errors=True)
         self.restart_worker(ignore_errors=True)
     
+    @property
+    def restart_master_command(self):
+        r = self.local_renderer
+        r.env.restart_master_command = r.format(
+            'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
+            '{virtualenv_dir}/bin/buildbot restart master"')
+        return r.env.restart_master_command
+    
     @task
     def restart_master(self, ignore_errors=None):
         ignore_errors = self.ignore_errors if ignore_errors is None else ignore_errors
         r = self.local_renderer
         s = {'warn_only':True} if ignore_errors else {}
         with settings(**s):
-            r.run(
-                'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
-                '{virtualenv_dir}/bin/buildbot restart master"')
-        
+            r.run(self.restart_master_command)
+    
+    @property
+    def restart_worker_command(self):
+        r = self.local_renderer
+        r.env.restart_worker_command = r.format(
+            'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
+            '{virtualenv_dir}/bin/buildbot-worker restart worker"')
+        return r.env.restart_worker_command
+    
     @task
     def restart_worker(self, ignore_errors=None):
         ignore_errors = self.ignore_errors if ignore_errors is None else ignore_errors
         r = self.local_renderer
         s = {'warn_only':True} if ignore_errors else {}
         with settings(**s):
-            r.run(
-                'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
-                '{virtualenv_dir}/bin/buildbot-worker restart worker"')
+            r.run(self.restart_worker_command)
     
     @task
     def start(self):
@@ -333,6 +356,45 @@ class BuildBotSatchel(ServiceSatchel):
             for log in logs:
                 r.env.log = log
                 r.sudo('rm -f {project_dir}/src/buildbot/{name}/{log}')
+
+    @task
+    def install_cron_check(self):
+        r = self.local_renderer
+        
+        # Install script to perform the actual check.
+        assert r.env.cron_check_worker_pid_path, 'Worker PID path not set.'
+        self.restart_master_command
+        self.restart_worker_command
+        self.install_script(
+            local_path=r.env.cron_check_command_template,
+            remote_path=r.env.cron_check_command_path,
+            render=True,
+            extra=r.collect_genv())
+        r.sudo('chown root:root {cron_check_command_path}')
+        
+        # Install crontab to schedule running the script.
+        self.install_script(
+            local_path=r.env.cron_check_crontab_template,
+            remote_path=r.env.cron_check_crontab_path,
+            render=True,
+            extra=r.collect_genv())
+        r.sudo('chown root:root {cron_check_crontab_path}')
+        r.sudo('chmod 600 {cron_check_crontab_path}')
+        r.sudo('service cron restart')
+        
+    @task
+    def uninstall_cron_check(self):
+        r = self.local_renderer
+        r.sudo('rm -f {cron_check_crontab_path}')
+        r.sudo('rm -f {cron_check_command_path}')
+        r.sudo('service cron restart')
+
+    @task
+    def update_cron_check(self):
+        if self.param_changed_to('cron_check_enabled', True):
+            self.install_cron_check()
+        elif self.param_changed_to('cron_check_enabled', False):
+            self.uninstall_cron_check()
     
     @task(precursors=['packager', 'user', 'apache'])
     def configure(self):
