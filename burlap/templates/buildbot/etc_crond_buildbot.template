@@ -1,0 +1,7 @@
+# /etc/cron.d/buildbot: crontab entries for the buildbot checker
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# minute hour day month weekday (0-6, 0 = Sunday) user command
+{{ buildbot_cron_check_schedule }}  {{ buildbot_cron_check_user }} {{ buildbot_cron_check_command_path }}
