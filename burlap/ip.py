@@ -8,9 +8,9 @@ STATIC = 'static'
 DYNAMIC = 'dynamic'
 
 class IPSatchel(ServiceSatchel):
-    
+
     name = 'ip'
-    
+
     post_deploy_command = None
 
     def set_defaults(self):
@@ -54,7 +54,7 @@ class IPSatchel(ServiceSatchel):
         fn = self.render_to_file('ip/ip_interfaces_static.template')
         r = self.local_renderer
         r.put(local_path=fn, remote_path=r.env.interfaces_fn, use_sudo=True)
-    
+
     @task
     def dynamic(self):
         """
@@ -63,7 +63,7 @@ class IPSatchel(ServiceSatchel):
         fn = self.render_to_file('ip/ip_interfaces_dynamic.template')
         r = self.local_renderer
         r.put(local_path=fn, remote_path=r.env.interfaces_fn, use_sudo=True)
-    
+
     @task(precursors=['packager', 'user', 'hostname'])
     def configure(self):
         if self.env.type == STATIC:
@@ -73,5 +73,5 @@ class IPSatchel(ServiceSatchel):
         else:
             raise NotImplementedError('Unknown type: %s' % self.env.type)
         self.restart()
-    
+
 ip = IPSatchel()

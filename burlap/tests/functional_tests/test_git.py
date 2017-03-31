@@ -3,7 +3,7 @@ from __future__ import print_function
 from fabric.contrib.files import exists
 from fabric.context_managers import cd
 from fabric.api import run
- 
+
 from burlap.common import set_verbose
 from burlap.git import git
 from burlap.tests.functional_tests.base import TestCase

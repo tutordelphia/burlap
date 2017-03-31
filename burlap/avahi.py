@@ -5,13 +5,13 @@ from burlap.constants import *
 from burlap.decorators import task
 
 class AvahiSatchel(ServiceSatchel):
-    
+
     name = 'avahi'
 
     def set_defaults(self):
-            
+
         self.env.daemon_name = 'avahi-daemon'
-    
+
         self.env.service_commands = {
             START:{
                 UBUNTU: 'service %s start' % self.env.daemon_name,
@@ -47,7 +47,7 @@ class AvahiSatchel(ServiceSatchel):
             DEBIAN: ['avahi-daemon'],
             UBUNTU: ['avahi-daemon'],
         }
-        
+
     @task(precursors=['packager', 'user'])
     def configure(self):
         if self.env.enabled:
@@ -56,5 +56,5 @@ class AvahiSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-    
+
 AvahiSatchel()

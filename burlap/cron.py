@@ -4,18 +4,18 @@ import sys
 
 from burlap import ServiceSatchel
 from burlap.constants import *
-from burlap.decorators import task 
+from burlap.decorators import task
 
 class CronSatchel(ServiceSatchel):
-    
+
     name = 'cron'
-    
+
     ## Service options.
-    
+
     #ignore_errors = True
-        
+
     post_deploy_command = None
-    
+
     @property
     def packager_system_packages(self):
         return {
@@ -33,7 +33,7 @@ class CronSatchel(ServiceSatchel):
         self.env.stdout_log_template = r'/tmp/chroniker-%(SITE)s-stdout.$(date +\%%d).log'
         self.env.stderr_log_template = r'/tmp/chroniker-%(SITE)s-stderr.$(date +\%%d).log'
         self.env.crontabs_selected = [] # [name]
-           
+
         self.env.service_commands = {
             START:{
                 FEDORA: 'systemctl start crond.service',
@@ -62,43 +62,43 @@ class CronSatchel(ServiceSatchel):
                 UBUNTU: 'service cron status',
             },
         }
-        
+
     def render_paths(self):
         r = self.local_renderer
         r.env.cron_stdout_log = r.format(r.env.stdout_log_template)
         r.env.cron_stderr_log = r.format(r.env.stderr_log_template)
-    
+
     def deploy(self, site=None):
         """
         Writes entire crontab to the host.
         """
         r = self.local_renderer
-        
+
         cron_crontabs = []
 #         if self.verbose:
-#             print('hostname: "%s"' % (hostname,), file=sys.stderr) 
+#             print('hostname: "%s"' % (hostname,), file=sys.stderr)
         for site, site_data in self.iter_sites(site=site):
             if self.verbose:
                 print('site:', site, file=sys.stderr)
                 print('env.crontabs_selected:', self.env.crontabs_selected, file=sys.stderr)
-                
+
             for selected_crontab in self.env.crontabs_selected:
                 lines = self.env.crontabs_available.get(selected_crontab, [])
                 if self.verbose:
                     print('lines:', lines, file=sys.stderr)
                 for line in lines:
                     cron_crontabs.append(r.format(line))
-        
+
         if not cron_crontabs:
             return
-        
+
         cron_crontabs = self.env.crontab_headers + cron_crontabs
         cron_crontabs.append('\n')
         r.env.crontabs_rendered = '\n'.join(cron_crontabs)
         fn = self.write_to_file(content=r.env.crontabs_rendered)
         r.env.put_remote_path = r.put(local_path=fn)
         r.sudo('crontab -u {cron_user} {put_remote_path}')
-    
+
     @task(precursors=['packager', 'user', 'tarball'])
     def configure(self, **kwargs):
         if self.env.enabled:
@@ -109,5 +109,5 @@ class CronSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-        
+
 cron = CronSatchel()
