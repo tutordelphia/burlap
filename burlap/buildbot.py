@@ -7,19 +7,19 @@ from burlap import ServiceSatchel
 from burlap.decorators import task
 
 class BuildBotSatchel(ServiceSatchel):
-    
+
     name = 'buildbot'
-    
+
     #post_deploy_command = 'reload'
-    
+
     required_system_packages = {
         UBUNTU: ['git'],
         (UBUNTU, '14.04'): ['git'],
         (UBUNTU, '16.04'): ['git'],
     }
-    
+
     def set_defaults(self):
-        
+
         self.env.project_dir = '/usr/local/myproject'
         self.env.virtualenv_dir = '/usr/local/myproject/.env'
         self.env.homedir = '/var/lib/{bb_user}'
@@ -27,41 +27,41 @@ class BuildBotSatchel(ServiceSatchel):
         self.env.ssh_dir = '{homedir}/.ssh'
         self.env.ssh_private_key = None # should be a *.pem file
         self.env.ssh_public_key = None # should be a *.pub file
-        
+
         # Must match the main user, or otherwise we get rsync errors.
         self.env.user = 'ubuntu'
         self.env.group = 'ubuntu'
-        
+
         self.env.bb_user = 'buildbot'
         self.env.bb_group = 'buildbot'
-        
+
         self.env.manhole_user = 'admin'
         self.env.manhole_port = 1234
-        
+
         self.env.perms = '777'
-        
+
         self.env.cron_path = '/etc/cron.d/buildbot_boot'
         self.env.cron_user = 'root'
         self.env.cron_group = 'root'
         self.env.cron_perms = '600'
-        
+
         self.env.extra_deploy_paths = ['buildbot/worker/info/', 'buildbot/worker/buildbot.tac']
-        
+
         self.env.delete_deploy_paths = []
 
         self.env.check_ok = True
         self.env.check_ok_paths = {} # {branch: (url, text)}
-        
+
         self.env.rsync_paths = [] # [[from_path, to_path, user, group]]
-        
+
         self.env.enable_apache_site = True
-        
+
         self.env.requirements = 'pip-requirements.txt'
-        
+
         self.env.use_ssh_key = False
-        
+
         self.env.pid_path = 'buildbot/{type}/twistd.pid'
-        
+
         self.env.cron_check_enabled = False
         self.env.cron_check_schedule = '0,30 * * * *'
         self.env.cron_check_user = 'root'
@@ -70,7 +70,7 @@ class BuildBotSatchel(ServiceSatchel):
         self.env.cron_check_command_path = '/usr/local/bin/check_buildbot.sh'
         self.env.cron_check_crontab_template = 'buildbot/etc_crond_buildbot.template'
         self.env.cron_check_crontab_path = '/etc/cron.d/buildbot'
-        
+
         self.env.service_commands = {
 #             START:{
 #                 UBUNTU: 'service apache2 start',
@@ -94,13 +94,13 @@ class BuildBotSatchel(ServiceSatchel):
 #                 UBUNTU: 'service apache2 restart; sleep 3',
 #             },
         }
-    
+
     @task
     def restart(self):
         self.set_permissions()
         self.restart_master(ignore_errors=True)
         self.restart_worker(ignore_errors=True)
-    
+
     @property
     def restart_master_command(self):
         r = self.local_renderer
@@ -108,7 +108,7 @@ class BuildBotSatchel(ServiceSatchel):
             'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
             '{virtualenv_dir}/bin/buildbot restart master"')
         return r.env.restart_master_command
-    
+
     @task
     def restart_master(self, ignore_errors=None):
         ignore_errors = self.ignore_errors if ignore_errors is None else ignore_errors
@@ -116,7 +116,7 @@ class BuildBotSatchel(ServiceSatchel):
         s = {'warn_only':True} if ignore_errors else {}
         with settings(**s):
             r.run(self.restart_master_command)
-    
+
     @property
     def restart_worker_command(self):
         r = self.local_renderer
@@ -124,7 +124,7 @@ class BuildBotSatchel(ServiceSatchel):
             'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
             '{virtualenv_dir}/bin/buildbot-worker restart worker"')
         return r.env.restart_worker_command
-    
+
     @task
     def restart_worker(self, ignore_errors=None):
         ignore_errors = self.ignore_errors if ignore_errors is None else ignore_errors
@@ -132,7 +132,7 @@ class BuildBotSatchel(ServiceSatchel):
         s = {'warn_only':True} if ignore_errors else {}
         with settings(**s):
             r.run(self.restart_worker_command)
-    
+
     @task
     def start(self):
         r = self.local_renderer
@@ -144,7 +144,7 @@ class BuildBotSatchel(ServiceSatchel):
             r.run(
                 'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
                 '{virtualenv_dir}/bin/buildbot-worker start worker"')
-    
+
     @task
     def stop(self):
         r = self.local_renderer
@@ -156,7 +156,7 @@ class BuildBotSatchel(ServiceSatchel):
             r.run(
                 'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
                 '{virtualenv_dir}/bin/buildbot-worker stop worker"')
-    
+
     @task
     def reload(self):
         r = self.local_renderer
@@ -166,7 +166,7 @@ class BuildBotSatchel(ServiceSatchel):
                 'sudo -u {bb_user} bash -c "'
                 'cd {project_dir}/src/buildbot; '
                 '{virtualenv_dir}/bin/buildbot reconfig master"')
-    
+
     @task
     def set_permissions(self):
         r = self.local_renderer
@@ -174,7 +174,7 @@ class BuildBotSatchel(ServiceSatchel):
         #r.sudo('chown -R {bb_user}:{bb_group} {project_dir}/src/buildbot/master')
         #r.sudo('chown -R {bb_user}:{bb_group} {project_dir}/src/buildbot/worker')
         r.sudo('chmod -R {perms} {project_dir}')
-    
+
     @task
     def rsync_paths(self):
         r = self.local_renderer
@@ -193,7 +193,7 @@ class BuildBotSatchel(ServiceSatchel):
             r.put(local_path=r.env.from_path, remote_path=r.env.to_path, use_sudo=True)
             r.sudo('chown {to_user}:{to_group} {to_path_fq}')
             r.sudo('chmod {to_perms} {to_path_fq}')
-    
+
     @task
     def setup_dir(self, clean=0):
         pip = self.get_satchel('pip')
@@ -212,7 +212,7 @@ class BuildBotSatchel(ServiceSatchel):
         #r.sudo('{virtualenv_dir}/bin/pip install -U pip')
         r.sudo('chown -R {user}:{group} {project_dir}')
         r.sudo('chmod -R {perms} {project_dir}')
-    
+
     @task
     def install_cron(self):
         r = self.local_renderer
@@ -226,17 +226,17 @@ class BuildBotSatchel(ServiceSatchel):
         # http://unix.stackexchange.com/questions/91202/cron-does-not-print-to-syslog
         r.sudo('chmod {cron_perms} {cron_path}')
         r.sudo('service cron restart')
-    
+
     @task
     def deploy_code(self):
         r = self.local_renderer
-        
+
         r.sudo('chown -R {user}:{group} {project_dir}')
         r.sudo('chmod -R {perms} {project_dir}')
-        
+
         for delete_path in r.env.delete_deploy_paths:
             r.sudo('rm -Rf %s' % delete_path)
-        
+
         r.local('rsync '
             '--recursive --verbose --perms --times --links '
             '--compress --copy-links '
@@ -273,7 +273,7 @@ class BuildBotSatchel(ServiceSatchel):
         self.rsync_paths()
 
         self.set_permissions()
-    
+
     @task
     def view_log(self, name='master', section='twistd'):
         r = self.local_renderer
@@ -281,31 +281,31 @@ class BuildBotSatchel(ServiceSatchel):
         assert section in ('twistd', 'http')
         r.env.section = section
         r.run('tail -f --lines=100 {project_dir}/src/buildbot/{name}/{section}.log')
-    
+
     @task
     def manhole(self):
         r = self.local_renderer
         r.env.host_string = '127.0.0.1'#self.genv.host_string
         r.run('ssh -p{manhole_port} {manhole_user}@{host_string}')
-    
+
     @task
     def check_ok(self):
         """
         Ensures all tests have passed for this branch.
-        
+
         This should be called before deployment, to prevent accidental deployment of code
         that hasn't passed automated testing.
         """
         import requests
-        
+
         if not self.env.check_ok:
             return
-        
+
         # Find current git branch.
         branch_name = self._local('git rev-parse --abbrev-ref HEAD', capture=True).strip()
-        
+
         check_ok_paths = self.env.check_ok_paths or {}
-        
+
         if branch_name in check_ok_paths:
             check = check_ok_paths[branch_name]
             if 'username' in check:
@@ -315,7 +315,7 @@ class BuildBotSatchel(ServiceSatchel):
             ret = requests.get(check['url'], auth=auth)
             passed = check['text'] in ret.content
             assert passed, 'Check failed: %s' % check['url']
-    
+
     @task
     def setup_user(self):
         user = self.get_satchel('user')
@@ -323,10 +323,10 @@ class BuildBotSatchel(ServiceSatchel):
         user.create(self.env.user, self.env.bb_group)
         group.create(self.env.bb_group)
         user.create(self.env.bb_user, self.env.bb_group)
-    
+
     def deploy_pre_run(self):
         self.check_ok()
-    
+
     @task
     def configure_ssh_key(self):
         r = self.local_renderer
@@ -345,7 +345,7 @@ class BuildBotSatchel(ServiceSatchel):
         else:
             r.sudo('rm -F {private_remote_path}')
             r.sudo('rm -F {public_remote_path}')
-    
+
     @task
     def delete_logs(self):
         r = self.local_renderer
@@ -360,7 +360,7 @@ class BuildBotSatchel(ServiceSatchel):
     @task
     def install_cron_check(self):
         r = self.local_renderer
-        
+
         # Install script to perform the actual check.
         assert r.env.cron_check_worker_pid_path, 'Worker PID path not set.'
         self.restart_master_command
@@ -371,7 +371,7 @@ class BuildBotSatchel(ServiceSatchel):
             render=True,
             extra=r.collect_genv())
         r.sudo('chown root:root {cron_check_command_path}')
-        
+
         # Install crontab to schedule running the script.
         self.install_script(
             local_path=r.env.cron_check_crontab_template,
@@ -381,7 +381,7 @@ class BuildBotSatchel(ServiceSatchel):
         r.sudo('chown root:root {cron_check_crontab_path}')
         r.sudo('chmod 600 {cron_check_crontab_path}')
         r.sudo('service cron restart')
-        
+
     @task
     def uninstall_cron_check(self):
         r = self.local_renderer
@@ -395,31 +395,31 @@ class BuildBotSatchel(ServiceSatchel):
             self.install_cron_check()
         elif self.param_changed_to('cron_check_enabled', False):
             self.uninstall_cron_check()
-    
+
     @task(precursors=['packager', 'user', 'apache'])
     def configure(self):
         packager = self.get_satchel('packager')
 #         umv = self.get_satchel('ubuntumultiverse')
-        
+
         packager.configure()
-        
+
         if self.env.enable_apache_site:
             apache = self.get_satchel('apache')
             apache.enable_mod('proxy_http')
-        
+
         self.setup_user()
-        
+
         #umv.configure()
-        
-        # Initialize base project directory and        
+
+        # Initialize base project directory and
         # Setup Python virtual environment.
         self.setup_dir()
-        
+
         # Copy up our code.
         self.deploy_code()
-        
+
         self.install_cron()
-        
+
         self.configure_ssh_key()
-        
+
 buildbot = BuildBotSatchel()

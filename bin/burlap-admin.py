@@ -29,7 +29,7 @@ ACTIONS = (
 )
 
 if __name__ == "__main__":
-    
+
     parser = argparse.ArgumentParser(
         description=('Initialize and manage a Burlap structured project.'),
     )
@@ -38,9 +38,9 @@ if __name__ == "__main__":
         help='Show version.',
         action='version',
         version=burlap.__version__,
-    )   
+    )
     subparsers = parser.add_subparsers(dest='action')
-    
+
     skel_parser = subparsers.add_parser(
         SKEL,
         help='Creates a skeleton project.')
@@ -68,21 +68,21 @@ if __name__ == "__main__":
         type=str,
         default='',
         help='The default components to enable (e.g. django).')
-        
+
     add_role_parser = subparsers.add_parser(
         ADD_ROLE,
         help='Adds a new role to the project.')
     add_role_parser.add_argument(
         'roles', metavar='roles', type=str, nargs='+',
         help='Names of roles to add.')
-                   
+
     create_satchel_parser = subparsers.add_parser(
         CREATE_SATCHEL,
         help='Adds a new role to the project.')
     create_satchel_parser.add_argument(
         'name', type=str,
         help='Names of the satchel to create.')
-        
+
     args = parser.parse_args()
     if args.action == SKEL:
         project.create_skeleton(**args.__dict__)

@@ -14,21 +14,21 @@ from burlap.context import set_cwd
 CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
 
 class ProjectTests(TestCase):
-    
+
     def setUp(self):
         super(ProjectTests, self).setUp()
-        
+
         set_verbose(True)
         # Ensure we're in burlap's root directory.
         os.chdir(os.path.abspath(os.path.join(CURRENT_DIR, '../..')))
-    
+
     def test_project(self):
         try:
             project_dir = '/tmp/burlap_test_project'#tempfile.mkdtemp()
             if not os.path.isdir(project_dir):
                 os.makedirs(project_dir)
             bin_dir = os.path.split(sys.executable)[0]
-            
+
             with set_cwd(project_dir):
                 cmd = (
                     '. {bin_dir}/activate; '
@@ -38,7 +38,7 @@ class ProjectTests(TestCase):
                 ret = os.system(cmd)
                 print('ret:', ret)
                 assert not ret
-                
+
                 cmd = (
                     '. {bin_dir}/activate; '
                     'burlap-admin.py add-role prod dev'
@@ -70,10 +70,10 @@ class JunkSatchel(Satchel):
     @task
     def configure(self):
         self.show_param()
-        
+
 junk = JunkSatchel()
 """)
-                
+
                 open('roles/all/settings.yaml', 'w').write(yaml.dump(dict(
                     app_name='myproject_site',
                     default_site='myproject',
@@ -81,14 +81,14 @@ junk = JunkSatchel()
                     sites={},
                     junk_param='allvalue',
                 )))
-                
+
                 open('roles/prod/settings.yaml', 'w').write(yaml.dump(dict(
                     inherits='all',
                     hosts=['localhost'],
                     junk_enabled=True,
                     junk_param='prodvalue',
                 )))
-                
+
                 open('roles/dev/settings.yaml', 'w').write(yaml.dump(dict(
                     inherits='all',
                     hosts=['localhost'],
@@ -97,7 +97,7 @@ junk = JunkSatchel()
                 )))
 
                 ## Check prod role.
-                
+
                 os.system('rm -Rf .burlap')
                 cmd = (
                     '. {bin_dir}/activate; '
@@ -139,7 +139,7 @@ junk = JunkSatchel()
                 status, output = getstatusoutput(cmd)
                 print('output:', output)
                 assert 'param:devvalue' in output
-                
+
                 os.system('rm -Rf .burlap')
                 cmd = (
                     '. {bin_dir}/activate; '
@@ -163,15 +163,15 @@ junk = JunkSatchel()
         finally:
             #shutil.rmtree(project_dir)
             pass
-    
-    
+
+
     def test_find_template(self):
         fn = 'burlap/gitignore.template'
         ret = find_template(fn)
         print('ret:', ret)
-        assert ret and ret.endswith(fn) 
-    
-    
+        assert ret and ret.endswith(fn)
+
+
     def test_render_to_string(self):
         ret = render_to_string(
             'postfix/etc_postfix_sasl_sasl_passwd',

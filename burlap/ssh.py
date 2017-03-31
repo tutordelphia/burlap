@@ -21,85 +21,85 @@ from burlap.decorators import task
 #            sshd_config='/etc/ssh/sshd_config'):
 #     """
 #     Apply best practices for ssh security.
-# 
+#
 #     See :func:`burlap.ssh.disable_password_auth` and
 #     :func:`burlap.ssh.disable_root_login` for a detailed
 #     description.
-# 
+#
 #     ::
-# 
+#
 #         import burlap
-# 
+#
 #         # This will apply all hardening techniques.
 #         burlap.ssh.harden()
-# 
+#
 #         # Only apply some of the techniques.
 #         burlap.ssh.harden(allow_password_auth=True)
-# 
+#
 #         # Override the sshd_config file location.
 #         burlap.ssh.harden(sshd_config='/etc/sshd_config')
-# 
+#
 #     """
-# 
+#
 #     if not allow_password_auth:
 #         disable_password_auth(sshd_config=sshd_config)
-# 
+#
 #     if not allow_root_login:
 #         disable_root_login(sshd_config=sshd_config)
-# 
-# 
+#
+#
 # def disable_password_auth(sshd_config='/etc/ssh/sshd_config'):
 #     """
 #     Do not allow users to use passwords to login via ssh.
 #     """
-# 
+#
 #     _update_ssh_setting(sshd_config, 'PasswordAuthentication', 'no')
-# 
-# 
+#
+#
 # def enable_password_auth(sshd_config='/etc/ssh/sshd_config'):
 #     """
 #     Allow users to use passwords to login via ssh.
 #     """
-# 
+#
 #     _update_ssh_setting(sshd_config, 'PasswordAuthentication', 'yes')
-# 
-# 
+#
+#
 # def disable_root_login(sshd_config='/etc/ssh/sshd_config'):
 #     """
 #     Do not allow root to login via ssh.
 #     """
-# 
+#
 #     _update_ssh_setting(sshd_config, 'PermitRootLogin', 'no')
-# 
-# 
+#
+#
 # def enable_root_login(sshd_config='/etc/ssh/sshd_config'):
 #     """
 #     Allow root to login via ssh.
 #     """
-# 
+#
 #     _update_ssh_setting(sshd_config, 'PermitRootLogin', 'yes')
-# 
-# 
+#
+#
 # def _update_ssh_setting(sshd_config, name, value):
 #     """
 #     Update a yes/no setting in the SSH config file
 #     """
-# 
+#
 #     with watch(sshd_config) as config_file:
-# 
+#
 #         with shell_env():
-# 
+#
 #             # First try to change existing setting
 #             sed(sshd_config,
 #                 r'^(\s*#\s*)?%s\s+(yes|no)' % name,
 #                 '%s %s' % (name, value),
 #                 use_sudo=True)
-# 
+#
 #             # Then append setting if it's still missing
 #             _append(sshd_config,
 #                     '%s %s' % (name, value),
 #                     use_sudo=True)
-# 
+#
 #     if config_file.changed and is_running('ssh'):
 #         restart('ssh')
 
@@ -114,7 +114,7 @@ from burlap.decorators import task
 class SSHNiceSatchel(Satchel):
 
     name = 'sshnice'
-    
+
     @property
     def packager_system_packages(self):
         return {
@@ -122,12 +122,12 @@ class SSHNiceSatchel(Satchel):
             UBUNTU: ['cron'],
             DEBIAN: ['cron'],
         }
-    
+
     def set_defaults(self):
         self.env.enabled = False
         self.env.cron_script_path = '/etc/cron.d/sshnice'
         self.env.cron_perms = '600'
-    
+
     @task(precursors=['packager'])
     def configure(self):
         r = self.local_renderer

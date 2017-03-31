@@ -24,7 +24,7 @@ def get_current(name):
     name = name.strip().lower()
     func = common.manifest_recorder[name]
     return func()
-    
+
 @task_or_dryrun
 @runs_once
 def get_last(name):
@@ -35,7 +35,7 @@ def get_last(name):
         if name in last_thumbprint:
             return last_thumbprint.get(name, type(env)())
     return type(env)()
-    
+
 @task_or_dryrun
 @runs_once
 def changed(name):

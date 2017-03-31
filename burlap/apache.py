@@ -6,35 +6,35 @@ import sys
 from burlap import ServiceSatchel
 from burlap.constants import *
 from burlap.decorators import task
-    
+
 class ApacheSatchel(ServiceSatchel):
-    
+
     name = 'apache'
-    
+
     post_deploy_command = 'reload'
-    
+
     templates = [
         '{site_template}',
     ]
-    
+
     @property
     def packager_system_packages(self):
-        
+
         mod_lst = []
-        
+
         if self.env.modevasive_enabled:
             mod_lst.append('libapache2-mod-evasive')
-            
+
         if self.env.modsecurity_enabled:
             mod_lst.append('libapache2-modsecurity')
-            
+
         if self.env.modrpaf_enabled:
             mod_lst.append('libapache2-mod-rpaf')
-            
+
         if self.env.visitors_enabled:
             #TODO:fix? package removed in Ubuntu 16?
             mod_lst.append('visitors')
-            
+
         return {
             FEDORA: ['httpd'] + mod_lst,
             UBUNTU: ['apache2'] + mod_lst,
@@ -45,9 +45,9 @@ class ApacheSatchel(ServiceSatchel):
             (UBUNTU, '16.04'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'] + mod_lst,
             (UBUNTU, '16.10'): ['apache2', 'libapache2-mod-wsgi', 'apache2-utils'] + mod_lst,
         }
-    
+
     def set_defaults(self):
-        
+
         self.env.service_commands = {
 #             START:{
 #                 UBUNTU: 'service network-manager start',
@@ -98,55 +98,55 @@ class ApacheSatchel(ServiceSatchel):
                 UBUNTU: 'service apache2 restart; sleep 3',
             },
         }
-        
+
         # An Apache-conf file and filename friendly string that uniquely identifies
         # your web application.
         self.env.application_name = None
-        
+
         # The Jinja-formatted template file used to render site configurations.
         self.env.site_template = 'apache/apache_site.template.conf'
-        
+
         self.env.error_log = '/var/log/apache2/error.log'
         self.env.log_level = 'warn'
-        
+
         self.env.auth_basic = False
         self.env.auth_basic_authuserfile = '{apache_docroot}/.htpasswd_{apache_site}'
         self.env.auth_basic_users = [] # [(user,password)]
-        
+
         # If true, activates a rewrite rule that causes domain.com to redirect
         # to www.domain.com.
         self.env.enforce_subdomain = True
-        
+
         self.env.ssl = True
         self.env.ssl_chmod = 440
-        
+
         # A list of path patterns that should have HTTPS enforced.
         self.env.ssl_secure_paths_enforce = True
         self.env.ssl_secure_paths = ['/admin/(.*)']
-        
+
         self.env.web_user = 'www-data'
         self.env.web_group = 'www-data'
         self.env.wsgi_user = 'www-data'
         self.env.wsgi_group = 'www-data'
         self.env.chmod = 775
-        
+
         self.env.mods_enabled = ['rewrite', 'wsgi', 'ssl']
-        
+
         # The value of the Apache's ServerName field. Usually should be set
         # to the domain.
         self.env.server_name = None
-        
+
         self.env.server_aliases_template = ''
-        
+
         self.env.docroot = '/usr/local/{apache_application_name}'
         self.env.ports_path = '{apache_root}/ports.conf'
         self.env.ssl_path = '{apache_root}/ssl'
-        
+
         self.env.domain_with_sub_template = ''
         self.env.domain_without_sub_template = ''
         self.env.domain_with_sub = None
         self.env.domain_without_sub = None
-        
+
         self.env.wsgi_enabled = False
         self.env.wsgi_template = 'django/django.template.wsgi'
         self.env.wsgi_python_path = None
@@ -154,16 +154,16 @@ class ApacheSatchel(ServiceSatchel):
         self.env.wsgi_server_memory_gb = 8
         self.env.wsgi_processes = 5
         self.env.wsgi_threads = 15
-        
+
         self.env.domain_redirect_templates = [] # [(wrong_domain,right_domain)]
         self.env.domain_redirects = [] # [(wrong_domain,right_domain)]
-        
+
         self.env.extra_rewrite_rules = ''
-        
+
         self.env.modrpaf_enabled = False
-        
+
         self.env.visitors_enabled = False
-        
+
         self.env.modevasive_enabled = False
         self.env.modevasive_DOSEmailNotify = 'admin@localhost'
         self.env.modevasive_DOSPageInterval = 1 # seconds
@@ -171,14 +171,14 @@ class ApacheSatchel(ServiceSatchel):
         self.env.modevasive_DOSSiteCount = 50
         self.env.modevasive_DOSSiteInterval = 1 # seconds
         self.env.modevasive_DOSBlockingPeriod = 10 # seconds
-        
+
         self.env.modsecurity_enabled = False
         self.env.modsecurity_download_url = 'https://github.com/SpiderLabs/owasp-modsecurity-crs/tarball/master'
-        
+
         # OS specific default settings.
         self.env.specifics = type(self.genv)()
         self.env.specifics[LINUX] = type(self.genv)()
-        
+
         self.env.specifics[LINUX][FEDORA] = type(self.genv)()
         self.env.specifics[LINUX][FEDORA].root = '/etc/httpd'
         self.env.specifics[LINUX][FEDORA].conf = '/etc/httpd/conf/httpd.conf'
@@ -186,7 +186,7 @@ class ApacheSatchel(ServiceSatchel):
         self.env.specifics[LINUX][FEDORA].sites_enabled = '/etc/httpd/sites-enabled'
         self.env.specifics[LINUX][FEDORA].log_dir = '/var/log/httpd'
         self.env.specifics[LINUX][FEDORA].pid = '/var/run/httpd/httpd.pid'
-        
+
         self.env.specifics[LINUX][UBUNTU] = type(self.genv)()
         self.env.specifics[LINUX][UBUNTU].root = '/etc/apache2'
         self.env.specifics[LINUX][UBUNTU].conf = '/etc/apache2/httpd.conf'
@@ -194,10 +194,10 @@ class ApacheSatchel(ServiceSatchel):
         self.env.specifics[LINUX][UBUNTU].sites_enabled = '/etc/apache2/sites-enabled'
         self.env.specifics[LINUX][UBUNTU].log_dir = '/var/log/apache2'
         self.env.specifics[LINUX][UBUNTU].pid = '/var/run/apache2/apache2.pid'
-        
+
         self.env.ssl_certificates = None
         self.env.ssl_certificates_templates = []
-        
+
         self.env.ignored_template_variables = [
             'APACHE_LOG_DIR',
             'GLOBAL',
@@ -205,35 +205,35 @@ class ApacheSatchel(ServiceSatchel):
             'SCRIPT_FILENAME',
             'GROUP',
         ]
-        
+
         # The local and remote relative directory where the SSL certificates are stored.
         self.env.ssl_dir_local = 'ssl'
-        
+
         # An optional segment to insert into the domain, customizable by role.
         # Useful for easily keying domain-local.com/domain-dev.com/domain-staging.com.
         self.env.locale = ''
-        
+
         self.env.sync_sets = {} # {name:[dict(local_path='static/', remote_path='$AWS_BUCKET:/')]}
-        
+
         # This will be appended to the custom Apache configuration file.
         self.env.httpd_conf_append = []
-    
+
     @task
     def enable_mod(self, name):
         self.sudo('a2enmod %s' % name)
-    
+
     @task
     def disable_mod(self, name):
         self.sudo('a2dismod %s' % name)
-        
+
     @task
     def enable_site(self, name):
         self.sudo('a2ensite %s' % name)
-        
+
     @task
     def disable_site(self, name):
         self.sudo('a2dissite %s' % name)
-    
+
     @task
     def optimize_wsgi_processes(self):
         """
@@ -243,16 +243,16 @@ class ApacheSatchel(ServiceSatchel):
         r = self.local_renderer
         #r.env.wsgi_processes = 5
         r.env.wsgi_server_memory_gb = 8
-        
+
         verbose = self.verbose
-        
+
         all_sites = list(self.iter_sites(site=ALL, setter=self.set_site_specifics))
-        
+
         #(current_mem/current_sites)/current_process = ()
         #(16/x)/(8/16) = y
         #(16/x)*(16/8) = y
         #(16*16)/(num_sites*8) = y
-        
+
 #     @task
 #     def visitors(self, force=0):
 #         """
@@ -263,21 +263,21 @@ class ApacheSatchel(ServiceSatchel):
 #             assert ApacheVisitors.name.upper() in self.genv.services or ApacheVisitors.name.lower() in self.genv.services, \
 #                 'Visitors has not been configured for this host.'
 #         self.run('visitors -o text /var/log/apache2/%(apache_application_name)s-access.log* | less' % self.genv)
-    
+
     def create_local_renderer(self):
         """
         Instantiates a new local renderer.
         Override this to do any additional initialization.
         """
         r = super(ApacheSatchel, self).create_local_renderer()
-        
+
         # Dynamically set values based on target operating system.
         os_version = self.os_version
         apache_specifics = r.env.specifics[os_version.type][os_version.distro]
         r.env.update(apache_specifics)
 
         return r
-        
+
 #     def iter_certificates(self):
 #         if self.verbose:
 #             print('apache_ssl_domain:', self.genv.apache_ssl_domain, file=sys.stderr)
@@ -289,21 +289,21 @@ class ApacheSatchel(ServiceSatchel):
 #             assert local_cert_file, 'Unable to find local certificate file: %s' % (_local_cert_file,)
 #             remote_cert_file = os.path.join(self.genv.apache_ssl_dir, cert_file_template % self.genv)
 #             yield cert_type, local_cert_file, remote_cert_file
-#     
+#
 #     @task
 #     def install_ssl(self, site=ALL):
 #         from burlap.common import iter_sites
 #         verbose = self.verbose
-#         
+#
 #         for site, site_data in iter_sites(site=site, setter=self.set_site_specifics):
-#             
+#
 #             site_secure = site+'_secure'
 #             if site_secure not in self.genv.sites:
 #                 continue
 #             self.set_site_specifics(site_secure)
-#         
+#
 #             self.sudo_or_dryrun('mkdir -p %(apache_ssl_dir)s' % self.genv)
-#             
+#
 #             if self.genv.apache_ssl:
 #                 for cert_type, local_cert_file, remote_cert_file in self.iter_certificates():
 #                     if verbose:
@@ -313,37 +313,37 @@ class ApacheSatchel(ServiceSatchel):
 #                         local_path=local_cert_file,
 #                         remote_path=remote_cert_file,
 #                         use_sudo=True)
-#         
+#
 #         self.sudo_or_dryrun('mkdir -p %(apache_ssl_dir)s' % self.genv)
 #         self.sudo_or_dryrun('chown -R %(apache_web_user)s:%(apache_web_group)s %(apache_ssl_dir)s' % self.genv)
 #         self.sudo_or_dryrun('chmod -R %(apache_ssl_chmod)s %(apache_ssl_dir)s' % self.genv)
-    
+
     @task
     def install_auth_basic_user_file(self, site=None):
         """
         Installs users for basic httpd auth.
-        """        
+        """
         r = self.local_renderer
-                
+
         hostname = self.current_hostname
-        
+
         target_sites = self.genv.available_sites_by_host.get(hostname, None)
-        
+
         for site, site_data in self.iter_sites(site=site, setter=self.set_site_specifics):
             if self.verbose:
                 print('~'*80, file=sys.stderr)
                 print('Site:', site, file=sys.stderr)
                 print('env.apache_auth_basic:', r.env.auth_basic, file=sys.stderr)
-            
+
             # Only load site configurations that are allowed for this host.
             if target_sites is not None:
                 assert isinstance(target_sites, (tuple, list))
                 if site not in target_sites:
                     continue
-            
+
             if not r.env.auth_basic:
                 continue
-            
+
             assert r.env.auth_basic_users, 'No apache auth users specified.'
             for username, password in r.env.auth_basic_users:
                 r.env.auth_basic_username = username
@@ -352,11 +352,11 @@ class ApacheSatchel(ServiceSatchel):
                     r.sudo('htpasswd -b {auth_basic_authuserfile} {auth_basic_username} {auth_basic_password}')
                 else:
                     r.sudo('htpasswd -b -c {auth_basic_authuserfile} {auth_basic_username} {auth_basic_password}')
-    
+
     @task
     def install_auth_basic_user_file_all(self):
         self.install_auth_basic_user_file(site='all')
-    
+
     @task
     def view_error_log(self):
         self.run('tail -f {apache_error_log}')
@@ -366,29 +366,29 @@ class ApacheSatchel(ServiceSatchel):
         """
         Uploads select media to an Apache accessible directory.
         """
-        
+
         #from burlap.dj import render_remote_paths
-        
+
         # Ensure a site is selected.
         self.genv.SITE = self.genv.SITE or self.genv.default_site
-        
+
 #         apache.get_apache_settings()
-        
+
         #render_remote_paths()
-        
+
         r = self.local_renderer
-        
+
         clean = int(clean)
         self.vprint('Getting site data for %s...' % self.genv.SITE)
-        
+
         self.set_site_specifics(self.genv.SITE)
         #site_data = self.genv.sites[self.genv.SITE]
         #self.genv.update(site_data)
-        
+
         sync_sets = r.env.sync_sets
         if sync_set:
             sync_sets = [sync_set]
-        
+
         ret_paths = []
         for sync_set in sync_sets:
             for paths in r.env.sync_sets[sync_set]:
@@ -396,18 +396,18 @@ class ApacheSatchel(ServiceSatchel):
                 r.env.sync_local_path = os.path.abspath(paths['local_path'] % self.genv)
                 if paths['local_path'].endswith('/') and not r.env.sync_local_path.endswith('/'):
                     r.env.sync_local_path += '/'
-                    
+
                 if iter_local_paths:
                     ret_paths.append(r.env.sync_local_path)
                     continue
-                    
+
                 r.env.sync_remote_path = paths['remote_path'] % self.genv
-                
+
                 if clean:
-                    r.sudo('rm -Rf {apache_sync_remote_path}') 
-                
+                    r.sudo('rm -Rf {apache_sync_remote_path}')
+
                 print('Syncing %s to %s...' % (r.env.sync_local_path, r.env.sync_remote_path))
-                
+
                 r.env.tmp_chmod = paths.get('chmod', r.env.chmod)
                 #with settings(warn_only=True):
                 r.sudo('mkdir -p {apache_sync_remote_path}')
@@ -415,7 +415,7 @@ class ApacheSatchel(ServiceSatchel):
                 r.local('rsync -rvz --progress --recursive --no-p --no-g '
                     '--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" {apache_sync_local_path} {user}@{host_string}:{apache_sync_remote_path}')
                 r.sudo('chown -R {apache_web_user}:{apache_web_group} {apache_sync_remote_path}')
-                
+
         if iter_local_paths:
             return ret_paths
 
@@ -449,28 +449,28 @@ class ApacheSatchel(ServiceSatchel):
     def configure_modevasive(self):
         """
         Installs the mod-evasive Apache module for combating DDOS attacks.
-        
+
         https://www.linode.com/docs/websites/apache-tips-and-tricks/modevasive-on-apache
         """
         r = self.local_renderer
         if r.env.modevasive_enabled:
             self.install_packages()
-                
+
             # Write conf for each Ubuntu version since they don't conflict.
             fn = r.render_to_file('apache/apache_modevasive.template.conf')
-            
+
             # Ubuntu 12.04
             r.put(
                 local_path=fn,
                 remote_path='/etc/apache2/mods-available/mod-evasive.conf',
                 use_sudo=True)
-            
+
             # Ubuntu 14.04
             r.put(
                 local_path=fn,
                 remote_path='/etc/apache2/mods-available/evasive.conf',
                 use_sudo=True)
-            
+
             self.enable_mod('evasive')
         else:
 #             print('self.last_manifest:', self.last_manifest)
@@ -483,18 +483,18 @@ class ApacheSatchel(ServiceSatchel):
     def configure_modsecurity(self):
         """
         Installs the mod-security Apache module.
-        
+
         https://www.modsecurity.org
         """
         r = self.local_renderer
         if r.env.modsecurity_enabled and not self.last_manifest.modsecurity_enabled:
-            
+
             self.install_packages()
-            
+
             # Write modsecurity.conf.
             fn = self.render_to_file('apache/apache_modsecurity.template.conf')
             r.put(local_path=fn, remote_path='/etc/modsecurity/modsecurity.conf', use_sudo=True)
-            
+
             # Write OWASP rules.
             r.env.modsecurity_download_filename = '/tmp/owasp-modsecurity-crs.tar.gz'
             r.sudo('cd /tmp; wget --output-document={apache_modsecurity_download_filename} {apache_modsecurity_download_url}')
@@ -504,15 +504,15 @@ class ApacheSatchel(ServiceSatchel):
             r.sudo('cd /tmp; tar -zxvf %(apache_modsecurity_download_filename)s' % self.genv)
             r.sudo('cd /tmp; cp -R %(apache_modsecurity_download_top)s/* /etc/modsecurity/' % self.genv)
             r.sudo('mv /etc/modsecurity/modsecurity_crs_10_setup.conf.example  /etc/modsecurity/modsecurity_crs_10_setup.conf')
-            
+
             r.sudo('rm -f /etc/modsecurity/activated_rules/*')
             r.sudo('cd /etc/modsecurity/base_rules; '
                 'for f in * ; do ln -s /etc/modsecurity/base_rules/$f /etc/modsecurity/activated_rules/$f ; done')
             r.sudo('cd /etc/modsecurity/optional_rules; '
                 'for f in * ; do ln -s /etc/modsecurity/optional_rules/$f /etc/modsecurity/activated_rules/$f ; done')
-            
+
             r.env.httpd_conf_append.append('Include "/etc/modsecurity/activated_rules/*.conf"')
-            
+
             self.enable_mod('evasive')
             self.enable_mod('headers')
         elif not self.env.modsecurity_enabled and self.last_manifest.modsecurity_enabled:
@@ -522,7 +522,7 @@ class ApacheSatchel(ServiceSatchel):
     def configure_modrpaf(self):
         """
         Installs the mod-rpaf Apache module.
-        
+
         https://github.com/gnif/mod_rpaf
         """
         r = self.local_renderer
@@ -532,25 +532,25 @@ class ApacheSatchel(ServiceSatchel):
         else:
             if self.last_manifest.modrpaf_enabled:
                 self.disable_mod('mod_rpaf')
-                
+
     @task
     def configure_site(self, full=1, site=None, delete_old=0):
         """
         Configures Apache to host one or more websites.
         """
         from burlap import service
-        
+
         r = self.local_renderer
-        
+
         print('Configuring Apache...', file=sys.stderr)
-        
+
         site = site or self.genv.SITE
-        
+
         if int(delete_old) and site == ALL:
             # Delete all existing enabled and available sites.
             r.sudo('rm -f {sites_available}/*')
             r.sudo('rm -f {sites_enabled}/*')
-        
+
         for site, site_data in self.iter_sites(site=site, setter=self.set_site_specifics):
             r = self.local_renderer
 
@@ -559,10 +559,10 @@ class ApacheSatchel(ServiceSatchel):
                 print('-'*80, file=sys.stderr)
                 print('Site:', site, file=sys.stderr)
                 print('-'*80, file=sys.stderr)
-            
+
             r.env.server_name = r.format(r.env.domain_template)
             print('r.env.server_name:', r.env.server_name)
-            
+
             # Write WSGI template
             if r.env.wsgi_enabled:
                 r.pc('Writing WSGI template for site %s...' % site)
@@ -571,7 +571,7 @@ class ApacheSatchel(ServiceSatchel):
                 r.env.wsgi_dir = r.env.remote_dir = os.path.split(r.env.wsgi_scriptalias)[0]
                 r.sudo('mkdir -p {remote_dir}')
                 r.put(local_path=fn, remote_path=r.env.wsgi_scriptalias, use_sudo=True)
-            
+
             # Write site configuration.
             r.pc('Writing site configuration for site %s...' % site)
             from functools import partial
@@ -585,25 +585,25 @@ class ApacheSatchel(ServiceSatchel):
             r.env.site_conf = site+'.conf'
             r.env.site_conf_fqfn = os.path.join(r.env.sites_available, r.env.site_conf)
             r.put(local_path=fn, remote_path=r.env.site_conf_fqfn, use_sudo=True)
-            
+
             self.enable_site(site)
-            
+
             self.clear_local_renderer()
-        
+
         # Enable modules.
         for mod_name in r.env.mods_enabled:
             with self.settings(warn_only=True):
                 self.enable_mod(mod_name)
-            
+
         if int(full):
             # Write master Apache configuration file.
             fn = self.render_to_file('apache/apache_httpd.template.conf')
             r.put(local_path=fn, remote_path=r.env.conf, use_sudo=True)
-            
+
             # Write Apache listening ports configuration.
             fn = self.render_to_file('apache/apache_ports.template.conf')
             r.put(local_path=fn, remote_path=r.env.ports_path, use_sudo=True)
-            
+
         r.sudo('chown -R {apache_web_user}:{apache_web_group} {apache_root}')
 
     @task(precursors=['packager', 'user', 'hostname', 'ip'])
@@ -615,5 +615,5 @@ class ApacheSatchel(ServiceSatchel):
         self.install_auth_basic_user_file(site=ALL)
         self.sync_media()
         #self.install_ssl(site=ALL)
-            
+
 apache = ApacheSatchel()

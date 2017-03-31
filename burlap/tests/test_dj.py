@@ -16,16 +16,16 @@ from burlap.context import set_cwd
 from burlap.deploy import STORAGE_LOCAL
 
 class DjTests(TestCase):
-    
+
     def test_migrate(self):
-        
+
         burlap_dir = os.path.abspath(os.path.split(burlap.__file__)[0])
-        
+
         d = '/tmp/test_dj_migrate'
         if os.path.isdir(d):
             shutil.rmtree(d)
         os.makedirs(d)
-        
+
         activate_cmd = '. {d}/.env/bin/activate;'.format(d=d)
         with set_cwd(d):
             project.create_skeleton(
@@ -33,10 +33,10 @@ class DjTests(TestCase):
                 roles='prod',
                 components='dj',
             )
-            
+
             assert not os.path.isfile('/tmp/test_dj_migrate/plans/prod/000/thumbprints/test-dj-migrate-1')
             assert not os.path.isfile('/tmp/test_dj_migrate/plans/prod/000/thumbprints/test-dj-migrate-2')
-            
+
             # Simulate multiple remote hosts my creating aliases of localhost.
             # Note, for testing this on your localhost for a user without passwordless sudo,
             # you may have to run: `sudo chmod 777 /etc/hosts`
@@ -50,9 +50,9 @@ class DjTests(TestCase):
                     ret = append(filename='/etc/hosts', text='127.0.0.1 test-dj-migrate-1\n127.0.0.1 test-dj-migrate-2', use_sudo=use_sudo)
                     if ret is None:
                         break
-            
+
             os.system('ln -s %s %s/' % (burlap_dir, d))
-            
+
             project.update_settings({
                     'plan_storage': STORAGE_LOCAL,
                     'plan_data_dir': os.path.join(d, 'plans'),
@@ -73,7 +73,7 @@ class DjTests(TestCase):
                     },
                 },
                 role='all')
-                
+
             project.update_settings({
                     'hosts': ['test-dj-migrate-1', 'test-dj-migrate-2'],
                     'available_sites_by_host':{
@@ -94,7 +94,7 @@ class DjTests(TestCase):
                     },
                 },
                 role='prod')
-            
+
             # Migrate built-in apps.
             kwargs = dict(
                 activate_cmd=activate_cmd,
@@ -106,7 +106,7 @@ class DjTests(TestCase):
             assert '[test-dj-migrate-2] run:' in output
             assert os.path.isfile('/tmp/test_dj_migrate/plans/prod/000/thumbprints/test-dj-migrate-1')
             assert os.path.isfile('/tmp/test_dj_migrate/plans/prod/000/thumbprints/test-dj-migrate-2')
-            
+
             # Create custom app.
             kwargs = dict(
                 src_dir='/tmp/test_dj_migrate/src',
@@ -114,7 +114,7 @@ class DjTests(TestCase):
             )
             status, output = self.getstatusoutput('{activate_cmd} cd {src_dir}; python manage.py startapp myapp'.format(**kwargs))
             assert os.path.isdir('/tmp/test_dj_migrate/src/myapp')
-            
+
             # Add myapp to installed apps list.
             settings_fn = '/tmp/test_dj_migrate/src/test_dj_migrate/settings.py'
             with open(settings_fn) as fin:
@@ -125,7 +125,7 @@ class DjTests(TestCase):
                 fout.write(settings_text)
             status, output = self.getstatusoutput('cd {src_dir}/test_dj_migrate; rm -f *.pyc'.format(**kwargs))
             assert not status
-            
+
             # Populate model.
             open('/tmp/test_dj_migrate/src/myapp/models.py', 'w').write('''
 from __future__ import unicode_literals

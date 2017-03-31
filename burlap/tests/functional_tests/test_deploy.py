@@ -25,7 +25,7 @@ class DeployTests(TestCase):
         try:
             set_verbose(True)
             assert 'apache_specifics' in env
-            
+
             print('all_satchels:', sorted(all_satchels.keys()))
             assert len(all_satchels.keys()) == 55
             print('env.host_string:', env.host_string)
@@ -33,7 +33,7 @@ class DeployTests(TestCase):
             print('env.user:', env.user)
             assert env.host_string
             assert env.user
-            
+
             # Delete any old tmp files
             PROJECT_DIR = '/tmp/burlap_test'
             if os.path.exists(PROJECT_DIR):
@@ -41,14 +41,14 @@ class DeployTests(TestCase):
                 os.system('rm -Rf %s/*' % PROJECT_DIR)
             else:
                 os.makedirs(PROJECT_DIR)
-         
+
             # Create our test virtualenv.
             PYTHON_EXE = os.path.split(sys.executable)[-1]
             VIRTUALENV_DIR = os.path.join(PROJECT_DIR, '.env')
             BURLAP_DIR = os.path.abspath(os.path.join(BASE_DIR, 'burlap'))
             BURLAP_BIN = os.path.abspath(os.path.join(BASE_DIR, 'bin/burlap-admin.py'))
             SITE_PACKAGES = os.path.join(VIRTUALENV_DIR, 'lib/%s/site-packages' % PYTHON_EXE)
-         
+
             # Initialize project.
             kwargs = dict(
                 project_dir=PROJECT_DIR,
@@ -61,11 +61,11 @@ class DeployTests(TestCase):
                 _status, _output = self.bash('{burlap_bin} skel multitenant'.format(**kwargs))
                 print('_status, _output:', _status, _output)
                 assert not _status
-             
+
                 # Symlink burlap.
                 _status, _output = self.bash('ln -s %s %s' % (BURLAP_DIR, SITE_PACKAGES))
                 #assert not _status
-                
+
                 # Add production role.
                 VIRTUALENV_ACTIVATE = '. %s/bin/activate' % VIRTUALENV_DIR
                 kwargs = dict(
@@ -74,10 +74,10 @@ class DeployTests(TestCase):
                     burlap_bin=BURLAP_BIN,
                 )
                 assert os.path.isdir(PROJECT_DIR)
-                
+
                 _status, _output = self.bash('{burlap_bin} add-role prod'.format(**kwargs))
                 assert not _status
-                 
+
                 # Test logging in to VM.
                 print('env.host_string:', env.host_string)
                 print('env.user:', env.user)
@@ -96,19 +96,19 @@ class DeployTests(TestCase):
                 )
                 self.bash('ls -lah .')
                 assert os.path.isdir(PROJECT_DIR)
-                
+
                 print('Testing hello world...')
                 _status, _output = self.bash('.env/bin/fab prod:verbose=1 shell:command="echo hello"'.format(**kwargs))
                 print('_status, _output:', _status, _output)
                 assert not _status
                 _status, _output = self.bash('ls -lah .')
                 print('_status, _output:', _status, _output)
-                
+
                 print('Testing ifconfig...')
                 _status, _output = self.bash('.env/bin/fab prod:verbose=1 shell:command="ifconfig"'.format(**kwargs))
                 print('_status, _output:', _status, _output)
                 assert 'inet addr:127.0.0.1' in _output
-                
+
                 # Add services.
                 services = prod_settings.get('services', [])
                 services.extend([
@@ -139,7 +139,7 @@ class DeployTests(TestCase):
                     }
                 })
                 prod_settings.set('pip_requirements', 'pip-requirements.txt')
-                
+
                 # Confirm deployment changes are detected.
                 #from burlap import role_prod as prod
                 prod = load_role_handler('prod')
@@ -187,13 +187,13 @@ class DeployTests(TestCase):
                     ('ubuntumultiverse.configure', None),
                     ('unattendedupgrades.configure', None),
                 ]
-            
+
             # Deploy changes.
-            
+
             # Confirm changes have been cleared.
-            
+
             # Add Django site.
-            
+
         finally:
             # Undo changes to the VM.
             pass
