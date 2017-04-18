@@ -10,16 +10,16 @@ from burlap.constants import *
 from burlap.decorators import task
 
 class MotionSatchel(ServiceSatchel):
-    
+
     name = 'motion'
-    
+
     @property
     def packager_system_packages(self):
         return {
             FEDORA: ['motion'],
             UBUNTU: ['motion'],
         }
-    
+
     def set_defaults(self):
         self.env.notify_enabled = False
         self.env.service_commands = {
@@ -47,10 +47,10 @@ class MotionSatchel(ServiceSatchel):
                 FEDORA: 'systemctl status motion.service',
                 UBUNTU: 'service motion status',
             },
-        }    
-    
+        }
+
     @task(precursors=['packager', 'user'])
     def configure(self):
         pass
-    
+
 motion = MotionSatchel()

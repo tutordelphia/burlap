@@ -27,7 +27,7 @@ def clear_runs_once(func):
             pass
         assert not hasattr(func, 'return_value'), 'Unable to clear runs_once on %s' % func
 
-class TestCase(unittest.TestCase):    
+class TestCase(unittest.TestCase):
 
     test_name_fout = sys.stdout
 
@@ -45,21 +45,21 @@ class TestCase(unittest.TestCase):
 
     def get_keep_env_keys(self):
         return list(self.keep_env_keys)
-    
+
     def clear_env(self):
         keep_env_keys = set(self.get_keep_env_keys())
         for k, v in env.items():
             if k in keep_env_keys:
                 continue
             del env[k]
-    
+
     def update_env(self, d):
         keep_env_keys = set(self.get_keep_env_keys())
         for k, v in default_env.items():
             if k in keep_env_keys:
                 continue
             env[k] = v
-    
+
     def setUp(self):
         # Always print the current test name before the test.
         rows, columns = map(int, os.popen('stty size', 'r').read().split())
@@ -68,7 +68,7 @@ class TestCase(unittest.TestCase):
             name=self._testMethodName,
         )
         print(self.test_name_format.format(**kwargs), file=self.test_name_fout)
-        
+
         # Save fabric state.
         self._env = env.copy()
 #         print('before env clear:')
@@ -79,13 +79,13 @@ class TestCase(unittest.TestCase):
         #self.update_env(default_env)
         init_env()
         deploy_init_env()
-        
+
         # Save burlap state.
         self._burlap_state = get_state()
-        
+
         self._dryrun = get_dryrun()
         self._verbose = get_verbose()
-        
+
         # Clear runs_once on legacy runs_once methods.
         from burlap import deploy, manifest
         modules = [deploy, manifest]
@@ -95,12 +95,12 @@ class TestCase(unittest.TestCase):
                 if not callable(func):
                     continue
                 clear_runs_once(func)
-                
+
         # Clear runs_once on our custom runs_once methods.
         from burlap.common import runs_once_methods
         for meth in runs_once_methods:
             clear_runs_once(func)
-        
+
         # Ensure all satchels re-push all their local variables back into the global env.
         for satchel in all_satchels.values():
             satchel.register()
@@ -114,20 +114,20 @@ class TestCase(unittest.TestCase):
         delete_plan_data_dir()
 
         clear_fs_cache()
-        
+
         super(TestCase, self).setUp()
 
     def tearDown(self):
-        
+
         set_dryrun(self._dryrun)
         set_verbose(self._verbose)
-        
+
         # Restore fabric state.
         self.clear_env()
         self.update_env(self._env)
-        
+
         # Restore burlap state.
         clear_state()
         set_state(self._burlap_state)
-        
+
         super(TestCase, self).tearDown()

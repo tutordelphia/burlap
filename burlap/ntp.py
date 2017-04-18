@@ -15,7 +15,7 @@ from burlap.decorators import task
 class NTPClientSatchel(ServiceSatchel):
 
     name = 'ntpclient'
-    
+
     @property
     def packager_system_packages(self):
         return {
@@ -26,7 +26,7 @@ class NTPClientSatchel(ServiceSatchel):
             (UBUNTU, '16.04'): ['ntpdate', 'ntp'],
             DEBIAN: ['ntpdate', 'ntp'],
         }
-    
+
     def set_defaults(self):
         self.env.enabled = True
         self.env.default_server = 'time.nist.gov'
@@ -73,5 +73,5 @@ class NTPClientSatchel(ServiceSatchel):
         else:
             self.disable()
             self.stop()
-    
+
 ntpclient = NTPClientSatchel()

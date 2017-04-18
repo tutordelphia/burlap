@@ -15,19 +15,19 @@ from burlap.context import set_cwd
 from burlap.deploy import STORAGE_LOCAL
 
 class ApacheTests(TestCase):
-    
+
     def test_diff(self):
         """
         Confirm on a multi-site multi-host environment, apache correctly reports change.
         """
-        
+
         burlap_dir = os.path.abspath(os.path.split(burlap.__file__)[0])
-        
+
         d = '/tmp/test_apache_change'
         if os.path.isdir(d):
             shutil.rmtree(d)
         os.makedirs(d)
-        
+
         activate_cmd = '. {d}/.env/bin/activate;'.format(d=d)
         with set_cwd(d):
             project.create_skeleton(
@@ -35,10 +35,10 @@ class ApacheTests(TestCase):
                 roles='prod',
                 components='apache',
             )
-            
+
             assert not os.path.isfile('%s/plans/prod/000/thumbprints/test-dj-migrate-1' % d)
             assert not os.path.isfile('%s/plans/prod/000/thumbprints/test-dj-migrate-2' % d)
-            
+
             # Simulate multiple remote hosts my creating aliases of localhost.
             # Note, for testing this on your localhost for a user without passwordless sudo,
             # you may have to run: `sudo chmod 777 /etc/hosts`
@@ -52,9 +52,9 @@ class ApacheTests(TestCase):
                     ret = append(filename='/etc/hosts', text='127.0.0.1 test-dj-migrate-1\n127.0.0.1 test-dj-migrate-2', use_sudo=use_sudo)
                     if ret is None:
                         break
-            
+
             os.system('ln -s %s %s/' % (burlap_dir, d))
-            
+
             project.update_settings({
                     'plan_storage': STORAGE_LOCAL,
                     'plan_data_dir': os.path.join(d, 'plans'),
@@ -74,7 +74,7 @@ class ApacheTests(TestCase):
                     'apache_wsgi_threads': 0,
                 },
                 role='all')
-                
+
             project.update_settings({
                     'hosts': ['test-dj-migrate-1', 'test-dj-migrate-2'],
                     'available_sites_by_host':{
@@ -95,7 +95,7 @@ class ApacheTests(TestCase):
                     },
                 },
                 role='prod')
-            
+
             # Run a deployment preview.
             kwargs = dict(
                 activate_cmd=activate_cmd,

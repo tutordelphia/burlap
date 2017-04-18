@@ -4,8 +4,8 @@ from burlap.tests.base import TestCase
 from burlap.jirahelper import jirahelper
 
 class JiraHelperTests(TestCase):
-    
-    def test_jirahelper(self):        
+
+    def test_jirahelper(self):
         test_log = """
 38fc750991db7df363322e77e4ce56d81d0f7eee Fixed migration conflict
 5bf53f847bd29eb796f15715a1cbe8a8437d6847 TICKET-3378 - Batch Edit Disassociation

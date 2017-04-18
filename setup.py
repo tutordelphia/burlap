@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import os
 import sys
- 
+
 from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
 
@@ -25,7 +25,7 @@ def read(filename):
         text = fin.read().decode('utf-8')
     #data.decode("utf8", "ignore")
     return text
-    
+
 def get_reqs(fn):
     return [
         _.strip()
@@ -44,7 +44,7 @@ class Tox(TestCommand):
         import tox
         tox.cmdline(self.test_args)
         sys.exit(0)
-        
+
 setup(
     name="burlap",
     version=burlap.__version__,

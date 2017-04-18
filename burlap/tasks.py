@@ -6,11 +6,11 @@ class WrappedCallableTask(_WrappedCallableTask):
     """
     A modified version of Fabric's WrappedCallableTask that sets a global
     dryrun variable from a task call.
-    
+
     The variable is then removed from the function call, allowing all wrapped
     function calls to implicitly use the keyword argument.
     """
-    
+
     def __init__(self, *args, **kwargs):
         real_module = kwargs.pop('real_module', None)
         super(WrappedCallableTask, self).__init__(*args, **kwargs)

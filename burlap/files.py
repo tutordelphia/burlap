@@ -92,12 +92,12 @@ class watch(object):
 class FileSatchel(ContainerSatchel):
     """
     Wrapper around common file operations.
-    
+
     Note, most readonly actions ignore the global dryrun setting.
     """
-    
+
     name = 'file'
-    
+
     @task
     def is_file(self, path, use_sudo=False):
         """
@@ -109,7 +109,7 @@ class FileSatchel(ContainerSatchel):
             func = use_sudo and _sudo or _run
             with self.settings(hide('running', 'warnings'), warn_only=True):
                 return func('[ -f "%(path)s" ]' % locals()).succeeded
-    
+
     @task
     def is_dir(self, path, use_sudo=False):
         """
@@ -121,7 +121,7 @@ class FileSatchel(ContainerSatchel):
             func = use_sudo and _sudo or _run
             with self.settings(hide('running', 'warnings'), warn_only=True):
                 return func('[ -d "%(path)s" ]' % locals()).succeeded
-    
+
     @task
     def is_link(self, path, use_sudo=False):
         """
@@ -130,7 +130,7 @@ class FileSatchel(ContainerSatchel):
         func = use_sudo and _sudo or _run
         with self.settings(hide('running', 'warnings'), warn_only=True):
             return func('[ -L "%(path)s" ]' % locals()).succeeded
-    
+
     @task
     def get_owner(self, path, use_sudo=False):
         """
@@ -146,7 +146,7 @@ class FileSatchel(ContainerSatchel):
                 return func('stat -f %%Su "%(path)s"' % locals())
             else:
                 return result
-    
+
     @task
     def get_group(self, path, use_sudo=False):
         """
@@ -162,12 +162,12 @@ class FileSatchel(ContainerSatchel):
                 return func('stat -f %%Sg "%(path)s"' % locals())
             else:
                 return result
-    
-    
+
+
     def get_mode(self, path, use_sudo=False):
         """
         Get the mode (permissions) of a file or directory.
-    
+
         Returns a string such as ``'0755'``, representing permissions as
         an octal number.
         """
@@ -181,20 +181,20 @@ class FileSatchel(ContainerSatchel):
                 return func('stat -f %%Op "%(path)s"|cut -c 4-6' % locals())
             else:
                 return result
-    
+
     @task
     def umask(self, use_sudo=False):
         """
         Get the user's umask.
-    
+
         Returns a string such as ``'0002'``, representing the user's umask
         as an octal number.
-    
+
         If `use_sudo` is `True`, this function returns root's umask.
         """
         func = use_sudo and run_as_root or self.run
         return func('umask')
-    
+
     @task
     def upload_template(self, filename, destination, context=None, use_jinja=False,
                         template_dir=None, use_sudo=False, backup=True,
@@ -202,24 +202,24 @@ class FileSatchel(ContainerSatchel):
                         mkdir=False, chown=False, user=None):
         """
         Upload a template file.
-    
+
         This is a wrapper around :func:`fabric.contrib.files.upload_template`
         that adds some extra parameters.
-    
+
         If ``mkdir`` is True, then the remote directory will be created, as
         the current user or as ``user`` if specified.
-    
+
         If ``chown`` is True, then it will ensure that the current user (or
         ``user`` if specified) is the owner of the remote file.
         """
-    
+
         if mkdir:
             remote_dir = os.path.dirname(destination)
             if use_sudo:
                 self.sudo('mkdir -p %s' % quote(remote_dir), user=user)
             else:
                 self.run('mkdir -p %s' % quote(remote_dir))
-    
+
         if not self.dryrun:
             _upload_template(
                 filename=filename,
@@ -232,12 +232,12 @@ class FileSatchel(ContainerSatchel):
                 mirror_local_mode=mirror_local_mode,
                 mode=mode,
             )
-    
+
         if chown:
             if user is None:
                 user = self.genv.user
             run_as_root('chown %s: %s' % (user, quote(destination)))
-    
+
     @task
     def md5sum(self, filename, use_sudo=False):
         """
@@ -269,16 +269,16 @@ class FileSatchel(ContainerSatchel):
                     res = func('%(md5)s %(filename)s' % locals())
                 else:
                     abort('No MD5 utility was found on this system.')
-    
+
         if res.succeeded:
             parts = res.split()
             _md5sum = len(parts) > 0 and parts[0] or None
         else:
             warn(res)
             _md5sum = None
-    
+
         return _md5sum
-    
+
     @task
     def uncommented_lines(self, filename, use_sudo=False):
         """
@@ -291,19 +291,19 @@ class FileSatchel(ContainerSatchel):
                     if line and not line.startswith('#')]
         else:
             return []
-    
-    
+
+
     def getmtime(self, path, use_sudo=False):
         """
         Return the time of last modification of path.
         The return value is a number giving the number of seconds since the epoch
-    
+
         Same as :py:func:`os.path.getmtime()`
         """
         func = use_sudo and run_as_root or self.run
         with self.settings(hide('running', 'stdout')):
             return int(func('stat -c %%Y "%(path)s" ' % locals()).strip())
-    
+
     @task
     def copy(self, source, destination, recursive=False, use_sudo=False):
         """
@@ -312,7 +312,7 @@ class FileSatchel(ContainerSatchel):
         func = use_sudo and run_as_root or self.run
         options = '-r ' if recursive else ''
         func('/bin/cp {0}{1} {2}'.format(options, quote(source), quote(destination)))
-    
+
     @task
     def move(self, source, destination, use_sudo=False):
         """
@@ -320,7 +320,7 @@ class FileSatchel(ContainerSatchel):
         """
         func = use_sudo and run_as_root or self.run
         func('/bin/mv {0} {1}'.format(quote(source), quote(destination)))
-    
+
     @task
     def symlink(self, source, destination, use_sudo=False):
         """
@@ -328,7 +328,7 @@ class FileSatchel(ContainerSatchel):
         """
         func = use_sudo and run_as_root or self.run
         func('/bin/ln -s {0} {1}'.format(quote(source), quote(destination)))
-    
+
     @task
     def remove(self, path, recursive=False, use_sudo=False):
         """
@@ -337,12 +337,12 @@ class FileSatchel(ContainerSatchel):
         func = use_sudo and run_as_root or self.run
         options = '-r ' if recursive else ''
         func('/bin/rm {0}{1}'.format(options, quote(path)))
-    
+
     @task
     def upload(self, src, dst=None):
         dst = self.put_or_dryrun(local_path=src, remote_path=dst)
         print('Uploaded to %s' % (dst,))
-        
+
     @task
     def download(self, src, dst=None):
         dst = self.get(local_path=dst, remote_path=src)
@@ -353,35 +353,35 @@ class FileSatchel(ContainerSatchel):
          temp_dir='/tmp'):
         """
         Require a file to exist and have specific contents and properties.
-    
+
         You can provide either:
-    
+
         - *contents*: the required contents of the file::
-    
+
             from fabtools import require
-    
+
             require.file('/tmp/hello.txt', contents='Hello, world')
-    
+
         - *source*: the local path of a file to upload::
-    
+
             from fabtools import require
-    
+
             require.file('/tmp/hello.txt', source='files/hello.txt')
-    
+
         - *url*: the URL of a file to download (*path* is then optional)::
-    
+
             from fabric.api import cd
             from fabtools import require
-    
+
             with cd('tmp'):
                 require.file(url='http://example.com/files/hello.txt')
-    
+
         If *verify_remote* is ``True`` (the default), then an MD5 comparison
         will be used to check whether the remote file is the same as the
         source. If this is ``False``, the file will be assumed to be the
         same if it is present. This is useful for very large files, where
         generating an MD5 sum may take a while.
-    
+
         When providing either the *contents* or the *source* parameter, Fabric's
         ``put`` function will be used to upload the file to the remote host.
         When ``use_sudo`` is ``True``, the file will first be uploaded to a temporary
@@ -389,31 +389,31 @@ class FileSatchel(ContainerSatchel):
         directory is ``/tmp``, but can be overridden with the *temp_dir* parameter.
         If *temp_dir* is an empty string, then the user's home directory will
         be used.
-    
+
         If `use_sudo` is `True`, then the remote file will be owned by root,
         and its mode will reflect root's default *umask*. The optional *owner*,
         *group* and *mode* parameters can be used to override these properties.
-    
+
         .. note:: This function can be accessed directly from the
                   ``fabtools.require`` module for convenience.
-    
+
         """
         func = use_sudo and run_as_root or self.run
-    
+
         # 1) Only a path is given
         if path and not (contents or source or url):
             assert path
             if not self.is_file(path):
                 func('touch "%(path)s"' % locals())
-    
+
         # 2) A URL is specified (path is optional)
         elif url:
             if not path:
                 path = os.path.basename(urlparse(url).path)
-    
+
             if not self.is_file(path) or md5 and self.md5sum(path) != md5:
                 func('wget --progress=dot:mega "%(url)s" -O "%(path)s"' % locals())
-    
+
         # 3) A local filename, or a content string, is specified
         else:
             if source:
@@ -424,7 +424,7 @@ class FileSatchel(ContainerSatchel):
                 t = os.fdopen(fd, 'w')
                 t.write(contents)
                 t.close()
-    
+
             if verify_remote:
                 # Avoid reading the whole file into memory at once
                 digest = hashlib.md5()
@@ -439,23 +439,23 @@ class FileSatchel(ContainerSatchel):
                     f.close()
             else:
                 digest = None
-    
+
             if (not self.is_file(path, use_sudo=use_sudo) or
                     (verify_remote and
                         self.md5sum(path, use_sudo=use_sudo) != digest.hexdigest())):
                 with self.settings(hide('running')):
                     self.put(local_path=source, remote_path=path, use_sudo=use_sudo, temp_dir=temp_dir)
-    
+
             if t is not None:
                 os.unlink(source)
-    
+
         # Ensure correct owner
         if use_sudo and owner is None:
             owner = 'root'
         if (owner and self.get_owner(path, use_sudo) != owner) or \
            (group and self.get_group(path, use_sudo) != group):
             func('chown %(owner)s:%(group)s "%(path)s"' % locals())
-    
+
         # Ensure correct mode
         if use_sudo and mode is None:
             mode = oct(0666 & ~int(self.umask(use_sudo=True), base=8))

@@ -4,7 +4,7 @@ Fabric command script for project buildbot.
 For most deployments, you'll want to do:
 
     fab prod deploy.run
-    
+
 """
 import sys
 
@@ -19,7 +19,7 @@ sys.path.insert(0, '..')
 #     local_or_dryrun,
 # )
 from burlap.decorators import task_or_dryrun
- 
+
 @task_or_dryrun
 def custom_task():
     #run_or_dryrun('echo "$(date)"')

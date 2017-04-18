@@ -53,7 +53,7 @@ class TestParseVagrantBoxListWithoutProvider(TestCase):
 
 
 class TestVagrantBaseBoxes(TestCase):
- 
+
     def test_vagrant_base_boxes(self):
         with patch('burlap.vagrant.vagrant._box_list') as mock_list:
             mock_list.return_value = [
