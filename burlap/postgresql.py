@@ -169,6 +169,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         self.env.createlangs = ['plpgsql'] # plpythonu
         self.env.postgres_user = 'postgres'
         self.env.encoding = 'UTF8'
+        self.env.locale = 'en_US.UTF-8'
         self.env.custom_load_cmd = ''
         self.env.port = 5432
         self.env.pgpass_path = '~/.pgpass'
@@ -334,7 +335,9 @@ class PostgreSQLSatchel(DatabaseSatchel):
             r.run('psql --user={postgres_user} --no-password --command="CREATE USER {db_user} WITH PASSWORD \'{db_password}\';"')
         
         r.pc('Creating database...')
-        r.run('psql --user={postgres_user} --no-password --command="CREATE DATABASE {db_name} WITH OWNER={db_user} ENCODING=\'{encoding}\'"')
+        r.run('psql --user={postgres_user} --no-password --command="'
+            'CREATE DATABASE {db_name} WITH OWNER={db_user} ENCODING=\'{encoding}\' LC_CTYPE=\'{locale}\' LC_COLLATE=\'{locale}\''
+        '"')
         
         with settings(warn_only=True):
             r.pc('Enabling plpgsql on database...')
