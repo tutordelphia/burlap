@@ -496,7 +496,16 @@ def format(s, lenv, genv, prefix=None, ignored_variables=None): # pylint: disabl
 #             pprint(var_values, indent=4)
 
         for _vn in ignored_variables:
-            var_values[_vn] = '{%s}' % _vn
+            # We can't escape ignroed variables this way, because the variables may use Python ":" operator,
+            # conflicting with curly brace string interpolation. 
+            #var_values[_vn] = '{%s}' % _vn
+            k = '{%s}' % _vn
+            v = str(uuid.uuid4())
+            escaped_var_names[k] = v
+            s = s.replace(k, v)
+            
+#         print('var_values:', var_values)
+#         print('s:', s)
         s = s.format(**var_values)
 
         for k, v in escaped_var_names.iteritems():
@@ -530,6 +539,14 @@ class Renderer(object):
 
     def format(self, s, **kwargs):
         return format(s, lenv=self.lenv, genv=self.genv, prefix=self.obj.name.lower(), **kwargs)
+
+    def render_to_string(self, *args, **kwargs):
+        format = kwargs.pop('format', True)
+        kwargs['extra'] = self.collect_genv(include_local=True, include_global=False)
+        s = self.obj.render_to_string(*args, **kwargs)
+        if format:
+            s = self.format(s)
+        return s
 
     def collect_genv(self, include_local=True, include_global=True):
         """

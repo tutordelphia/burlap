@@ -198,12 +198,23 @@ class ApacheSatchel(ServiceSatchel):
         self.env.ssl_certificates = None
         self.env.ssl_certificates_templates = []
         
+        # Apache site config files use a similar syntax to our template syntax,
+        # so instead of having to escape all of Apache's variables, we list them here so
+        # our templating system knows to not try interpolating them.
         self.env.ignored_template_variables = [
             'APACHE_LOG_DIR',
             'GLOBAL',
             'DOCUMENT_ROOT',
             'SCRIPT_FILENAME',
+            'SERVER_NAME',
+            'REQUEST_URI',
             'GROUP',
+            'Referer',
+            'User-Agent',
+            'X-Forwarded-For',
+            'HTTP:X-Forwarded-Proto',
+            'HTTPS',
+            'HTTP',
         ]
         
         # The local and remote relative directory where the SSL certificates are stored.

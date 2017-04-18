@@ -43,6 +43,8 @@ class DjangoSatchel(Satchel):
 
         self.env.shell_template = 'cd {project_dir}; /bin/bash -i -c \"{manage_cmd} shell;\"'
         
+        self.env.fixture_sets = {} # {name: [paths to Django fixtures]}
+        
         # These apps will be migrated on a specific database, while faked
         # on all others.
         # This is necessary since South does not have proper support for
@@ -55,6 +57,8 @@ class DjangoSatchel(Satchel):
         
         # The target version of Django to assume.
         self.env.version = (1, 6, 0)
+        
+        self.env.createsuperuser_cmd = 'createsuperuser'
         
         self.env.manage_media = True
         
@@ -289,12 +293,16 @@ class DjangoSatchel(Satchel):
         Runs the Django createsuperuser management command.
         """
         r = self.local_renderer
+        site = site or self.genv.SITE
         self.set_site_specifics(site)
-        r.env.db_createsuperuser_username = username
-        r.env.db_createsuperuser_email = email or username
-        r.run('export SITE={SITE}; export ROLE={ROLE}; '
-            'cd {project_dir}; {manage_cmd} createsuperuser '
-            '--username={db_createsuperuser_username} --email={db_createsuperuser_email}')
+        options = ['--username=%s' % username]
+        if email:
+            options.append('--email=%s' % email)
+        if password:
+            options.append('--password=%s' % password)
+        r.env.options_str = ' '.join(options)
+        r.run_or_local('export SITE={SITE}; export ROLE={ROLE}; '
+            'cd {project_dir}; {manage_cmd} {createsuperuser_cmd} {options_str}')
 
     @task
     def loaddata(self, path, site=None):
@@ -305,7 +313,7 @@ class DjangoSatchel(Satchel):
         
         Pass site=all to run on all sites.
         """
-        site = site or self.env.SITE
+        site = site or self.genv.SITE
         r = self.local_renderer
         r.env._loaddata_path = path
         for site, site_data in self.iter_sites(site=site, no_secure=True):
@@ -507,6 +515,7 @@ class DjangoSatchel(Satchel):
         if database:
             r.env.db_syncdb_database = ' --database=%s' % database
 
+        site = site or self.genv.SITE
         for site, site_data in r.iter_unique_databases(site=site):
             r.env.SITE = site
             with self.settings(warn_only=ignore_errors):
@@ -562,6 +571,7 @@ class DjangoSatchel(Satchel):
         
         # CS 2017-3-29 Don't bypass the iterator. That causes reversion to the global env that could corrupt the generated commands.
         #databases = list(self.iter_unique_databases(site=site))#TODO:remove
+        site = site or self.genv.SITE
         databases = self.iter_unique_databases(site=site)
 #         print('databases:', databases)
         for site, site_data in databases:

@@ -27,3 +27,26 @@ class BuildbotTests(TestCase):
             assert not exists(buildbot.env.cron_check_crontab_path)
         finally:
             buildbot.uninstall_cron_check()
+
+    def test_configure(self):
+        try:
+            buildbot.genv.ROLE = 'local'
+            buildbot.genv.services = ['buildbot']
+            buildbot.clear_caches()
+                
+            buildbot.env.cron_check_enabled = True
+            buildbot.env.cron_check_worker_pid_path = '/usr/local/myproject/src/buildbot/worker/twistd.pid'
+            buildbot.configure()
+            
+            assert exists(buildbot.env.cron_check_command_path)
+            assert exists(buildbot.env.cron_check_crontab_path)
+
+            self.thumbprint(components=buildbot.name)
+    
+            buildbot.env.cron_check_enabled = False
+            buildbot.configure()
+    
+            assert not exists(buildbot.env.cron_check_command_path)
+            assert not exists(buildbot.env.cron_check_crontab_path)
+        finally:
+            buildbot.uninstall()

@@ -56,6 +56,19 @@ class SeleniumSatchel(Satchel):
         r.sudo('rm -f {geckodriver_install_bin_path}/{geckodriver_bin_name}')
 
     @task
+    def get_installed_version(self):
+        r = self.local_renderer
+        out = r.run('geckodriver --version') or ''
+        print('out:', out)
+        version = re.findall(r'geckodriver\s+([0-9\.]+)', out)
+        if version:
+            version = version[0]
+            print('Geckodriver version %s found.' % version)
+            return version
+        else:
+            print('Geckodriver is not installed.')
+
+    @task
     def check_for_change(self):
         """
         Determines if a new release has been made.

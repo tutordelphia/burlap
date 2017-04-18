@@ -35,8 +35,8 @@ class CelerySatchel(ServiceSatchel):
         self.env.config_path = '/etc/sysconfig/celeryd'
         self.env.daemon_opts = '--concurrency=1 --loglevel=DEBUG'
         self.env.daemon_path = '/etc/init.d/celeryd'
-        self.env.log_path_template = '/var/log/celeryd-%(SITE)s.log'
-        self.env.celerybeat_log_path_template = '/var/log/celerybeat-%(SITE)s.log'
+        self.env.log_path_template = '/var/log/celeryd-{SITE}.log'
+        self.env.celerybeat_log_path_template = '/var/log/celerybeat-{SITE}.log'
         self.env.celeryd_command = 'celeryd'
         self.env.has_worker = False
         self.env.daemon_user = 'www-data'
@@ -49,10 +49,10 @@ class CelerySatchel(ServiceSatchel):
         self.env.has_celerybeat = False
         self.env.celerybeat_command = 'celerybeat'
         self.env.paths_owned = ['/tmp/celerybeat-schedule*', '/var/log/celery*']
-        self.env.celerybeat_opts_template = ('--schedule=/tmp/celerybeat-schedule-%(SITE)s --pidfile=/tmp/celerybeat-%(SITE)s.pid '
-            '--logfile=%(celery_celerybeat_log_path)s --loglevel=DEBUG')
-        self.env.celerybeat_command_template = ('%(celery_supervisor_python)s %(celery_supervisor_django_manage)s '
-            '%(celery_celerybeat_command)s %(celery_celerybeat_opts)s')
+        self.env.celerybeat_opts_template = ('--schedule=/tmp/celerybeat-schedule-{SITE} --pidfile=/tmp/celerybeat-{SITE}.pid '
+            '--logfile={celery_celerybeat_log_path} --loglevel=DEBUG')
+        self.env.celerybeat_command_template = ('{celery_supervisor_python} {celery_supervisor_django_manage} '
+            '{celery_celerybeat_command} {celery_celerybeat_opts}')
         
         self.env.service_commands = {
             START:{
@@ -114,7 +114,7 @@ class CelerySatchel(ServiceSatchel):
     def render_paths(self):
         r = self.local_renderer
         r.env.supervisor_directory = r.format(r.env.supervisor_directory_template)
-        r.env.celeryd_command = r.format(r.env.celeryd_command_template)
+        r.env.celeryd_command = r.format(r.env.celeryd_command_template or r.env.celeryd_command)
         r.env.log_path = r.format(r.env.log_path_template)
         
     @task
@@ -148,9 +148,10 @@ class CelerySatchel(ServiceSatchel):
             return
             
         self.render_paths()
+        print('r.env.celeryd_command:', r.env.celeryd_command)
         
         conf_name = 'celery_%s.conf' % site
-        ret = self.render_to_string('celery/celery_supervisor.template.conf')
+        ret = r.render_to_string('celery/celery_supervisor.template.conf')
         return conf_name, ret
 
     @task(post_callback=True)

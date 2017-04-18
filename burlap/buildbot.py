@@ -22,9 +22,9 @@ class BuildBotSatchel(ServiceSatchel):
         
         self.env.project_dir = '/usr/local/myproject'
         self.env.virtualenv_dir = '/usr/local/myproject/.env'
-        self.env.homedir = '/var/lib/{bb_user}'
-        self.env.ssh_bin = '{homedir}/bin'
-        self.env.ssh_dir = '{homedir}/.ssh'
+        self.env.home_dir = '/var/lib/{bb_user}'
+        self.env.ssh_bin = '{home_dir}/bin'
+        self.env.ssh_dir = '{home_dir}/.ssh'
         self.env.ssh_private_key = None # should be a *.pem file
         self.env.ssh_public_key = None # should be a *.pub file
         
@@ -170,6 +170,7 @@ class BuildBotSatchel(ServiceSatchel):
     @task
     def set_permissions(self):
         r = self.local_renderer
+        r.sudo('chown -R {bb_user}:{bb_group} {home_dir}')
         r.sudo('chown -R {bb_user}:{bb_group} {project_dir}')
         #r.sudo('chown -R {bb_user}:{bb_group} {project_dir}/src/buildbot/master')
         #r.sudo('chown -R {bb_user}:{bb_group} {project_dir}/src/buildbot/worker')
@@ -340,8 +341,8 @@ class BuildBotSatchel(ServiceSatchel):
             r.put(local_path=r.env.ssh_private_key, remote_path=r.env.private_remote_path, use_sudo=True)
             r.put(local_path=r.env.ssh_public_key, remote_path=r.env.public_remote_path, use_sudo=True)
             r.sudo('chown -R {bb_user}:{bb_group} {ssh_dir}')
-            r.sudo('chmod -R 700 {ssh_dir}')
-            r.sudo('chmod -R 600 {ssh_dir}/*')
+            r.sudo('chmod -R 0770 {ssh_dir}')
+            r.sudo('chmod -R 0600 {ssh_dir}/*')
         else:
             r.sudo('rm -F {private_remote_path}')
             r.sudo('rm -F {public_remote_path}')
@@ -398,6 +399,10 @@ class BuildBotSatchel(ServiceSatchel):
     
     @task(precursors=['packager', 'user', 'apache'])
     def configure(self):
+        
+        with settings(**s):
+            self.stop()
+        
         packager = self.get_satchel('packager')
 #         umv = self.get_satchel('ubuntumultiverse')
         
@@ -421,5 +426,12 @@ class BuildBotSatchel(ServiceSatchel):
         self.install_cron()
         
         self.configure_ssh_key()
+
+        self.update_cron_check()
+        
+        self.restart()
+        
+        apache = self.get_satchel('apache')
+        apache.reload()
         
 buildbot = BuildBotSatchel()

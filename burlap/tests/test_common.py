@@ -314,7 +314,7 @@ set_by_include3: 'some special setting'
         print('all_satchels.a:', actual)
         expected = [
             'APACHE', 'AVAHI', 'BLUETOOTH', 'BUILDBOT', 'CELERY', 'CLOUDFRONT', 'CRON',
-            'DEBUG', 'DEPLOYMENTNOTIFIER', 'DJ', 'EC2MONITOR', 'ELASTICSEARCH', 'FILE',
+            'DEBUG', 'DEPLOYMENTNOTIFIER', 'DJ', 'DNS', 'EC2MONITOR', 'ELASTICSEARCH', 'FILE',
             'GIT', 'GITCHECKER', 'GITTRACKER', 'GPSD', 'GROUP', 'HOST', 'HOSTNAME', 'HOSTSFILE',
             'IP', 'JIRAHELPER', 'JSHINT', 'LOGINNOTIFIER', 'MOTION', 'MYSQL', 'MYSQLCLIENT', 'NM',
             'NTPCLIENT', 'PACKAGER', 'PHANTOMJS', 'PIP', 'POSTFIX', 'POSTGRESQL', 'POSTGRESQLCLIENT', 'PROJECT',
