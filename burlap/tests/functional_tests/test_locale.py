@@ -1,12 +1,12 @@
 from __future__ import print_function
 
-from burlap.locale import LocaleSatchel
+from burlap.locale import LocalesSatchel
 from burlap.tests.functional_tests.base import TestCase
 
 class LocaleTests(TestCase):
 
     def test_locale(self):
-        ts = LocaleSatchel()
+        ts = LocalesSatchel()
         ts.verbose = True
 
         locale0 = ts.cat_locale()

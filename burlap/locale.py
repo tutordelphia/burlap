@@ -2,13 +2,15 @@ from __future__ import print_function
 
 import re
 
-from burlap import ServiceSatchel
+from burlap import Satchel
 from burlap.constants import *
 from burlap.decorators import task
 
-class LocaleSatchel(ServiceSatchel):
+# Note, using the name "locale" doesn't allow the satchel to be imported due to a conflict with an existing variable/module.
 
-    name = 'locale'
+class LocalesSatchel(Satchel):
+
+    name = 'locales'
 
     def set_defaults(self):
         self.env.language = 'en_US:en' # 'en_US.UTF-8'
@@ -49,4 +51,4 @@ class LocaleSatchel(ServiceSatchel):
         r.env.update_args = ' '.join(args)
         r.sudo('{exports} update-locale {update_args}')
 
-LocaleSatchel()
+locales = LocalesSatchel()
