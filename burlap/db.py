@@ -380,7 +380,7 @@ class DatabaseSatchel(ServiceSatchel):
         raise NotImplementedError
 
     @task
-    def drop_database(name):
+    def drop_database(self, name):
         raise NotImplementedError
 
     @task
