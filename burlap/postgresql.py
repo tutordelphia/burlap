@@ -114,23 +114,6 @@ def create_database(name, owner, template='template0', encoding='UTF8',
                   --encoding=%(encoding)s --lc-ctype=%(locale)s \
                   --lc-collate=%(locale)s %(name)s''' % locals())
 
-
-def drop_database(name):
-    """
-    Delete a PostgreSQL database.
-
-    Example::
-
-        import burlap
-
-        # Remove DB if it exists
-        if burlap.postgres.database_exists('myapp'):
-            burlap.postgres.drop_database('myapp')
-
-    """
-    _run_as_pg('''dropdb %(name)s''' % locals())
-
-
 def create_schema(name, database, owner=None):
     """
     Create a schema within a database.
@@ -169,6 +152,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         self.env.createlangs = ['plpgsql'] # plpythonu
         self.env.postgres_user = 'postgres'
         self.env.encoding = 'UTF8'
+        self.env.locale = 'en_US.UTF-8'
         self.env.custom_load_cmd = ''
         self.env.port = 5432
         self.env.pgpass_path = '~/.pgpass'
@@ -334,11 +318,13 @@ class PostgreSQLSatchel(DatabaseSatchel):
             r.run('psql --user={postgres_user} --no-password --command="CREATE USER {db_user} WITH PASSWORD \'{db_password}\';"')
 
         r.pc('Creating database...')
-        r.run('psql --user={postgres_user} --no-password --command="CREATE DATABASE {db_name} WITH OWNER={db_user} ENCODING=\'{encoding}\'"')
+        r.run('psql --user={postgres_user} --no-password --command="'
+            'CREATE DATABASE {db_name} WITH OWNER={db_user} ENCODING=\'{encoding}\' LC_CTYPE=\'{locale}\' LC_COLLATE=\'{locale}\''
+        '"')
 
         with settings(warn_only=True):
             r.pc('Enabling plpgsql on database...')
-            r.run('createlang -U postgres plpgsql {db_name}')
+            r.run('createlang -U postgres plpgsql {db_name} || true')
 
     @task
     @runs_once
@@ -434,6 +420,23 @@ class PostgreSQLSatchel(DatabaseSatchel):
         r.sudo("add-apt-repository '{apt_repo}'")
         r.sudo('wget --quiet -O - {apt_key} | apt-key add -')
         r.sudo('apt-get update')
+
+    @task
+    def drop_database(self, name):
+        """
+        Delete a PostgreSQL database.
+
+        Example::
+
+            import burlap
+
+            # Remove DB if it exists
+            if burlap.postgres.database_exists('myapp'):
+                burlap.postgres.drop_database('myapp')
+
+        """
+        with settings(warn_only=True):
+            self.sudo('dropdb %s' % (name,), user='postgres')
 
     @task
     def version(self):

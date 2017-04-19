@@ -272,6 +272,10 @@ class MySQLSatchel(DatabaseSatchel):
         raise NotImplementedError
 
     @task
+    def drop_database(self, name):
+        raise NotImplementedError
+
+    @task
     def drop_views(self, name=None, site=None):
         """
         Drops all views.

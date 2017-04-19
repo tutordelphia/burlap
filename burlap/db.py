@@ -380,6 +380,10 @@ class DatabaseSatchel(ServiceSatchel):
         raise NotImplementedError
 
     @task
+    def drop_database(self, name):
+        raise NotImplementedError
+
+    @task
     def exists(self, name='default', site=None):
         """
         Returns true if a database with the given name exists. False otherwise.
