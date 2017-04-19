@@ -6,7 +6,7 @@ import burlap
 from burlap.tests.functional_tests.base import TestCase
 
 class Md5Tests(TestCase):
-    
+
     def test_md5sum_empty_file(self):
         try:
             run('touch f1')

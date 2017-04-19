@@ -15,13 +15,13 @@ from burlap.decorators import task
 class SeleniumSatchel(Satchel):
     """
     Management commands for the Selenium browser automation and testing tool.
-    
+
     http://www.seleniumhq.org/
     """
 
     name = 'selenium'
 
-    def set_defaults(self):        
+    def set_defaults(self):
         # See https://github.com/mozilla/geckodriver/releases for other versions and architectures.
         # If none provided, will track the most recent tagged release.
         self.env.geckodriver_version = None # '0.13.0'
@@ -93,7 +93,7 @@ class SeleniumSatchel(Satchel):
         version = latest_url.split('/')[-1][1:]
         self.vprint('version:', version)
         return version
-        
+
     @task
     def get_target_geckodriver_version_number(self):
         return self.env.geckodriver_version or self.get_latest_geckodriver_version_number()

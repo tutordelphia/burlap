@@ -5,7 +5,7 @@ from burlap.constants import *
 from burlap.decorators import task
 
 class JSHintSatchel(ServiceSatchel):
-    
+
     name = 'jshint'
 
     def set_defaults(self):
@@ -17,7 +17,7 @@ class JSHintSatchel(ServiceSatchel):
 #             DEBIAN: ['npm'],
 #             UBUNTU: ['npm'],
 #         }
-        
+
     @task
     def install_packages(self):
         packager = self.packager
@@ -27,7 +27,7 @@ class JSHintSatchel(ServiceSatchel):
             self.sudo('DEBIAN_FRONTEND=noninteractive apt-get -f -o Dpkg::Options::="--force-overwrite" install --yes npm')
         else:
             raise NotImplementedError('Unsupported packager: %s' % (packager,))
-        
+
     @task(precursors=['packager', 'user'])
     def configure(self):
         r = self.local_renderer
@@ -38,5 +38,5 @@ class JSHintSatchel(ServiceSatchel):
             r.sudo('[ ! -f /usr/bin/node ] && ln -s /usr/bin/nodejs /usr/bin/node || true')
         else:
             r.sudo('npm uninstall -g jshint')
-    
+
 jshint = JSHintSatchel()

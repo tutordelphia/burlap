@@ -18,7 +18,7 @@ from burlap.decorators import task
 from fabric.api import runs_once, hide
 
 class SSLSatchel(ServiceSatchel):
-    
+
     name = 'ssl'
 
     def set_defaults(self):
@@ -36,7 +36,7 @@ class SSLSatchel(ServiceSatchel):
         """
         Generates a self-signed certificate for use in an internal development
         environment for testing SSL pages.
-        
+
         http://almostalldigital.wordpress.com/2013/03/07/self-signed-ssl-certificate-for-ec2-load-balancer/
         """
         r = self.local_renderer
@@ -51,14 +51,14 @@ class SSLSatchel(ServiceSatchel):
             '-days {ssl_days} -nodes -x509 '
             '-subj "/C={ssl_country}/ST={ssl_state}/L={ssl_city}/O={ssl_organization}/CN={ssl_domain}" '
             '-keyout {ssl_base_dst}.key -out {ssl_base_dst}.crt')
-    
+
     @task
     @runs_once
     def generate_csr(self, domain='', r=None):
         """
         Creates a certificate signing request to be submitted to a formal
         certificate authority to generate a certificate.
-        
+
         Note, the provider may say the CSR must be created on the target server,
         but this is not necessary.
         """
@@ -80,7 +80,7 @@ class SSLSatchel(ServiceSatchel):
             r.local('openssl req -nodes -newkey rsa:{ssl_length} '
                 '-subj "/C={ssl_country}/ST={ssl_state}/L={ssl_city}/O={ssl_organization}/CN={ssl_domain}" '
                 '-keyout {ssl_base_dst}.{ssl_csr_year}.key -out {ssl_base_dst}.{ssl_csr_year}.csr')
-    
+
     def get_expiration_date(self, fn):
         """
         Reads the expiration date of a local crt file.
@@ -92,7 +92,7 @@ class SSLSatchel(ServiceSatchel):
         matches = re.findall('notAfter=(.*?)$', ret, flags=re.IGNORECASE)
         if matches:
             return dateutil.parser.parse(matches[0])
-    
+
     @task
     def list_expiration_dates(self, base='roles/all/ssl'):
         """
@@ -114,7 +114,7 @@ class SSLSatchel(ServiceSatchel):
         print('%s %s %s' % ('Filename'.ljust(max_fn_len), 'Expiration Date'.ljust(max_date_len), 'Expired'))
         now = datetime.now().replace(tzinfo=pytz.UTC)
         for fn, dt in sorted(data):
-            
+
             if dt is None:
                 expired = '?'
             elif dt < now:
@@ -122,38 +122,38 @@ class SSLSatchel(ServiceSatchel):
             else:
                 expired = 'NO'
             print('%s %s %s' % (fn.ljust(max_fn_len), str(dt).ljust(max_date_len), expired))
-    
+
     @task
     def verify_certificate_chain(self, base=None, crt=None, csr=None, key=None):
         """
         Confirms the key, CSR, and certificate files all match.
         """
         from burlap.common import get_verbose, print_fail, print_success
-        
+
         r = self.local_renderer
-        
+
         if base:
             crt = base + '.crt'
             csr = base + '.csr'
             key = base + '.key'
         else:
             assert crt and csr and key, 'If base not provided, crt and csr and key must be given.'
-    
+
         assert os.path.isfile(crt)
         assert os.path.isfile(csr)
         assert os.path.isfile(key)
-    
+
         csr_md5 = r.local('openssl req -noout -modulus -in %s | openssl md5' % csr, capture=True)
         key_md5 = r.local('openssl rsa -noout -modulus -in %s | openssl md5' % key, capture=True)
         crt_md5 = r.local('openssl x509 -noout -modulus -in %s | openssl md5' % crt, capture=True)
-    
+
         match = crt_md5 == csr_md5 == key_md5
-            
+
         if self.verbose or not match:
             print('crt:', crt_md5)
             print('csr:', csr_md5)
             print('key:', key_md5)
-    
+
         if match:
             print_success('Files look good!')
         else:

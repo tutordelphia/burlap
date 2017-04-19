@@ -5,14 +5,14 @@ from burlap.constants import *
 from burlap.decorators import task
 
 class ElasticSearchSatchel(ServiceSatchel):
-    
+
     name = 'elasticsearch'
-    
+
     def set_defaults(self):
-    
+
         self.env.conf_path = '/etc/elasticsearch/elasticsearch.yml'
         self.env.script_engine_groovy_inline_search = False
-    
+
         self.env.service_commands = {
             START:{
                 UBUNTU: 'service elasticsearch start',
@@ -42,15 +42,15 @@ class ElasticSearchSatchel(ServiceSatchel):
             DEBIAN: ['elasticsearch'],
             UBUNTU: ['elasticsearch'],
         }
-    
+
     @task(precursors=['packager', 'user', 'cron'])
     def configure(self):
         r = self.local_renderer
-        
+
         if self.env.enabled:
-            
+
             if self.env.script_engine_groovy_inline_search:
-                
+
                 # Turn on online groovy search.
                 r.sed(
                     filename=self.env.conf_path,
@@ -80,7 +80,7 @@ class ElasticSearchSatchel(ServiceSatchel):
                     after='script.engine.groovy.inline.search: off',
                     use_sudo=True,
                 )
-            
+
             self.enable()
             self.restart()
         else:

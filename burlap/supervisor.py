@@ -25,18 +25,18 @@ from burlap.decorators import task
 #     Reload supervisor configuration.
 #     """
 #     run_as_root("supervisorctl reload")
-# 
-# 
+#
+#
 # def update_config():
 #     """
 #     Reread and update supervisor job configurations.
-# 
+#
 #     Less heavy-handed than a full reload, as it doesn't restart the
 #     backend supervisor process and all managed processes.
 #     """
 #     run_as_root("supervisorctl update")
-# 
-# 
+#
+#
 # def process_status(name):
 #     """
 #     Get the status of a supervisor process.
@@ -47,22 +47,22 @@ from burlap.decorators import task
 #             return None
 #         else:
 #             return res.split()[1]
-# 
-# 
+#
+#
 # def start_process(name):
 #     """
 #     Start a supervisor process
 #     """
 #     run_as_root("supervisorctl start {name}" % locals())
-# 
-# 
+#
+#
 # def stop_process(name):
 #     """
 #     Stop a supervisor process
 #     """
 #     run_as_root("supervisorctl stop {name}" % locals())
-# 
-# 
+#
+#
 # def restart_process(name):
 #     """
 #     Restart a supervisor process
@@ -71,23 +71,23 @@ from burlap.decorators import task
 
 
 class SupervisorSatchel(ServiceSatchel):
-    
+
     name = 'supervisor'
-    
+
     ## Service options.
-    
+
     #ignore_errors = True
-    
+
     post_deploy_command = 'restart'
-    
+
     @property
     def packager_system_packages(self):
         return {
             UBUNTU: ['supervisor'],
         }
-    
+
     def set_defaults(self):
-    
+
         self.env.config_template = 'supervisor/supervisor_daemon.template2.config'
         self.env.config_path = '/etc/supervisor/supervisord.conf'
         #/etc/supervisor/conf.d/celery_
@@ -100,14 +100,14 @@ class SupervisorSatchel(ServiceSatchel):
         self.env.supervisorctl_path_template = '{pip_virtualenv_dir}/bin/supervisorctl'
         self.env.kill_pattern = ''
         self.env.max_restart_wait_minutes = 5
-        
+
         self.env.services = []
-        
+
         # Functions that, when called, should return a supervisor service text
         # ready to be appended to supervisord.conf.
         # It will be called once for each site.
         self.genv._supervisor_create_service_callbacks = []
-        
+
         self.env.service_commands = {
             START:{
                 FEDORA: 'systemctl start supervisord.service',
@@ -136,16 +136,16 @@ class SupervisorSatchel(ServiceSatchel):
                 UBUNTU: 'systemctl --no-pager status supervisor',
             },
         }
-    
+
     def render_paths(self):
         r = self.local_renderer
         r.env.daemon_bin_path = r.format(r.env.daemon_bin_path_template)
         r.env.bin_path = r.format(r.env.bin_path_template)
         r.env.supervisorctl_path = r.format(r.env.supervisorctl_path_template)
-    
+
     def register_callback(self, f):
         self.genv._supervisor_create_service_callbacks.append(f)
-        
+
     def restart(self):
         """
         Supervisor can take a very long time to start and stop,
@@ -166,34 +166,34 @@ class SupervisorSatchel(ServiceSatchel):
             print('Waiting for supervisor to start (%i of %i)...' % (_, n))
             time.sleep(sleep_n)
         raise Exception('Failed to restart service %s!' % self.name)
-    
+
     def record_manifest(self):
         """
         Called after a deployment to record any data necessary to detect changes
         for a future deployment.
         """
         data = super(SupervisorSatchel, self).record_manifest()
-        
+
         # Celery deploys itself through supervisor, so monitor its changes too in Apache site configs.
         for site_name, site_data in self.genv.sites.iteritems():
             if self.verbose:
                 print(site_name, site_data)
             data['celery_has_worker_%s' % site_name] = site_data.get('celery_has_worker', False)
-        
+
         data['configured'] = True
-        
+
         return data
 
     @task
     def write_configs(self, site=None):
-        
+
         verbose = self.verbose
-        
+
         self.render_paths()
-        
+
         supervisor_services = []
         process_groups = []
-        
+
         #TODO:check available_sites_by_host and remove dead?
         for site, site_data in self.iter_sites(site=site, renderer=self.render_paths):
             if verbose:
@@ -211,11 +211,11 @@ class SupervisorSatchel(ServiceSatchel):
                     remote_fn = os.path.join(self.env.conf_dir, conf_name)
                     local_fn = self.write_to_file(conf_content)
                     self.put_or_dryrun(local_path=local_fn, remote_path=remote_fn, use_sudo=True)
-                    
+
                     process_groups.append(os.path.splitext(conf_name)[0])
-                    
+
         self.env.services_rendered = '\n'.join(supervisor_services)
-    
+
         fn = self.render_to_file(self.env.config_template)
         self.put_or_dryrun(local_path=fn, remote_path=self.env.config_path, use_sudo=True)
 
@@ -224,33 +224,33 @@ class SupervisorSatchel(ServiceSatchel):
         Collects the configurations for all registered services and writes
         the appropriate supervisord.conf file.
         """
-        
+
         verbose = self.verbose
-        
+
         r = self.local_renderer
-#         
+#
 #         target_sites = self.genv.available_sites_by_host.get(hostname, None)
-        
+
         self.render_paths()
-        
+
         supervisor_services = []
-        
+
         process_groups = []
-        
+
         r.sudo('rm -Rf /etc/supervisor/conf.d/*')
-        
+
         #TODO:check available_sites_by_host and remove dead?
         self.write_configs(site=site)
         for site, site_data in self.iter_sites(site=site, renderer=self.render_paths):
             if verbose:
                 print('deploy_services.site:', site)
-                
+
             # Only load site configurations that are allowed for this host.
 #             if target_sites is not None:
 #                 assert isinstance(target_sites, (tuple, list))
 #                 if site not in target_sites:
 #                     continue
-                
+
             for cb in self.genv._supervisor_create_service_callbacks:
                 if self.verbose:
                     print('cb:', cb)
@@ -266,36 +266,36 @@ class SupervisorSatchel(ServiceSatchel):
 #                     print('conf_content:', conf_content)
                     remote_fn = os.path.join(self.env.conf_dir, conf_name)
                     local_fn = self.write_to_file(conf_content)
-#                     
+#
                     process_groups.append(os.path.splitext(conf_name)[0])
-                    
+
         self.env.services_rendered = '\n'.join(supervisor_services)
-    
+
         fn = self.render_to_file(self.env.config_template)
         r.put(local_path=fn, remote_path=self.env.config_path, use_sudo=True)
-        
+
         # We use supervisorctl to configure supervisor, but this will throw a uselessly vague
         # error message is supervisor isn't running.
         if not self.is_running():
             self.start()
-            
+
         for pg in process_groups:
             r.env.pg = pg
             r.sudo('supervisorctl add {pg}')
-        
+
         #TODO:are all these really necessary?
         r.sudo('supervisorctl reread')
         #r.sudo('supervisorctl update')
         r.sudo('supervisorctl restart all')
-    
+
     @task(precursors=['packager', 'user', 'rabbitmq'])
     def configure(self, **kwargs):
         kwargs['site'] = ALL
-        
+
 #         last_manifest = supervisor_satchel.last_manifest
 #         if not last_manifest or not last_manifest.get('configured'):
 #             configure()
-        
+
         self.deploy_services(**kwargs)
-        
+
 supervisor = SupervisorSatchel()
