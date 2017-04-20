@@ -159,8 +159,7 @@ def _get_environ_handler(name, d):
             hostname = translator(hostname=hostname)
             _hosts = env.hosts
             env.hosts = [_ for _ in env.hosts if _ == hostname]
-            assert env.hosts, \
-                'Hostname %s does not match any known hosts.' % (_hostname,)
+            assert env.hosts, 'Hostname %s does not match any known hosts.' % (_hostname,)
 
         if env.is_local is None:
             if env.hosts:
@@ -170,6 +169,9 @@ def _get_environ_handler(name, d):
 
         for cb in common.post_role_load_callbacks:
             cb()
+
+        # Ensure satchels don't cache values from previously loaded roles.
+        common.reset_all_satchels()
 
         print('Loaded role %s.' % (name,), file=sys.stderr)
     func.__doc__ = 'Sets enivronment variables for the "%s" role.' % (name,)

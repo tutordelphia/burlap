@@ -655,6 +655,10 @@ class GlobalRenderer(Renderer):
 def get_satchel(name):
     return all_satchels[name.strip().upper()]
 
+def reset_all_satchels():
+    for name, satchel in all_satchels.items():
+        satchel.clear_caches()
+
 class Satchel(object):
     """
     Represents a base unit of functionality that is deployed and maintained on one
