@@ -37,6 +37,7 @@ class CommonTests(TestCase):
         print('ret0:', ret)
         self.assertEqual(ret, 'root')
 
-        ret = sudo_or_dryrun('whoami', user='daemon')
+        target_user = 'www-data'
+        ret = sudo_or_dryrun('whoami', user=target_user)
         print('ret1:', ret)
-        self.assertEqual(ret, 'daemon')
+        self.assertEqual(ret, target_user)
