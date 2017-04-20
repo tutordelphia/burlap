@@ -30,14 +30,17 @@ class CommonTests(TestCase):
 
     def test_sudo(self):
 
-        ret = run_or_dryrun('cut -d: -f1 /etc/passwd')
-        print('all users:', ret)
+        all_users = run_or_dryrun('cut -d: -f1 /etc/passwd')
+        print('all users:', all_users)
 
         ret = sudo_or_dryrun('whoami')
         print('ret0:', ret)
         self.assertEqual(ret, 'root')
 
-        target_user = 'www-data'
+        if 'travis' in all_users:
+            target_user = 'travis'
+        else:
+            target_user = 'www-data'
         ret = sudo_or_dryrun('whoami', user=target_user)
         print('ret1:', ret)
         self.assertEqual(ret, target_user)
