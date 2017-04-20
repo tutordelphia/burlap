@@ -507,12 +507,19 @@ class DjangoSatchel(Satchel):
         if database:
             r.env.db_syncdb_database = ' --database=%s' % database
 
+        post_south = tuple(r.env.version) >= (1, 7, 0)
+
         for site, site_data in r.iter_unique_databases(site=site):
             r.env.SITE = site
             with self.settings(warn_only=ignore_errors):
-                r.run_or_local(
-                    'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
-                    '{manage_cmd} syncdb --noinput {db_syncdb_all_flag} {db_syncdb_database}')
+                if post_south:
+                    r.run_or_local(
+                        'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
+                        '{manage_cmd} migrate --run-syncdb --noinput {db_syncdb_database}')
+                else:
+                    r.run_or_local(
+                        'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
+                        '{manage_cmd} syncdb --noinput {db_syncdb_all_flag} {db_syncdb_database}')
 
     @task
     def migrate(self, app='', migration='', site=None, fake=0, ignore_errors=0, skip_databases=None, database=None, migrate_apps='', delete_ghosts=1):
