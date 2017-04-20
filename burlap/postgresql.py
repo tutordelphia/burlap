@@ -316,7 +316,6 @@ class PostgreSQLSatchel(DatabaseSatchel):
         r.env.filename = filename
         #r.run('psql --user={postgres_user} --no-password -d {db_name} -a -f {filename}')
         r.run('psql --user={db_user} --no-password --host={db_host} -d {db_name} -a -f {filename}')
-        
 
     @task
     def create(self, name='default', site=None, **kargs):
