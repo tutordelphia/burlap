@@ -305,7 +305,18 @@ class PostgreSQLSatchel(DatabaseSatchel):
     def execute(self, sql, name='default', site=None, **kwargs):
         r = self.database_renderer(name=name, site=site)
         r.env.sql = sql
-        r.run('psql --user={postgres_user} --no-password --command="{sql}"')
+        #r.run('psql --user={postgres_user} --no-password --command="{sql}"')
+        r.run('psql --user={db_user} --no-password --host={db_host} -d {db_name} --command="{sql}"')
+
+    @task
+    def execute_file(self, filename, name='default', site=None, **kwargs):
+        r = self.database_renderer(name=name, site=site)
+        #r.env.user = kwargs.pop('user', r.env.db_root_username)
+        #r.env.password = kwargs.pop('password', r.env.db_root_password)
+        r.env.filename = filename
+        #r.run('psql --user={postgres_user} --no-password -d {db_name} -a -f {filename}')
+        r.run('psql --user={db_user} --no-password --host={db_host} -d {db_name} -a -f {filename}')
+        
 
     @task
     def create(self, name='default', site=None, **kargs):
