@@ -81,7 +81,7 @@ def get_pip_oath():
     return client_id, client_secret
 
 class Dependency(object):
-    
+
     def __init__(self, type, name, uri, version, rss_field, rss_regex): # pylint: disable=redefined-builtin
         self.type = type # source location, e.g. pip|github|rss|apt|etc
         assert type in TYPES, 'Unknown type: %s' % (self.type,)
@@ -91,19 +91,19 @@ class Dependency(object):
         self.rss_field = rss_field
         self.rss_regex = rss_regex
         self._cache = {}
-    
+
     def __unicode__(self):
         return u'%s==%s' % (self.name, self.version)
-    
+
     def __str__(self):
         return unicode(self)
-    
+
     def _get_current_version_pip(self):
         client = xmlrpclib.ServerProxy('http://pypi.python.org/pypi')
         v = client.package_releases(self.uri)
         if v:
             return v[0]
-    
+
     def _get_current_version_github(self):
         #TODO:use authentication to avoid rate-limiting?
         user, repo = get_github_user_repo(self.uri)
@@ -112,7 +112,7 @@ class Dependency(object):
         resp = urlopen(url).read()
         resp = json.loads(resp)
         return resp['object']['sha']
-    
+
     def _get_current_version_github_tag(self):
         # check rate limiting with:
         # curl -i https://api.github.com/users/whatever
@@ -135,7 +135,7 @@ class Dependency(object):
             if not v[0].isalnum():
                 v = v[1:]
             return v
-    
+
     def _get_current_version_apt(self):
 #        cmd = ("apt-get upgrade --dry-run %(uri)s | grep \"Conf %(uri)s\" " + \
 #            "| awk '{gsub(/[()]/,\"\"); print($3;}'") % dict(uri=self.uri)
@@ -145,7 +145,7 @@ class Dependency(object):
         out = subprocess.check_output(cmd, shell=True)
         #print out
         return out
-    
+
     def _get_current_version_rss(self):
         resp = feedparser.parse(self.uri)
         pat = re.compile(self.rss_regex)
@@ -153,19 +153,19 @@ class Dependency(object):
             matches = pat.findall(getattr(entry, self.rss_field))
             if matches:
                 return matches[0]
-    
+
     def get_current_version(self):
         if '_current_version' not in self._cache:
             self._cache['_current_version'] = \
                 getattr(self, '_get_current_version_%s' % self.type)()
         return self._cache['_current_version']
-    
+
     def is_stale(self):
         cv = self.get_current_version()
         if not cv:
             return
         return cv != self.version
-    
+
     def is_fresh(self):
         return not self.is_stale()
 
@@ -185,10 +185,10 @@ if __name__ == '__main__':
         help='If set, outputs a pip requirements file.')
     parser.add_argument('--pipin', dest='pipin',
         default=None,
-        help='The filename of a pip requirements file to read and convert ' + 
+        help='The filename of a pip requirements file to read and convert ' +
             'to a dependency file.')
     args = parser.parse_args()
-    
+
     done = False
     if args.line:
         done = True
@@ -200,7 +200,7 @@ if __name__ == '__main__':
         print('\tcurrent version:', dep.get_current_version())
         print('\tyour version:', dep.version)
         print('\tfresh:', dep.is_fresh())
-        
+
     if args.file:
         done = True
         fn = args.file
@@ -231,7 +231,7 @@ if __name__ == '__main__':
         print('%i total dependencies' % total)
         print('%i total stale dependencies' % total_stale)
         print('%.0f%% fresh' % ((total-total_stale)/float(total)*100))
-    
+
     if args.pipin:
         done = True
         fn = args.pipin
@@ -254,8 +254,7 @@ if __name__ == '__main__':
             fmt = '%(type)s,%(name)s,%(uri)s,%(version)s,%(rss_field)s,' + \
                 '%(rss_regex)s'
             print(fmt % args)
-    
+
     if not done:
         parser.print_help()
         sys.exit(1)
-        

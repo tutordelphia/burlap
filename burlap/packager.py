@@ -9,9 +9,9 @@ from burlap.constants import *
 from burlap.decorators import task
 
 class PackagerSatchel(Satchel):
-    
+
     name = 'packager'
-    
+
     def set_defaults(self):
         self.env.apt_requirments_fn = 'apt-requirements.txt'
         self.env.yum_requirments_fn = 'yum-requirements.txt'
@@ -20,7 +20,7 @@ class PackagerSatchel(Satchel):
         self.env.yum_packages = None
         self.env.do_reboots = True
         self.env.blacklisted_packages = []
-    
+
     def record_manifest(self):
         """
         Returns a dictionary representing a serialized state of the service.
@@ -32,7 +32,7 @@ class PackagerSatchel(Satchel):
         data['custom_packages'].sort()
         data['repositories'] = self.get_repositories()
         return data
-    
+
     @task
     def update(self):
         """
@@ -57,19 +57,19 @@ class PackagerSatchel(Satchel):
         if not apt_req_fqfn:
             return []
         assert os.path.isfile(apt_req_fqfn)
-        
+
         lines = list(self.env.apt_packages or [])
         for _ in open(apt_req_fqfn).readlines():
             if _.strip() and not _.strip().startswith('#') \
             and (not package_name or _.strip() == package_name):
-                lines.extend(_pkg.strip() for _pkg in _.split(' ') if _pkg.strip()) 
-        
+                lines.extend(_pkg.strip() for _pkg in _.split(' ') if _pkg.strip())
+
         if list_only:
             return lines
-        
+
         tmp_fn = r.write_temp_file('\n'.join(lines))
         apt_req_fqfn = tmp_fn
-        
+
         if not self.genv.is_local:
             r.put(local_path=tmp_fn, remote_path=tmp_fn)
             apt_req_fqfn = self.genv.put_remote_path
@@ -116,13 +116,13 @@ class PackagerSatchel(Satchel):
             return self.install_yum(*args, **kwargs)
         else:
             raise Exception('Unknown packager: %s' % (packager,))
-    
+
     @task
     def kill_apt_get(self):
         r = self.local_renderer
         r.sudo('killall apt-get')
         r.sudo('DEBIAN_FRONTEND=noninteractive dpkg --configure -a')
-    
+
     @task
     def refresh(self, *args, **kwargs):
         """
@@ -157,19 +157,19 @@ class PackagerSatchel(Satchel):
 
     @task
     def get_repositories(self, typ=None, service=None):
-        
+
         service = (service or '').strip().upper()
         typ = (typ or '').lower().strip()
         assert not typ or typ in PACKAGE_TYPES, \
             'Unknown package type: %s' % (typ,)
-        
+
         repositories = {} # {typ: [repos]}
-        
+
         for satchel_name, satchel in self.all_other_enabled_satchels.items():
-            
+
             if service and satchel_name.upper() != service:
                 continue
-            
+
             if hasattr(satchel, 'packager_repositories'):
                 repos = satchel.packager_repositories
                 for repo_type, repo_lst in repos.items():
@@ -182,17 +182,17 @@ class PackagerSatchel(Satchel):
                             assert _name, 'Invalid repo name for satchel %s.' % satchel_name
                     repositories.setdefault(repo_type, [])
                     repositories[repo_type].extend(repo_lst)
-                    
+
         for repo_type in repositories:
             repositories[repo_type].sort()
-                    
+
         return repositories
-    
+
     @task
     def install_repositories(self, *args, **kwargs):
         r = self.local_renderer
         repos = self.get_repositories(*args, **kwargs)
-        
+
         # Apt sources.
         r.pc('Installing apt sources.')
         apt_sources = repos.get(APT_SOURCE, [])
@@ -200,7 +200,7 @@ class PackagerSatchel(Satchel):
             r.env.apt_source = line
             r.env.apt_fn = fn
             r.sudo("sh -c 'echo \"{apt_source}\" > {apt_fn}'")
-        
+
         # Apt keys.
         r.pc('Installing apt keys.')
         apt_keys = repos.get(APT_KEY, [])
@@ -215,7 +215,7 @@ class PackagerSatchel(Satchel):
                 assert isinstance(parts, basestring)
                 r.env.apt_key_url = parts
                 r.sudo('wget {apt_key_url} -O - | apt-key add -')
-        
+
         r.pc('Installing repositories.')
         for repo_type in [APT]:
             if repo_type not in repos:
@@ -247,21 +247,21 @@ class PackagerSatchel(Satchel):
         packages_set = set()
         packages = []
         version = self.os_version
-        
+
         for _service, satchel in self.all_other_enabled_satchels.items():
-                
+
             _service = _service.strip().upper()
             if service and service != _service:
                 continue
-                
+
             _new = []
-            
+
             if not type or type == SYSTEM:
-                
+
                 #TODO:deprecated, remove
                 _new.extend(required_system_packages.get(
                     _service, {}).get((version.distro, version.release), []))
-                    
+
                 try:
                     _pkgs = satchel.packager_system_packages
                     if self.verbose:
@@ -277,13 +277,13 @@ class PackagerSatchel(Satchel):
                             break
                 except AttributeError:
                     pass
-                    
+
             if not type or type == PYTHON:
-                
+
                 #TODO:deprecated, remove
                 _new.extend(required_python_packages.get(
                     _service, {}).get((version.distro, version.release), []))
-                
+
                 try:
                     _pkgs = satchel.packager_python_packages
                     for _key in [(version.distro, version.release), version.distro]:
@@ -292,15 +292,15 @@ class PackagerSatchel(Satchel):
                 except AttributeError:
                     pass
                 print('_new:', _new)
-                    
+
             if not type or type == RUBY:
-                
+
                 #TODO:deprecated, remove
                 _new.extend(required_ruby_packages.get(
                     _service, {}).get((version.distro, version.release), []))
-            
-            
-            
+
+
+
     #         if not _new and verbose:
     #             print(\
     #                 'Warning: no packages found for service "%s"' % (_service,)
@@ -313,7 +313,7 @@ class PackagerSatchel(Satchel):
             for package in sorted(packages):
                 print('package:', package)
         return packages
-    
+
     def get_locale(self):
         version = self.os_version
         all_locale_dicts = {}
@@ -328,7 +328,7 @@ class PackagerSatchel(Satchel):
             except AttributeError:
                 pass
         return all_locale_dicts
-    
+
     @task
     def update_locale(self):
         locale_dict = self.get_locale()
@@ -341,7 +341,7 @@ class PackagerSatchel(Satchel):
             raise NotImplementedError
         else:
             raise Exception('Unknown packager: %s' % (packager,))
-    
+
     @task
     def install_required_system(self):
         self.install_required(type=SYSTEM)
@@ -377,7 +377,7 @@ class PackagerSatchel(Satchel):
             else:
                 raise NotImplementedError
         return lst
-    
+
     @task
     def uninstall_blacklisted(self):
         """
@@ -394,39 +394,39 @@ class PackagerSatchel(Satchel):
                 self.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq purge %s' % ' '.join(blacklisted_packages))
             else:
                 raise NotImplementedError('Unknown family: %s' % family)
-        
 
-    @task(precursors=['user', 'ubuntumultiverse'])
+
+    @task(precursors=['user', 'ubuntumultiverse', 'locale'])
     def configure(self, **kwargs):
-        
+
         initial_upgrade = int(kwargs.pop('initial_upgrade', 1))
-        
+
         service = kwargs.pop('service', '')
-        
+
         lm = self.last_manifest
-        
+
         if isinstance(lm, list):
             lm = {'required_packages': lm}
-        
+
         enabled_services = map(str.upper, self.genv.services)
         #for satchel_name, satchel in self.all_satchels.iteritems():
         for satchel_name, satchel in self.all_other_enabled_satchels.items():
             if hasattr(satchel, 'packager_pre_configure'):
                 satchel.packager_pre_configure()
-                
+
         self.refresh()
         if initial_upgrade and lm.initial_upgrade is None and self.env.initial_upgrade:
             self.upgrade()
             if self.env.do_reboots:
                 self.reboot(wait=300, timeout=60)
-            
+
         self.install_repositories(service=service, **kwargs)
         self.install_required(type=SYSTEM, service=service, **kwargs)
         self.install_custom(**kwargs)
         self.uninstall_blacklisted()
 
 class UbuntuMultiverseSatchel(Satchel):
-     
+
     name = 'ubuntumultiverse'
 
     @task

@@ -72,27 +72,27 @@ def init_env():
     env.sites = {} # {site:site_settings}
     env[SITE] = None
     env[ROLE] = None
-    
+
     env.hosts_retriever = None
     env.hosts_retrievers = type(env)() #'default':lambda hostname: hostname,
-    
+
     env.hostname_translator = 'default'
     env.hostname_translators = type(env)()
     env.hostname_translators.default = lambda hostname: hostname
-    
+
     env.default_site = None
-    
+
     # A list of all site names that should be available on the current host.
     env.available_sites = []
-    
+
     # A list of all site names per host.
     # {hostname: [sites]}
     # If no entry found, will use available_sites.
     env.available_sites_by_host = {}
-    
+
     # The command run to determine the percent of disk usage.
     env.disk_usage_command = "df -H | grep -vE '^Filesystem|tmpfs|cdrom|none' | awk '{print $5 " " $1}'"
-    
+
     env.burlap_data_dir = '.burlap'
 
     env.setdefault('roledefs', {})
@@ -120,7 +120,7 @@ state_variables = [
     'required_system_packages',
     'required_python_packages',
     'required_ruby_packages',
-    
+
     'service_configurators',
     'service_pre_deployers',
     'service_pre_db_dumpers',
@@ -130,20 +130,20 @@ state_variables = [
     'service_restarters',
     'service_stoppers',
     'services',
-    
+
     'manifest_recorder',
     'manifest_comparer',
     'manifest_deployers',
     'manifest_deployers_befores',
     'manifest_deployers_takes_diff',
-    
+
     'post_callbacks',
     'post_role_load_callbacks',
-    
+
     'post_import_modules',
-    
+
     'all_satchels',
-    
+
     'runs_once_methods',
 ]
 
@@ -196,7 +196,7 @@ def get_state():
             raise NotImplementedError('State variable %s has unknown type %s' % (k, type(v)))
         d[k] = v
     return d
-        
+
 def clear_state():
     d = {}
     for k in state_variables:
@@ -672,6 +672,10 @@ class GlobalRenderer(Renderer):
 def get_satchel(name):
     return all_satchels[name.strip().upper()]
 
+def reset_all_satchels():
+    for name, satchel in all_satchels.items():
+        satchel.clear_caches()
+
 class Satchel(object):
     """
     Represents a base unit of functionality that is deployed and maintained on one
@@ -719,13 +723,13 @@ class Satchel(object):
         self.settings = settings
 
         self._set_defaults()
-        
+
         self._verbose = None
 
         super(Satchel, self).__init__()
 
         self.register()
-        
+
         # Add built-in tasks.
         if 'install_packages' not in self.tasks:
             self.tasks += ('install_packages',)
@@ -769,14 +773,14 @@ class Satchel(object):
         """
         Wrapper around the overrideable set_defaults().
         """
-        
+
         # Register an "enabled" flag on all satchels.
         # How this flag is interpreted depends on the individual satchel.
         _prefix = '%s_enabled' % self.name
         if _prefix not in env:
             env[_prefix] = True
-        
-        # Do a one-time init of custom defaults. 
+
+        # Do a one-time init of custom defaults.
         _key = '_%s' % self.name
         if _key not in env:
             env[_key] = True
@@ -791,22 +795,22 @@ class Satchel(object):
         """
         Adds this satchel to the global registeries for fast lookup from other satchels.
         """
-        
+
         self._set_defaults()
-        
+
         all_satchels[self.name.upper()] = self
-        
+
         manifest_recorder[self.name] = self.record_manifest
-        
+
         # Register service commands.
         if self.required_system_packages:
             required_system_packages[self.name.upper()] = self.required_system_packages
-        
+
     def unregister(self):
         """
         Removes this satchel from global registeries.
         """
-        
+
         for k in env.keys():
             if k.startswith(self.env_prefix):
                 del env[k]
@@ -1307,10 +1311,10 @@ class Satchel(object):
             # Dereference brace notation. e.g. convert '{var}' to `env[var]`.
             if template and template.startswith('{') and template.endswith('}'):
                 template = self.env[template[1:-1]]
-            
+
             if not template:
                 continue
-             
+
             if template.startswith('%s/' % self.name):
                 fqfn = self.find_template(template)
             else:
@@ -1358,7 +1362,7 @@ class Satchel(object):
 
     @verbose.setter
     def verbose(self, v):
-        # 1 or True=local verbose only, 2=global verbose, None=clears local 
+        # 1 or True=local verbose only, 2=global verbose, None=clears local
         if v == 1:
             self._verbose = True
         elif v is None:
@@ -1424,7 +1428,7 @@ class Service(object):
         key = '%s_service_commands' % self.name
         if key in env:
             return env[key]
-         
+
         key = 'service_commands'
         r = self.local_renderer
         if key in r.env:
@@ -1439,7 +1443,7 @@ class Service(object):
             (os_version.type, os_version.distro),
             (os_version.distro,),
             os_version.distro,
-        ]        
+        ]
         if get_verbose():
             print('commands:')
             pprint(self.commands, indent=4)
@@ -2329,12 +2333,12 @@ def get_packager():
     """
     Returns the packager detected on the remote system.
     """
-    
+
     # TODO: remove once fabric stops using contextlib.nested.
     # https://github.com/fabric/fabric/issues/1364
     import warnings
     warnings.filterwarnings("ignore", category=DeprecationWarning)
-    
+
     common_packager = get_rc('common_packager')
     if common_packager:
         return common_packager
@@ -2363,7 +2367,7 @@ def get_os_version():
     """
     Returns a named tuple describing the operating system on the remote host.
     """
-    
+
     # TODO: remove once fabric stops using contextlib.nested.
     # https://github.com/fabric/fabric/issues/1364
     import warnings
@@ -2374,28 +2378,28 @@ def get_os_version():
         return common_os_version
     with settings(warn_only=True):
         with hide('running', 'stdout', 'stderr', 'warnings'):
-    
+
             ret = _run('cat /etc/lsb-release')
             if ret.succeeded:
                 return OS(
                     type=LINUX,
                     distro=UBUNTU,
                     release=re.findall(r'DISTRIB_RELEASE=([0-9\.]+)', ret)[0])
-    
+
             ret = _run('cat /etc/debian_version')
             if ret.succeeded:
                 return OS(
                     type=LINUX,
                     distro=DEBIAN,
                     release=re.findall(r'([0-9\.]+)', ret)[0])
-    
+
             ret = _run('cat /etc/fedora-release')
             if ret.succeeded:
                 return OS(
                     type=LINUX,
                     distro=FEDORA,
                     release=re.findall(r'release ([0-9]+)', ret)[0])
-    
+
             raise Exception('Unable to determine OS version.')
 
 def find_template(template):

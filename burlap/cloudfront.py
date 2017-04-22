@@ -14,7 +14,7 @@ def get_boto():
     return boto
 
 class CloudfrontSatchel(Satchel):
-    
+
     name = 'cloudfront'
 
     def set_defaults(self):
@@ -31,7 +31,7 @@ class CloudfrontSatchel(Satchel):
                 self.genv.aws_secret_access_key
             )
             origin = boto.cloudfront.origin.S3Origin(origin_dns)
-            
+
             distro = None
             dists = conn.get_all_distributions()
             for d in dists:
@@ -40,14 +40,14 @@ class CloudfrontSatchel(Satchel):
                     print('Found existing distribution!')
                     distro = d
                     break
-                    
+
                 # Necessary to avoid "Rate exceeded" errors.
                 time.sleep(0.4)
-            
+
             if not distro:
                 print('Creating new distribution from %s...' % origin)
                 distro = conn.create_distribution(origin=origin, enabled=True)
-                
+
             return distro
         else:
             print('boto.connect_cloudfront().create_distribution(%s)' % repr(origin_dns))

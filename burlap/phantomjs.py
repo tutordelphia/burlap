@@ -11,9 +11,9 @@ class PhantomJSSatchel(Satchel):
     """
     Installs PhantomJS from upstream, since the Ubuntu package is incorrectly built.
     """
-    
+
     name = 'phantomjs'
-    
+
     @property
     def packager_system_packages(self):
         return {
@@ -28,7 +28,7 @@ class PhantomJSSatchel(Satchel):
                 'libfontconfig1-dev',
             ],
         }
-    
+
     def set_defaults(self):
         self.env.version = '2.1.1'
         self.env.target = 'phantomjs-{version}-linux-x86_64'
@@ -38,10 +38,10 @@ class PhantomJSSatchel(Satchel):
     @task
     def install(self):
         r = self.local_renderer
-        
+
         # Ensure the buggy system package is removed.
         r.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq purge phantomjs')
-        
+
         with cd('/tmp'):
             r.run('wget {wget_url}')
             r.run('tar xvjf {target}.tar.bz2')

@@ -54,7 +54,7 @@ def init_env():
 # Prevent globals from being reset by duplicate imports.
 if not 'plan_init' in env:
     init_env()
-    
+
 _originals = env.plan_originals
 
 RUN = 'run'
@@ -136,7 +136,7 @@ def is_file(fqfn):
 #         print('singleton.init')
 #         super(Singleton, cls).__init__(name, bases, dict)
 #         cls.instance = None
-#  
+#
 #     def __call__(cls, *args, **kw):
 #         print('singleton.call')
 #         return super(Singleton, cls).__call__(*args, **kw)
@@ -149,14 +149,14 @@ class RemoteFile(object):
     A helper class for allowing a remote file to be read and written locally
     while still ultimately being saved remotely.
     """
-    
+
 #     __metaclass__ = Singleton
-    
+
     _file_cache = {} # {fqfn, obj}
-    
+
     #TODO:use meta-class instead?
     #http://stackoverflow.com/questions/31875/is-there-a-simple-elegant-way-to-define-singletons-in-python/33201#33201
-    
+
     def __new__(cls, fqfn, *args, **kwargs):
         # Remember and cache every class instance per unique file name.
         if fqfn not in cls._file_cache:
@@ -165,24 +165,24 @@ class RemoteFile(object):
 #         else:
 #             print('using cache:', fqfn)
         return cls._file_cache[fqfn]
-    
+
     def __init__(self, fqfn, mode='r'):
         super(RemoteFile, self).__init__() # causes instantiation error?
-        
+
         assert mode in ('r', 'w', 'a'), 'Invalid mode: %s' % mode
-        
+
         self.mode = mode
-            
+
         # Due to the singleton-nature of __new__, this may be called multiple times,
         # so we check for and avoid duplicate calls.
         if not hasattr(self, 'fqfn'):
-            
+
             self.fqfn = fqfn
             self.content = ''
             self.fresh = True
-            
+
             if mode in 'ra':
-    
+
                 _, tmp_fn = tempfile.mkstemp()
                 os.remove(tmp_fn)
                 ret = _get(remote_path=fqfn, local_path=tmp_fn, use_sudo=True)
@@ -198,12 +198,12 @@ class RemoteFile(object):
                 #print('removing:', tmp_fn)
                 os.remove(tmp_fn)#TODO:memory leak?
 #                 print('done init load')
-                
+
             if mode in 'wa':
-                
+
                 # Update file system cache.
                 _fs_cache['is_file'][fqfn] = True
-                
+
 #         print('done init all')
 
     def write(self, s):
@@ -214,14 +214,14 @@ class RemoteFile(object):
 
     def read(self, *args, **kwargs):
         return self.content
-    
+
     def readlines(self):
         return self.content.split('\n')
-    
+
     def flush(self):
         if self.fresh:
             return
-        
+
         print('Flushing contents to remote file.')
         _, tmp_fn = tempfile.mkstemp()
         os.remove(tmp_fn)
@@ -236,10 +236,10 @@ class RemoteFile(object):
             use_sudo=True)
         os.remove(tmp_fn)#TODO:memory leak?
         self.fresh = True
-        
+
         # Update file system cache.
         _fs_cache['is_file'][self.fqfn] = True
-        
+
     def close(self):
         print('Closing remote file.')
         self.flush()
@@ -317,30 +317,30 @@ def get_thumbprint_path(role, name):
 
 def get_thumbprint_filename():
     return 'thumbprint'
-        
+
 class Step(object):
     """
     A single piece of a plan.
     """
-    
+
     def __init__(self, command, host, method, user=None, key=None, args=None, kwargs=None):
-        
+
         args = args or []
         kargs = kwargs or {}
-        
+
         self.command = command
         self.host = host
         self.user = user
         self.method = method
-        
+
         assert method in PLAN_METHODS
-        
+
         self.key = key
         # The value entity attributes are set to as a result
         # of executing this step.
         self.args = args
         self.kwargs = kwargs
-    
+
     @classmethod
     def from_line(cls, line):
         matches = re.findall(
@@ -349,20 +349,20 @@ class Step(object):
         assert matches
         #print(matches)
         kwargs = dict(zip(['user', 'host', 'extra', 'method', 'command'], matches[0]))
-        
+
         extra = {}
         if kwargs['extra']:
             extra = json.loads(kwargs['extra'])
         del kwargs['extra']
-        
+
         if 'key' in extra:
             key = extra['key']
             del extra['key']
             kwargs['key'] = key
-           
+
         step = Step(**kwargs)
         return step
-    
+
     def execute(self):
         method = getattr(common, '%s_or_dryrun' % self.method)
         env.user = self.user
@@ -372,7 +372,7 @@ class Step(object):
         else:
             env.key_filename = None
         method(self.command)
-    
+
     def __str__(self):
         user_str = '%s@' % (self.user) if self.user else ''
         return '[%s%s] %s %s' % (
@@ -381,7 +381,7 @@ class Step(object):
             self.method+':',
             self.command,
         )
-    
+
     def __repr__(self):
         return str(self.__dict__)
 
@@ -401,20 +401,20 @@ class Plan(object):
     """
     A sequence of steps for accomplishing a state change.
     """
-    
+
     def __init__(self, name, role=None):
-        
+
         self.verbose = verbose = common.get_verbose()
-        
+
         self.name = name
-        
+
         self.role = role or env.ROLE
-        
+
         self.vprint('init plan dir')
         self.plan_dir = get_plan_dir(role, name)
         make_dir(self.plan_dir)
         assert is_dir(self.plan_dir)
-        
+
         self.vprint('init plan history dir')
         self.plan_dir_history = os.path.join(self.plan_dir, 'history')
         if not is_file(self.plan_dir_history):
@@ -422,9 +422,9 @@ class Plan(object):
             fout.write(','.join(HISTORY_HEADERS))
             fout.close()
         self.vprint('loading plan history')
-        
+
         self.load_history()
-        
+
         self.vprint('init plan index')
         self.plan_dir_index = os.path.join(self.plan_dir, 'index')
         if not is_file(self.plan_dir_index):
@@ -433,7 +433,7 @@ class Plan(object):
             fout.close()
         self.vprint('loading plan index')
         self.load_index()
-        
+
         self.vprint('init plan steps')
         self.plan_dir_steps = os.path.join(self.plan_dir, 'steps')
         if not is_file(self.plan_dir_steps):
@@ -442,7 +442,7 @@ class Plan(object):
             fout.close()
         self.vprint('loading plan steps')
         self.load_steps()
-        
+
         self.vprint('init plan hosts')
         self.plan_dir_hosts = os.path.join(self.plan_dir, 'hosts')
         if self.role == env.ROLE and not is_file(self.plan_dir_hosts):
@@ -451,9 +451,9 @@ class Plan(object):
             fout.close()
         self.vprint('loading plan hosts')
         self.load_hosts()
-        
+
         #self.plan_thumbprint_fn = os.path.join(self.plan_dir, 'thumbprint')
-        
+
         self.vprint('plan init done')
 
     def vprint(self, *args, **kwargs):
@@ -468,17 +468,17 @@ class Plan(object):
         if not isinstance(other, Plan):
             return NotImplemented
         return cmp((self.name, self.role), (other.name, other.role))
-    
+
     def __unicode__(self):
         return unicode(self.name)
-    
+
     def __repr__(self):
         return u'<%s: %s>' % (type(self).__name__, unicode(self))
-    
+
     def is_complete(self):
         #return self.percent_complete == 100
         return self.all_hosts_thumbprinted and self.index == len(self._steps)
-    
+
     @property
     def number(self):
         try:
@@ -486,10 +486,10 @@ class Plan(object):
         except IndexError:
             #print('No number in "%s"' % self.name
             return 0
-    
+
     def failed(self):
         return False #TODO
-    
+
     def load_hosts(self):
         self.hosts = []
         if self.verbose: print('loading hosts, opening')
@@ -502,7 +502,7 @@ class Plan(object):
                 continue
             self.hosts.append(line.strip())
         if self.verbose: print('loading hosts, done')
-    
+
     @property
     def all_hosts_thumbprinted(self):
         for host in self.hosts:
@@ -510,16 +510,16 @@ class Plan(object):
             if not is_file(fn):
                 return False
         return True
-    
+
     def load_history(self):
         pass
-    
+
     def get_thumbprint_filename(self, host_string):
         d = os.path.join(self.plan_dir, 'thumbprints')
         make_dir(d)
         fn = os.path.join(d, env.host_string)
         return fn
-    
+
     @property
     def thumbprint(self):
         verbose = common.get_verbose()
@@ -531,7 +531,7 @@ class Plan(object):
         data = yaml.load(content)
         self.vprint('plan.thumbprint.yaml.data:', data)
         return data
-    
+
     @thumbprint.setter
     def thumbprint(self, data):
         assert isinstance(data, dict)
@@ -539,7 +539,7 @@ class Plan(object):
             fout = open_file(self.get_thumbprint_filename(env.host_string), 'w')
             yaml.dump(data, fout, default_flow_style=False, indent=4)
             fout.flush()
-    
+
     def record_thumbprint(self, only_components=None):
         """
         Creates a thumbprint file for the current host in the current role and name.
@@ -550,27 +550,27 @@ class Plan(object):
         print('Recording thumbprint for host %s with deployment %s on %s.' % (env.host_string, self.name, self.role))
         #print('data:', data)
         self.thumbprint = data
-    
+
     @property
     def remaining_step_count(self):
         return len(self._steps) - self.index
-    
+
     def add_history(self, index, start, end):
         fout = open_file(self.plan_dir_history, 'a')
         fout.write('%s,%s,%s\n' % (index, start, end))
         fout.flush()
         fout.close()
-    
+
     def load_index(self):
         self._index = int(open_file(self.plan_dir_index).read().strip())
-    
+
     @property
     def index(self):
         return self._index
-    
+
     def is_initial(self):
         return set(self.name) == set(['0'])
-    
+
     @property
     def percent_complete(self):
         if self.is_initial():
@@ -578,7 +578,7 @@ class Plan(object):
         if not self._steps:
             return 100
         return self.index/float(len(self._steps))*100
-    
+
     @index.setter
     def index(self, v):
         self._index = int(v)
@@ -586,7 +586,7 @@ class Plan(object):
         fout.write(str(self._index))
         fout.flush()
         fout.close()
-    
+
     def load_steps(self):
         self._steps = []
         lines = open_file(self.plan_dir_steps).readlines()
@@ -621,40 +621,40 @@ class Plan(object):
             print('loading plan:', name)
         plan = cls(name, role=role)
         return plan
-    
+
     def add_step(self, s):
         assert isinstance(s, Step)
         self._steps.append(s)
-    
+
     @property
     def steps(self):
         return list(self._steps)
-    
+
     def clear(self):
         self.index = 0
         self._steps = []
-    
+
     def execute(self, i=None, j=None):
         i = i or self.index
         steps_ran = []
         for step_i, step in enumerate(self.steps):
             if step_i < i:
                 continue
-                
+
             # Run command.
             t0 = datetime.datetime.utcnow().isoformat()
             step.execute()
             t1 = datetime.datetime.utcnow().isoformat()
             steps_ran.append(step)
-            
+
             # Record success.
             if not common.get_dryrun():
                 self.index = step_i + 1
                 self.add_history(self.index, t0, t1)
-            
+
             if j is not None and step_i >= j:
                 break
-                
+
         return steps_ran
 
 #DEPRECATED
@@ -699,7 +699,7 @@ def get_last_completed_plan():
             print('plan.completed:', plan.is_complete())
         if plan.is_complete():
             return plan
-            
+
 def get_last_plan(role=None):
     """
     Returns the last plan created.
@@ -748,7 +748,7 @@ def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None
     """
     if name == INITIAL:
         name = '0'*env.plan_digits
-    
+
     last = get_last_thumbprint()
     only_components = only_components or []
     only_components = [_.upper() for _ in only_components]
@@ -757,17 +757,17 @@ def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None
     for component_name, func in sorted(common.manifest_recorder.iteritems()):
         component_name = component_name.upper()
         #print('component_name:', component_name)
-        
+
         if only_components and component_name not in only_components:
             if common.get_verbose():
                 print('Skipping ignored component:', component_name)
             continue
-            
+
         if component_name.lower() not in env.services:
             if common.get_verbose():
                 print('Skipping unused component:', component_name)
             continue
-            
+
         try:
             manifest_data[component_name] = func()
         except exceptions.AbortDeployment as e:
@@ -776,7 +776,7 @@ def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None
             if int(reraise):
                 raise
             print(traceback.format_exc(), file=sys.stderr)
-        
+
     return manifest_data
 
 @task_or_dryrun
@@ -892,7 +892,7 @@ def reset():
         local_or_dryrun('mkdir -p "%s"' % d)
     else:
         raise NotImplementedError
-    
+
 @task_or_dryrun
 @runs_once
 def truncate():
@@ -910,7 +910,7 @@ def thumbprint(components=None, set_satchels=None):
     so that a future deployment can use it as a reference to perform an
     idempotent deployment.
     """
-    
+
     only_components = components or []
     if isinstance(only_components, basestring):
         only_components = [_.strip() for _ in only_components.split(',') if _.strip()]
@@ -929,7 +929,7 @@ def thumbprint(components=None, set_satchels=None):
     if not plan:
         plan = Plan.get_or_create_next()
     plan.record_thumbprint(only_components=only_components)
-    
+
 @task_or_dryrun
 @runs_once
 def preview(**kwargs):
@@ -946,7 +946,7 @@ def get_last_current_diffs(target_component):
     Retrieves differing manifests between the current and last snapshot.
     """
     target_component = target_component.strip().upper()
-    
+
     all_services = set(_.strip().upper() for _ in env.services)
     diffs = list(iter_thumbprint_differences())
     components = set()
@@ -955,7 +955,7 @@ def get_last_current_diffs(target_component):
         if component not in all_services:
             continue
         component_thumbprints[component] = last, current
-    
+
     print('component_thumbprints:', component_thumbprints.keys())
     last, current = component_thumbprints[target_component]
     return last, current
@@ -964,46 +964,46 @@ def get_last_current_diffs(target_component):
 def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, enable_plans=True, force=False):
     """
     Generates a plan based on the components that have changed since the last deployment.
-    
+
     The overall steps ran for each host:
-    
+
         1. create plan
         2. run plan
         3. create thumbprint
-    
+
     fake := If true, generates the plan and records the run as successful, but does not apply any
         changes to the hosts.
-    
+
     components := list of names of components found in the services list
-    
+
     force := If true and specific components are specified, treats them as changed, even if no changes have been found
     """
     verbose = common.get_verbose()
-    
+
     explain = int(explain)
     only_components = components or []
     if isinstance(only_components, basestring):
         only_components = [_.strip().upper() for _ in only_components.split(',') if _.strip()]
     if only_components:
         print('Limiting deployment to components: %s' % only_components)
-    
+
     def get_deploy_funcs(components):
         for component in components:
-            
+
             if only_components and component not in only_components:
                 continue
-            
+
             funcs = common.manifest_deployers.get(component, [])
             for func_name in funcs:
-                
+
                 #TODO:remove this after burlap.* naming prefix bug fixed
                 if func_name.startswith('burlap.'):
                     print('skipping %s' % func_name)
                     continue
-                    
+
                 takes_diff = common.manifest_deployers_takes_diff.get(func_name, False)
 #                 print(func_name, takes_diff)
-                
+
                 if preview:
                     #print(success((' '*4)+func_name))
                     #continue
@@ -1020,12 +1020,12 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
     fake = int(fake)
     preview = int(preview)
     check_outstanding = int(check_outstanding)
-    
+
     all_services = set(_.strip().upper() for _ in env.services)
     if verbose:
         print('&'*80)
         print('services:', env.services)
-    
+
     if enable_plans:
         last_plan = get_last_completed_plan()
         outstanding = has_outstanding_plans()
@@ -1038,7 +1038,7 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
                 'To ignore these, re-run with :check_outstanding=0.'
             ) % env.ROLE))
             sys.exit(1)
-    
+
     if verbose:
         print('iter_thumbprint_differences')
     diffs = list(iter_thumbprint_differences(only_components=only_components))
@@ -1060,13 +1060,13 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
     if force and only_components:
         components.update(only_components)
     component_dependences = {}
-    
+
     if verbose:
         print('all_services:', all_services)
         print('manifest_deployers_befores:', common.manifest_deployers_befores.keys())
         print('*'*80)
         print('all components:', components)
-    
+
     all_components = set(common.all_satchels)
     if only_components and not all_components.issuperset(only_components):
         unknown_components = set(only_components).difference(all_components)
@@ -1082,12 +1082,12 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
         if verbose:
             print('deps1:', deps)
         component_dependences[_c] = deps
-        
+
     if verbose:
         print('dependencies:')
         for _c in component_dependences:
             print(_c, component_dependences[_c])
-        
+
     components = list(common.topological_sort(component_dependences.items()))
     plan_funcs = list(get_deploy_funcs(components))
     if components and plan_funcs:
@@ -1100,8 +1100,8 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
     else:
         print(success_str('\nNothing to do!\n'))
         return False
-    
-    # Execute plan. 
+
+    # Execute plan.
     if preview:
         print('\nTo execute this plan on all hosts run:\n\n    fab %s deploy.run' % env.ROLE)
         return components, plan_funcs
@@ -1115,7 +1115,7 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
                 fout.flush()
                 if callable(plan_func):
                     plan_func()
-                    
+
                     # Record this step complete.
                     if not only_components:
                         try:
@@ -1123,12 +1123,12 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
                         except AssertionError:
                             # On new installs where the host is not yet present, this may fail.
                             pass
-                        
+
                 print('%s Done!' % (datetime.datetime.now(),), file=fout)
                 fout.flush()
             print('%s Plan execution complete!' % (datetime.datetime.now(),), file=fout)
             fout.flush()
-    
+
     # Create thumbprint.
     if enable_plans and not preview and not common.get_dryrun():
         plan = Plan.get_or_create_next(last_plan=last_plan)
@@ -1138,19 +1138,19 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
 def run(*args, **kwargs):
     """
     Performs a full deployment.
-    
+
     Parameters:
-    
+
         components := name of satchel to limit deployment to
     """
     from burlap import notifier
     from burlap.common import all_satchels, get_satchel
-    
+
     service = get_satchel('service')
-    
+
     assume_yes = int(kwargs.pop('assume_yes', 0)) or int(kwargs.pop('yes', 0))
     fake = int(kwargs.get('fake', 0))
-    
+
     # Allow satchels to configure connection parameters before we try contacting the hosts.
     #TODO:support ordering?
     services_set = set(env.services)
@@ -1165,7 +1165,7 @@ def run(*args, **kwargs):
                 satchel.deploy_pre_run()
             except Exception as e:
                 print('Error running %s pre-runner: %s' % (name, e))
-    
+
     if env.host_string == env.hosts[0]:
         pending = preview(*args, **kwargs)
         if pending:
@@ -1176,13 +1176,13 @@ def run(*args, **kwargs):
         else:
             # There are no changes pending, so abort all further tasks.
             sys.exit(1)
-    
+
     if not fake:
         service.pre_deploy()
-        
+
     kwargs['check_outstanding'] = 0
     auto(*args, **kwargs)
-    
+
     if not fake:
         service.post_deploy()
         notifier.notify_post_deployment()
@@ -1195,4 +1195,3 @@ def test_remotefile():
     print('-'*80)
     f = RemoteFile('/var/log/auth.log')
     print(id(f))
-    

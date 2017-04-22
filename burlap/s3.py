@@ -22,7 +22,7 @@ from burlap.decorators import task
 S3SYNC_PATH_PATTERN = r'(?:->)\s+([^\n]+)'
 
 class S3Satchel(Satchel):
-    
+
     name = 's3'
 
     def set_defaults(self):
@@ -37,30 +37,30 @@ class S3Satchel(Satchel):
     def sync(self, sync_set, force=0, site=None, role=None):
         """
         Uploads media to an Amazon S3 bucket using s3sync.
-        
+
         Requires s3cmd. Install with:
-        
+
             pip install s3cmd
-            
+
         """
         from burlap.dj import dj
         force = int(force)
-        
+
         r = self.local_renderer
-        
+
         r.env.sync_force_flag = ' --force ' if force else ''
-        
+
         _settings = dj.get_settings(site=site, role=role)
         assert _settings, 'Unable to import settings.'
         for k in _settings.__dict__.iterkeys():
             if k.startswith('AWS_'):
                 r.genv[k] = _settings.__dict__[k]
-        
+
         site_data = r.genv.sites[r.genv.SITE]
         r.env.update(site_data)
-        
+
         r.env.virtualenv_bin_dir = os.path.split(sys.executable)[0]
-        
+
         rets = []
         for paths in r.env.sync_sets[sync_set]:
             is_local = paths.get('is_local', True)
@@ -70,21 +70,21 @@ class S3Satchel(Satchel):
             if not remote_path.startswith('s3://'):
                 remote_path = 's3://' + remote_path
             local_path = local_path % r.genv
-            
+
             if is_local:
                 #local_or_dryrun('which s3sync')#, capture=True)
                 r.env.local_path = os.path.abspath(local_path)
             else:
                 #run('which s3sync')
                 r.env.local_path = local_path
-                
+
             if local_path.endswith('/') and not r.env.local_path.endswith('/'):
                 r.env.local_path = r.env.local_path + '/'
-                
+
             r.env.remote_path = remote_path % r.genv
-            
+
             print('Syncing %s to %s...' % (r.env.local_path, r.env.remote_path))
-            
+
             # Superior Python version.
             if force:
                 r.env.sync_cmd = 'put'
@@ -96,14 +96,14 @@ class S3Satchel(Satchel):
                 '{s3cmd_path} {sync_cmd} --progress --acl-public --guess-mime-type --no-mime-magic '\
                 '--delete-removed --cf-invalidate --recursive {sync_force_flag} '\
                 '{local_path} {remote_path}')
-    
+
     @task
     def invalidate(self, *paths):
         """
         Issues invalidation requests to a Cloudfront distribution
         for the current static media bucket, triggering it to reload the specified
         paths from the origin.
-        
+
         Note, only 1000 paths can be issued in a request at any one time.
         """
         dj = self.get_satchel('dj')
@@ -124,7 +124,7 @@ class S3Satchel(Satchel):
             paths = all_paths[i:i+1000]
             if not paths:
                 break
-            
+
             c = boto.connect_cloudfront()
             rs = c.get_all_distributions()
             target_dist = None
@@ -148,9 +148,9 @@ class S3Satchel(Satchel):
     def get_or_create_bucket(self, name):
         """
         Gets an S3 bucket of the given name, creating one if it doesn't already exist.
-        
+
         Should be called with a role, if AWS credentials are stored in role settings. e.g.
-        
+
             fab local s3.get_or_create_bucket:mybucket
         """
         from boto.s3 import connection
@@ -166,22 +166,22 @@ class S3Satchel(Satchel):
 
     @task
     def list_bucket_sizes(self):
-        
+
         UNIT_TO_BYTES = {
             'Bytes': 1,
             'KiB': 1000,
             'MiB': 1000000,
             'GiB': 1000000000,
         }
-        
+
         r = self.local_renderer
-        
+
         sizes = {} # {bucket: total size}
         total_size_bytes = 0
-        
+
         buckets = json.loads(r.local("aws s3api list-buckets --query 'Buckets[].Name'", capture=True) or '[]')
         print('buckets:', len(buckets))
-        
+
         for bucket in buckets:
             ret = r.local("aws s3 ls --summarize --human-readable --recursive s3://%s/" % bucket, capture=True)
             matches = re.findall(r'Total Size: (?P<number>[0-9\.]+)\s(?P<unit>[a-zA-Z]+)', ret)
@@ -195,9 +195,9 @@ class S3Satchel(Satchel):
         for name in sorted(sizes):
             print('%s,%s' % (name, sizes[name]))
         print('all,%s' % total_size_bytes)
-    
+
     @task(precursors=['packager'])
     def configure(self, *args, **kwargs):
         pass
-        
+
 s3 = S3Satchel()

@@ -19,7 +19,7 @@ MANAGER = 'yum -y --color=never'
 def update(kernel=False):
     """
     Upgrade all packages, skip obsoletes if ``obsoletes=0`` in ``yum.conf``.
-    
+
     Exclude *kernel* upgrades by default.
     """
     manager = MANAGER

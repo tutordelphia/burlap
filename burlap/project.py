@@ -25,12 +25,12 @@ def to_camelcase(value):
     return ''.join(x.capitalize() for x in value.split(' '))
 
 def init_dj(project_name, default_roles, virtualenv_dir='.env', **kwargs):
-    
+
     site_name = project_name
-    
+
     print('Installing Django...')
     os.system('%s/bin/pip install Django' % virtualenv_dir)
-    
+
     print('Initializing Django project...')
     if not os.path.isdir('src/%s' % site_name):
         print('Initializing base django project...')
@@ -53,7 +53,7 @@ SITES = (
             _top.append("    ROLE_%s," % (_role.upper(),))
         _top.append(')')
         _index = _content.find('"""\n\n')+4
-        
+
         bottom_args = dict(
             app_name=project_name,
             app_name_title=project_name.title() + ' Administration',
@@ -97,7 +97,7 @@ ADMIN_TITLE = '{app_name_title}'
 ADMIN_TITLE_SIMPLE = '{app_name_simple}'
 '''.format(**bottom_args)
         open(_settings_fn, 'w').write(_content[:_index]+_sites+('\n'.join(_top))+_content[_index:]+_bottom)
-    
+
     print('Creating Django helper scripts...')
     open('src/manage', 'w').write('''#!/bin/bash
 # Helper script for ensuring we use the Python binary in our local
@@ -138,7 +138,7 @@ PS1="\u@\h:\W(fab)\$ "''')
 
     md('media')
     md('static')
-    
+
     os.system('chmod +x src/shell')
     os.system('chmod +x src/manage')
     os.system('chmod +x src/runserver')
@@ -146,16 +146,16 @@ PS1="\u@\h:\W(fab)\$ "''')
     # Create the primary app for containing models/urls/views.
     if not os.path.isdir('src/%s' % project_name):
         os.system('cd src; ./manage startapp %s' % (project_name,))
-        
+
     os.system('cd src; ./manage syncdb')
 
 class ProjectSatchel(ContainerSatchel):
-    
+
     name = 'project'
-    
+
     def set_defaults(self):
         pass
-    
+
     def update_settings(self, d, role, path='roles/{role}/settings.yaml'):
         """
         Writes a key/value pair to a settings file.
@@ -174,24 +174,24 @@ class ProjectSatchel(ContainerSatchel):
         data.update(d)
         settings_str = dump_func(data)
         open(settings_fn, 'w').write(settings_str)
-    
+
     @task
     def create_skeleton(self, project_name, roles='', components='', pip_requirements='', virtualenv_dir='.env', **kwargs):
 
         assert project_name, 'Specify project name.'
         site_name = project_name
-        
+
         app_name = project_name
-        
+
         default_roles = [_ for _ in roles.split(',') if _.strip()]
         default_components = [_.strip().lower() for _ in components.split(',') if _.strip()]
-        
+
         print('Creating folders...')
         md('roles/all')
         for _role in default_roles:
             md('roles/%s' % _role)
         md('src')
-        
+
         print('Creating roles...')
         open('roles/all/settings.yaml', 'w').write(
             self.render_to_string(
@@ -202,17 +202,17 @@ class ProjectSatchel(ContainerSatchel):
                 self.render_to_string(
                     'burlap/role_settings.yaml.template',
                     extra=dict(project_name=project_name, site_name=site_name, role=_role)))
-        
+
         default_packages = pip_requirements.split(',')
         if default_packages:
             open('roles/all/pip-requirements.txt', 'w').write('\n'.join(default_packages))
-            
+
         open('roles/all/apt-requirements.txt', 'w').write('')
-        
+
         content = open(fabfile_template, 'r').read()
         content = content.format(project_name=project_name)
         open('fabfile.py', 'w').write(content.strip()+'\n')
-        
+
         print('Initializing local development virtual environment...')
         os.system('virtualenv --no-site-packages %s' % virtualenv_dir)
         for package in default_packages:
@@ -230,9 +230,9 @@ class ProjectSatchel(ContainerSatchel):
             assert not os.system(cmd)
 
         open('setup.bash', 'w').write(self.render_to_string('burlap/setup.bash.template'))
-        
+
         open('.gitignore', 'w').write(self.render_to_string('burlap/gitignore.template'))
-        
+
         args = kwargs.copy()
         args['project_name'] = project_name
         args['roles'] = roles
@@ -245,7 +245,7 @@ class ProjectSatchel(ContainerSatchel):
                 globals()['init_%s' % component](**args)
             except KeyError:
                 pass
-        
+
         print('='*80)
         print()
         print('Skeleton created for project %s!' % (project_name.title(),))
