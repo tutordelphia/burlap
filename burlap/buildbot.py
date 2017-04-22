@@ -399,10 +399,10 @@ class BuildBotSatchel(ServiceSatchel):
 
     @task(precursors=['packager', 'user', 'apache'])
     def configure(self):
-        
-        with settings(**s):
+
+        with settings(warn_only=True):
             self.stop()
-        
+
         packager = self.get_satchel('packager')
 #         umv = self.get_satchel('ubuntumultiverse')
 
@@ -428,9 +428,9 @@ class BuildBotSatchel(ServiceSatchel):
         self.configure_ssh_key()
 
         self.update_cron_check()
-        
+
         self.restart()
-        
+
         apache = self.get_satchel('apache')
         apache.reload()
 

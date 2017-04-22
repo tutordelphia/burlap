@@ -44,7 +44,7 @@ class DjangoSatchel(Satchel):
         self.env.shell_template = 'cd {project_dir}; /bin/bash -i -c \"{manage_cmd} shell;\"'
 
         self.env.fixture_sets = {} # {name: [paths to Django fixtures]}
-        
+
         # These apps will be migrated on a specific database, while faked
         # on all others.
         # This is necessary since South does not have proper support for
@@ -59,7 +59,7 @@ class DjangoSatchel(Satchel):
         self.env.version = (1, 6, 0)
 
         self.env.createsuperuser_cmd = 'createsuperuser'
-        
+
         self.env.manage_media = True
 
         self.env.manage_migrations = True
@@ -508,6 +508,8 @@ class DjangoSatchel(Satchel):
         r = self.local_renderer
 
         ignore_errors = int(ignore_errors)
+
+        post_south = tuple(r.env.version) >= (1, 7, 0)
 
         r.env.db_syncdb_all_flag = '--all' if int(all) else ''
 

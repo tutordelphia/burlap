@@ -1,19 +1,11 @@
 from __future__ import print_function
 
-import os
-import sys
-import re
-import json
-import uuid
-import traceback
-import commands
 from pprint import pprint
-from functools import partial
 
 from burlap.constants import *
 from burlap import Satchel
-from burlap.decorators import task, runs_once
-from burlap.common import print_fail, print_success
+from burlap.decorators import task
+from burlap.common import print_success
 
 GODADDY = 'godaddy'
 BACKENDS = (
@@ -24,9 +16,9 @@ class DNSSatchel(Satchel):
     """
     Manages DNS zone records.
     """
-    
+
     name = 'dns'
-    
+
     def set_defaults(self):
         self.zones = []
 
@@ -81,9 +73,9 @@ class DNSSatchel(Satchel):
             zone_data = parse_zone_file(zone_data)
             if self.verbose:
                 pprint(dict(zone_data), indent=4)
-            
+
             #TODO:add differential update using get_last_zonefile()
-            
+
             # Only update record types we're specifically incharge of managing.
             for record_type in types:
                 record_type = record_type.lower()
@@ -91,8 +83,9 @@ class DNSSatchel(Satchel):
                     getattr(self, 'update_dns_%s' % backend)(domain=domain, record_type=record_type, record=record)
                     #break
                 #break
-                
+
     def record_manifest(self):
+        r = self.local_renderer
         manifest = super(DNSSatchel, self).record_manifest()
         manifest['zone_files'] = {}
         for zone_data in r.env.zones:

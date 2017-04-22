@@ -497,13 +497,13 @@ def format(s, lenv, genv, prefix=None, ignored_variables=None): # pylint: disabl
 
         for _vn in ignored_variables:
             # We can't escape ignroed variables this way, because the variables may use Python ":" operator,
-            # conflicting with curly brace string interpolation. 
+            # conflicting with curly brace string interpolation.
             #var_values[_vn] = '{%s}' % _vn
             k = '{%s}' % _vn
             v = str(uuid.uuid4())
             escaped_var_names[k] = v
             s = s.replace(k, v)
-            
+
 #         print('var_values:', var_values)
 #         print('s:', s)
         s = s.format(**var_values)
