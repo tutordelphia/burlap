@@ -325,11 +325,22 @@ class BuildBotSatchel(ServiceSatchel):
 
     @task
     def setup_user(self):
+        r = self.local_renderer
         user = self.get_satchel('user')
         group = self.get_satchel('group')
-        user.create(self.env.user, self.env.bb_group)
+
+#         user = buildbot.get_satchel('user')
+#         user.create(username='buildbot', groups='buildbot')
+#
         group.create(self.env.bb_group)
-        user.create(self.env.bb_user, self.env.bb_group)
+        user.create(
+            username=self.env.bb_user,
+            groups=self.env.bb_group,
+            create_home=True,
+            home_dir=r.format(r.env.home_dir),
+            password=False,
+        )
+        #user.create(self.env.bb_user, self.env.bb_group)
 
     def deploy_pre_run(self):
         self.check_ok()
@@ -420,29 +431,32 @@ class BuildBotSatchel(ServiceSatchel):
     @task(precursors=['packager', 'user', 'apache'])
     def configure(self):
 
+        self.vprint('Stopping any existing buildbot server...')
         with settings(warn_only=True):
             self.stop()
 
+        self.vprint('Installing packages...')
         packager = self.get_satchel('packager')
 #         umv = self.get_satchel('ubuntumultiverse')
-
         packager.configure()
 
+        self.vprint('Enabling Apache modules...')
         if self.env.enable_apache_site:
             apache = self.get_satchel('apache')
             apache.enable_mod('proxy_http')
 
+        self.vprint('Setting up user...')
         self.setup_user()
 
         #umv.configure()
 
-        # Initialize base project directory and
-        # Setup Python virtual environment.
+        self.vprint('Setting up project directory...')
         self.setup_dir()
 
-        # Copy up our code.
+        self.vprint('Deploying code...')
         self.deploy_code()
 
+        self.vprint('Installing cron...')
         self.install_cron()
 
         self.configure_ssh_key()

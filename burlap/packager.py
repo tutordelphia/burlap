@@ -21,6 +21,9 @@ class PackagerSatchel(Satchel):
         self.env.do_reboots = True
         self.env.blacklisted_packages = []
 
+        # If true, all packages in the custom apt/yum requirements will be managed.
+        self.env.manage_custom = True
+
     def record_manifest(self):
         """
         Returns a dictionary representing a serialized state of the service.
@@ -109,6 +112,8 @@ class PackagerSatchel(Satchel):
         Installs all system packages listed in the appropriate
         <packager>-requirements.txt.
         """
+        if not self.env.manage_custom:
+            return
         packager = self.packager
         if packager == APT:
             return self.install_apt(*args, **kwargs)
