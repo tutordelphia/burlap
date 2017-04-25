@@ -233,7 +233,7 @@ class BuildBotSatchel(ServiceSatchel):
         r = self.local_renderer
         r.sudo('rm -f {cron_path} || true')
         r.sudo('service cron restart')
-        
+
     @task
     def deploy_code(self):
         r = self.local_renderer
@@ -405,6 +405,7 @@ class BuildBotSatchel(ServiceSatchel):
 
     @task
     def uninstall(self):
+        r = self.local_renderer
 
         with settings(warn_only=True):
             self.stop()
