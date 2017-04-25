@@ -54,8 +54,9 @@ class SeleniumTests(TestCase):
             print('-'*80)
 
             # Confirm the most recent version was installed.
+            expected_version = selenium.get_most_recent_version()
             selenium.clear_caches()
-            assert selenium.last_manifest.fingerprint == '0.15.0'
+            assert selenium.last_manifest.fingerprint == expected_version
             output = selenium.run('geckodriver --version')
             expected_version = selenium.get_latest_geckodriver_version_number()
             assert expected_version in output

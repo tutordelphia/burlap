@@ -23,7 +23,7 @@ class GitTests(TestCase):
         git.install_packages() # fails on Ubuntu 14 under Travis-CI?
 
         print('Setting up sample git repo...')
-        run('mkdir /tmp/mygithookrepo')
+        run('mkdir /tmp/mygithookrepo || true')
         with cd('/tmp/mygithookrepo'):
             run('git init')
         assert not exists('/tmp/mygithookrepo/.git/hooks/post-checkout')
