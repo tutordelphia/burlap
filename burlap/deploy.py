@@ -536,7 +536,8 @@ class Plan(object):
     def thumbprint(self, data):
         assert isinstance(data, dict)
         if not common.get_dryrun():
-            fout = open_file(self.get_thumbprint_filename(env.host_string), 'w')
+            fn = self.get_thumbprint_filename(env.host_string)
+            fout = open_file(fn, 'w')
             yaml.dump(data, fout, default_flow_style=False, indent=4)
             fout.flush()
 

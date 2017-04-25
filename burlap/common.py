@@ -2558,8 +2558,8 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
 
     target_sites = env.available_sites_by_host.get(hostname, None)
 
-#     print('iter_sites.site:', site)
-#     print('iter_sites.sites:', sites)
+#    print('iter_sites.site:', site)
+#    print('iter_sites.sites0:', sites)
 #     print('iter_sites.target_sites:', target_sites)
 
     if sites is None:
@@ -2572,6 +2572,7 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
             sites = [(site, env.sites.get(site))]
 #             print('iter_sites.sites2b:', sites)
 
+#    print('iter_sites.sites1:', sorted(sites))
     renderer = renderer #or render_remote_paths
     env_default = save_env()
     for site, site_data in sorted(sites):

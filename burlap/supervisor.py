@@ -262,8 +262,9 @@ class SupervisorSatchel(ServiceSatchel):
                 elif isinstance(ret, tuple):
                     assert len(ret) == 2
                     conf_name, conf_content = ret
-#                     print('conf_name:', conf_name)
-#                     print('conf_content:', conf_content)
+                    if self.dryrun:
+                        print('supervisor conf filename:', conf_name)
+                        print(conf_content)
                     remote_fn = os.path.join(self.env.conf_dir, conf_name)
                     local_fn = self.write_to_file(conf_content)
 #
@@ -290,7 +291,7 @@ class SupervisorSatchel(ServiceSatchel):
 
     @task(precursors=['packager', 'user', 'rabbitmq'])
     def configure(self, **kwargs):
-        kwargs['site'] = ALL
+        kwargs.setdefault('site', ALL)
 
 #         last_manifest = supervisor_satchel.last_manifest
 #         if not last_manifest or not last_manifest.get('configured'):

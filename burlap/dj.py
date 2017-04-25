@@ -509,7 +509,7 @@ class DjangoSatchel(Satchel):
 
         ignore_errors = int(ignore_errors)
 
-        post_south = tuple(r.env.version) >= (1, 7, 0)
+        post_south = self.version_tuple >= (1, 7, 0)
 
         r.env.db_syncdb_all_flag = '--all' if int(all) else ''
 
@@ -530,6 +530,11 @@ class DjangoSatchel(Satchel):
                         'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
                         '{manage_cmd} syncdb --noinput {db_syncdb_all_flag} {db_syncdb_database}')
 
+    @property
+    def version_tuple(self):
+        r = self.local_renderer
+        return tuple(r.env.version)
+
     @task
     def migrate(self, app='', migration='', site=None, fake=0, ignore_errors=0, skip_databases=None, database=None, migrate_apps='', delete_ghosts=1):
         """
@@ -547,9 +552,9 @@ class DjangoSatchel(Satchel):
 
         delete_ghosts = int(delete_ghosts)
 
-        post_south = tuple(r.env.version) >= (1, 7, 0)
+        post_south = self.version_tuple >= (1, 7, 0)
 
-        if tuple(r.env.version) >= (1, 9, 0):
+        if self.version_tuple >= (1, 9, 0):
             delete_ghosts = 0
 
         skip_databases = (skip_databases or '')
@@ -578,7 +583,9 @@ class DjangoSatchel(Satchel):
 
         # CS 2017-3-29 Don't bypass the iterator. That causes reversion to the global env that could corrupt the generated commands.
         #databases = list(self.iter_unique_databases(site=site))#TODO:remove
-        site = site or self.genv.SITE
+        # CS 2017-4-24 Don't specify a single site as the default when none is supplied. Otherwise all other sites will be ignored.
+        #site = site or self.genv.SITE
+        site = site or ALL
         databases = self.iter_unique_databases(site=site)
 #         print('databases:', databases)
         for site, site_data in databases:

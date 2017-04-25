@@ -24,12 +24,15 @@ def to_camelcase(value):
     value = re.sub(r'[^a-zA-Z0-9]+', ' ', value).strip()
     return ''.join(x.capitalize() for x in value.split(' '))
 
-def init_dj(project_name, default_roles, virtualenv_dir='.env', **kwargs):
+def init_dj(project_name, default_roles, virtualenv_dir='.env', version=None, **kwargs):
 
     site_name = project_name
 
     print('Installing Django...')
-    os.system('%s/bin/pip install Django' % virtualenv_dir)
+    if version:
+        os.system('%s/bin/pip install Django==%s' % (virtualenv_dir, version))
+    else:
+        os.system('%s/bin/pip install Django' % virtualenv_dir)
 
     print('Initializing Django project...')
     if not os.path.isdir('src/%s' % site_name):
@@ -68,22 +71,24 @@ MEDIA_ROOT = os.path.join(PROJECT_DIR, 'media')
 MEDIA_URL = '/media/'
 
 STATICFILES_FINDERS = (
-'django.contrib.staticfiles.finders.FileSystemFinder',
-'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
 )
 TEMPLATE_LOADERS = (
-'django.template.loaders.filesystem.Loader',
-'django.template.loaders.app_directories.Loader',
+    'django.template.loaders.filesystem.Loader',
+    'django.template.loaders.app_directories.Loader',
 )
 TEMPLATE_DIRS = (
-'%s/src/{app_name}/templates' % PROJECT_DIR,
+    '%s/src/{app_name}/templates' % PROJECT_DIR,
 )
+# https://docs.djangoproject.com/en/1.11/ref/settings/#templates
 TEMPLATES = [
     {{
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': TEMPLATE_DIRS,
         'APP_DIRS': True,
         'OPTIONS': {{
+            #'loaders': TEMPLATE_LOADERS, # Unnecessary if we're using APP_DIRS.
             'context_processors': [
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
@@ -207,8 +212,10 @@ class ProjectSatchel(ContainerSatchel):
         if default_packages:
             open('roles/all/pip-requirements.txt', 'w').write('\n'.join(default_packages))
 
+        print('Adding global apt-requirements.txt...')
         open('roles/all/apt-requirements.txt', 'w').write('')
 
+        print('Adding fabfile...')
         content = open(fabfile_template, 'r').read()
         content = content.format(project_name=project_name)
         open('fabfile.py', 'w').write(content.strip()+'\n')
@@ -229,8 +236,10 @@ class ProjectSatchel(ContainerSatchel):
             print('cmd:', cmd)
             assert not os.system(cmd)
 
+        print('Adding bash setup...')
         open('setup.bash', 'w').write(self.render_to_string('burlap/setup.bash.template'))
 
+        print('Adding gitignore...')
         open('.gitignore', 'w').write(self.render_to_string('burlap/gitignore.template'))
 
         args = kwargs.copy()
@@ -241,8 +250,17 @@ class ProjectSatchel(ContainerSatchel):
         args['pip_requirements'] = pip_requirements
         args['virtualenv_dir'] = virtualenv_dir
         for component in default_components:
+            print('Setting up component %s...' % component)
+            # Get component-specific settings.
+            component_kwargs = dict(args)
+            for _k, _v in kwargs.items():
+                _key = component+'_'
+                if _k.startswith(_key):
+                    component_kwargs[_k[len(_key):]] = _v
+                    del component_kwargs[_k]
+            print('component_kwargs:', component_kwargs)
             try:
-                globals()['init_%s' % component](**args)
+                globals()['init_%s' % component](**component_kwargs)
             except KeyError:
                 pass
 

@@ -229,6 +229,12 @@ class BuildBotSatchel(ServiceSatchel):
         r.sudo('service cron restart')
 
     @task
+    def uninstall_cron(self):
+        r = self.local_renderer
+        r.sudo('rm -f {cron_path} || true')
+        r.sudo('service cron restart')
+        
+    @task
     def deploy_code(self):
         r = self.local_renderer
 
@@ -396,6 +402,19 @@ class BuildBotSatchel(ServiceSatchel):
             self.install_cron_check()
         elif self.param_changed_to('cron_check_enabled', False):
             self.uninstall_cron_check()
+
+    @task
+    def uninstall(self):
+
+        with settings(warn_only=True):
+            self.stop()
+
+        self.uninstall_cron_check()
+
+        self.uninstall_cron()
+
+        r.sudo('rm -Rf {virtualenv_dir} || true')
+        r.sudo('rm -Rf {project_dir} || true')
 
     @task(precursors=['packager', 'user', 'apache'])
     def configure(self):

@@ -21,6 +21,10 @@ class DjTests(TestCase):
 
         burlap_dir = os.path.abspath(os.path.split(burlap.__file__)[0])
 
+        src_dir = '/tmp/test_dj_migrate/src'
+
+        dj_version = [1, 10, 6]
+
         d = '/tmp/test_dj_migrate'
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -32,6 +36,7 @@ class DjTests(TestCase):
                 project_name='test_dj_migrate',
                 roles='prod',
                 components='dj',
+                dj_version='.'.join(map(str, dj_version)),
             )
 
             assert not os.path.isfile('/tmp/test_dj_migrate/plans/prod/000/thumbprints/test-dj-migrate-1')
@@ -47,7 +52,8 @@ class DjTests(TestCase):
             env.user = getpass.getuser()
             with settings(warn_only=True):
                 for use_sudo in (False, True):
-                    ret = append(filename='/etc/hosts', text='127.0.0.1 test-dj-migrate-1\n127.0.0.1 test-dj-migrate-2', use_sudo=use_sudo)
+                    ret = append(filename='/etc/hosts', text='127.0.0.1 test-dj-migrate-1', use_sudo=use_sudo)
+                    ret = append(filename='/etc/hosts', text='127.0.0.1 test-dj-migrate-2', use_sudo=use_sudo)
                     if ret is None:
                         break
 
@@ -65,7 +71,7 @@ class DjTests(TestCase):
                     'dj_manage_media': False,
                     'dj_manage_migrations': True,
                     'dj_manage_cmd': '%s/.env/bin/python manage.py' % d,
-                    'dj_version': [1, 10, 6],
+                    'dj_version': dj_version,
                     # This is necessary to stop get_current_hostname() from attempting to lookup our actual hostname.
                     '_ip_to_hostname': {
                         'test-dj-migrate-1': 'test-dj-migrate-1',
@@ -95,11 +101,20 @@ class DjTests(TestCase):
                 },
                 role='prod')
 
+            # Confirm both hosts are shown.
+            kwargs = dict(
+                activate_cmd=activate_cmd,
+            )
+            status, output = self.getstatusoutput('{activate_cmd} fab prod debug.list_hosts'.format(**kwargs))
+            print('output:', output)
+            assert 'test-dj-migrate-1' in output
+            assert 'test-dj-migrate-2' in output
+
             # Migrate built-in apps.
             kwargs = dict(
                 activate_cmd=activate_cmd,
             )
-            status, output = self.getstatusoutput('{activate_cmd} fab prod deploy.run:yes=1'.format(**kwargs))
+            status, output = self.getstatusoutput('{activate_cmd} fab prod deploy.run:yes=1,verbose=0'.format(**kwargs))
             assert not status
             # The migrations should have been run on both hosts.
             assert '[test-dj-migrate-1] run:' in output
@@ -125,6 +140,14 @@ class DjTests(TestCase):
                 fout.write(settings_text)
             status, output = self.getstatusoutput('cd {src_dir}/test_dj_migrate; rm -f *.pyc'.format(**kwargs))
             assert not status
+
+            # Confirm the correct version of Django was installed.
+            kwargs = dict(
+                src_dir=src_dir,
+                activate_cmd=activate_cmd,
+            )
+            status, output = self.getstatusoutput('{activate_cmd} cd {src_dir}; pip freeze | grep Django'.format(**kwargs))
+            assert '.'.join(map(str, dj_version)) in output
 
             # Populate model.
             open('/tmp/test_dj_migrate/src/myapp/models.py', 'w').write('''

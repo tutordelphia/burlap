@@ -68,6 +68,11 @@ if __name__ == "__main__":
         type=str,
         default='',
         help='The default components to enable (e.g. django).')
+    skel_parser.add_argument(
+        '--dj-version',
+        type=str,
+        default='',
+        help='If the component dj is specified, the version of Django to install.')
 
     add_role_parser = subparsers.add_parser(
         ADD_ROLE,
