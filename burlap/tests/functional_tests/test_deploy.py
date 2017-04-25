@@ -136,9 +136,10 @@ class DeployTests(TestCase):
                         'apache_ssl': False,
                         'apache_auth_basic': False,
                         'apache_enforce_subdomain': False,
-                    }
+                    },
                 })
                 prod_settings.set('pip_requirements', 'pip-requirements.txt')
+                prod_settings.set('packager_initial_upgrade', False)
 
                 # Confirm deployment changes are detected.
                 #from burlap import role_prod as prod
