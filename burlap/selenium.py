@@ -39,10 +39,10 @@ class SeleniumSatchel(Satchel):
         return r.format('{geckodriver_install_bin_path}/{geckodriver_bin_name}')
 
     @task
-    def install_geckodriver(self):
+    def install_geckodriver(self, version=None):
         r = self.local_renderer
         self.vprint('Checking geckdriver %s...' % r.env.geckodriver_version)
-        r.env.geckodriver_version = r.env.geckodriver_version or self.get_target_geckodriver_version_number()
+        r.env.geckodriver_version = version or r.env.geckodriver_version or self.get_target_geckodriver_version_number()
         self.vprint('Installing geckdriver %s...' % r.env.geckodriver_version)
         r.run(
             'cd /tmp; '
