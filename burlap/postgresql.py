@@ -264,24 +264,25 @@ class PostgreSQLSatchel(DatabaseSatchel):
     #        $$
 
     @task
-    def exists(self, name='default', site=None):
+    def exists(self, name='default', site=None, use_root=False):
         """
         Returns true if a database with the given name exists. False otherwise.
         """
 
         r = self.database_renderer(name=name, site=site)
 
-#         kwargs = dict(
-#             db_user=env.db_root_user,
-#             db_password=env.db_root_password,
-#             db_host=env.db_host,
-#             db_name=env.db_name,
-#         )
-#         env.update(kwargs)
+        if int(use_root):
+            kwargs = dict(
+                db_user=r.env.db_root_username,
+                db_password=r.env.db_root_password,
+                db_host=r.env.db_host,
+                db_name=r.env.db_name,
+            )
+            r.env.update(kwargs)
 
         # Set pgpass file.
-#         if env.db_password:
-#             self.write_pgpass(verbose=verbose, name=name)
+        if r.env.db_password:
+            self.write_pgpass(name=name, root=use_root)
 
 #        cmd = ('psql --username={db_user} --no-password -l '\
 #            '--host={db_host} --dbname={db_name}'\
@@ -469,7 +470,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         r.run('psql --user={dst_db_user} --host={dst_db_host} --command="DROP TABLE IF EXISTS {table_name} CASCADE;"')
         r.run('pg_dump -t {table_name} --user={dst_db_user} --host={dst_db_host} | psql --user={src_db_user} --host={src_db_host}')
 
-    @task(precursors=['packager', 'user'])
+    @task(precursors=['packager', 'user', 'locales'])
     def configure(self, *args, **kwargs):
         #TODO:set postgres user password?
         #https://help.ubuntu.com/community/PostgreSQL
