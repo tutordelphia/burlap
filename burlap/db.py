@@ -52,6 +52,10 @@ class DatabaseSatchel(ServiceSatchel):
 
         self.env.default_db_name = 'default'
 
+    def clear_caches(self):
+        super(DatabaseSatchel, self).clear_caches()
+        self._database_renderers.clear()
+
     def get_database_defaults(self):
         """
         Returns a dictionary of default settings for each database.
