@@ -17,6 +17,13 @@ class LocalesSatchel(Satchel):
         self.env.lang = 'C' # 'en_US.UTF-8'
         self.env.lc_all = None # 'C' # 'en_US.UTF-8'
 
+    @property
+    def packager_system_packages(self):
+        return {
+            UBUNTU: ['locales'],
+            DEBIAN: ['locales'],
+        }
+
     @task
     def cat_locale(self):
         return self.run('cat /etc/default/locale')
@@ -32,6 +39,10 @@ class LocalesSatchel(Satchel):
     @task(precursors=['user'])
     def configure(self):
         r = self.local_renderer
+
+        # Locales is an odd case, because it needs to be run before most packages are installed
+        # but it still needs to ensure it's own package is installed.
+        self.install_packages()
 
         args = []
         if r.env.language:

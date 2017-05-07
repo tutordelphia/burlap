@@ -401,7 +401,7 @@ class PackagerSatchel(Satchel):
                 raise NotImplementedError('Unknown family: %s' % family)
 
 
-    @task(precursors=['user', 'ubuntumultiverse', 'locale'])
+    @task(precursors=['user', 'ubuntumultiverse', 'locales'])
     def configure(self, **kwargs):
 
         initial_upgrade = int(kwargs.pop('initial_upgrade', 1))
