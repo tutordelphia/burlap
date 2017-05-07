@@ -161,6 +161,9 @@ class PostgreSQLSatchel(DatabaseSatchel):
         self.env.version_command = '`psql --version | grep -o -E "[0-9]+.[0-9]+"`'
         self.env.engine = POSTGRESQL # 'postgresql' | postgis
 
+        self.env.db_root_username = 'postgres'
+        self.env.db_root_password = 'password'
+
         self.env.apt_repo_enabled = False
 
         # Populated from https://www.postgresql.org/download/linux/ubuntu/
@@ -208,8 +211,8 @@ class PostgreSQLSatchel(DatabaseSatchel):
             r.sudo('chmod {pgpass_chmod} {pgpass_path}')
 
         if root:
-            r.env.shell_username = r.env.db_root_username
-            r.env.shell_password = r.env.db_root_password
+            r.env.shell_username = r.env.get('db_root_username', 'postgres')
+            r.env.shell_password = r.env.get('db_root_password', 'password')
         else:
             r.env.shell_username = r.env.db_user
             r.env.shell_password = r.env.db_password
