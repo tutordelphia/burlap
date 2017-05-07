@@ -443,7 +443,7 @@ class MySQLSatchel(DatabaseSatchel):
         and user supports this feature.
         """
         r = self.database_renderer(name=name, site=site)
-        
+
         if int(use_root):
             kwargs = dict(
                 db_user=r.env.db_root_username,
@@ -452,10 +452,10 @@ class MySQLSatchel(DatabaseSatchel):
                 db_name=r.env.db_name,
             )
             r.env.update(kwargs)
-            
+
         if not name:
             r.env.db_name = ''
-            
+
         r.run('/bin/bash -i -c "mysql -u {db_user} -p\'{db_password}\' -h {db_host} {db_name}"')
 
     @task(precursors=['packager', 'user'])
