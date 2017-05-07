@@ -276,8 +276,8 @@ class PostgreSQLSatchel(DatabaseSatchel):
 
         if int(use_root):
             kwargs = dict(
-                db_user=r.env.db_root_username,
-                db_password=r.env.db_root_password,
+                db_user=r.env.get('db_root_username', 'postgres'),
+                db_password=r.env.get('db_root_password', 'password'),
                 db_host=r.env.db_host,
                 db_name=r.env.db_name,
             )
