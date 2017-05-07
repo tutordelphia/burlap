@@ -202,7 +202,10 @@ class PostgreSQLSatchel(DatabaseSatchel):
         use_sudo = int(use_sudo)
 
         r.run('touch {pgpass_path}')
-        r.sudo('chmod {pgpass_chmod} {pgpass_path}')
+        if '~' in r.env.pgpass_path:
+            r.run('chmod {pgpass_chmod} {pgpass_path}')
+        else:
+            r.sudo('chmod {pgpass_chmod} {pgpass_path}')
 
         if root:
             r.env.shell_username = r.env.db_root_username
