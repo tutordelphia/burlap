@@ -100,6 +100,7 @@ class SupervisorSatchel(ServiceSatchel):
         self.env.supervisorctl_path_template = '{pip_virtualenv_dir}/bin/supervisorctl'
         self.env.kill_pattern = ''
         self.env.max_restart_wait_minutes = 5
+        self.env.services_rendered = ''
 
         self.env.services = []
 
@@ -181,6 +182,9 @@ class SupervisorSatchel(ServiceSatchel):
             data['celery_has_worker_%s' % site_name] = site_data.get('celery_has_worker', False)
 
         data['configured'] = True
+
+        # Reset dynamically generated variables.
+        data['services_rendered'] = ''
 
         return data
 

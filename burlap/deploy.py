@@ -829,7 +829,25 @@ def explain(name, **kwargs):
     last, current = diffs.get(name, (None, None))
     if last is None and current is None:
         print('There are no differences.')
-#     else:
+    else:
+        last = last[name]
+        current = current[name]
+        print('='*80)
+        print('These keys differ:')
+        for key in set(last.keys()).union(current.keys()):
+
+            last_value = last.get(key)
+            if isinstance(last_value, dict):
+                last_value = sorted(last_value.items())
+
+            current_value = current.get(key)
+            if isinstance(current_value, dict):
+                current_value = sorted(current_value.items())
+
+            if last_value == current_value:
+                continue
+            print('-'*80)
+            print('Change: %s\n\tLast: %s\n\tCurrent: %s' % (key, last_value, current_value))
 #         last = last or {}
 #         last.setdefault(name, {})
 #         print('last:')
