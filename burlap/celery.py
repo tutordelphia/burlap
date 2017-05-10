@@ -148,7 +148,6 @@ class CelerySatchel(ServiceSatchel):
             return
 
         self.render_paths()
-        print('r.env.celeryd_command:', r.env.celeryd_command)
 
         conf_name = 'celery_%s.conf' % site
         ret = r.render_to_string('celery/celery_supervisor.template.conf')

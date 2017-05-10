@@ -183,13 +183,16 @@ class SupervisorSatchel(ServiceSatchel):
 
         data['configured'] = True
 
-        # Reset dynamically generated variables.
-        data['services_rendered'] = ''
+        # Generate services list.
+        self.write_configs(upload=0)
+        #data['services_rendered'] = ''
 
         return data
 
     @task
-    def write_configs(self, site=None):
+    def write_configs(self, site=None, upload=1):
+
+        site = site or ALL
 
         verbose = self.verbose
 
@@ -213,15 +216,17 @@ class SupervisorSatchel(ServiceSatchel):
                         print('conf_name:', conf_name)
                         print('conf_content:', conf_content)
                     remote_fn = os.path.join(self.env.conf_dir, conf_name)
-                    local_fn = self.write_to_file(conf_content)
-                    self.put_or_dryrun(local_path=local_fn, remote_path=remote_fn, use_sudo=True)
+                    if int(upload):
+                        local_fn = self.write_to_file(conf_content)
+                        self.put_or_dryrun(local_path=local_fn, remote_path=remote_fn, use_sudo=True)
 
                     process_groups.append(os.path.splitext(conf_name)[0])
 
         self.env.services_rendered = '\n'.join(supervisor_services)
 
-        fn = self.render_to_file(self.env.config_template)
-        self.put_or_dryrun(local_path=fn, remote_path=self.env.config_path, use_sudo=True)
+        if int(upload):
+            fn = self.render_to_file(self.env.config_template)
+            self.put_or_dryrun(local_path=fn, remote_path=self.env.config_path, use_sudo=True)
 
     def deploy_services(self, site=None):
         """
