@@ -30,6 +30,7 @@ class SeleniumSatchel(Satchel):
         self.env.geckodriver_install_bin_path = '/usr/local/bin'
         self.env.geckodriver_bin_name = 'geckodriver'
         #self.env.geckodriver_fingerprint_path = '/usr/local/lib/geckodriver/fingerprint.txt'
+        self.env.geckodriver_feed = 'https://github.com/mozilla/geckodriver/tags.atom'
 
     @property
     def geckodriver_path(self):
@@ -78,16 +79,15 @@ class SeleniumSatchel(Satchel):
         self.vprint('last_fingerprint:', last_fingerprint)
         self.vprint('current_fingerprint:', current_fingerprint)
         if last_fingerprint != current_fingerprint:
-            print('A new release is available.')
+            print('A new release is available. %s' % self.get_most_recent_version())
             return True
-        else:
-            print('No updates found.')
-            return False
+        print('No updates found.')
+        return False
 
     @task
     def get_most_recent_version(self):
         import feedparser
-        link = feedparser.parse('https://github.com/mozilla/geckodriver/tags.atom')['entries'][0]['link']
+        link = feedparser.parse(self.env.geckodriver_feed)['entries'][0]['link']
         self.vprint('link:', link)
         matches = re.findall(r'v([0-9]+.[0-9]+.[0-9]+)', link)
         if matches:
@@ -101,7 +101,7 @@ class SeleniumSatchel(Satchel):
         Retrieves the version number from the latest tagged release.
         """
         import feedparser
-        latest_url = feedparser.parse('https://github.com/mozilla/geckodriver/tags.atom')['entries'][0]['link']
+        latest_url = feedparser.parse(self.env.geckodriver_feed)['entries'][0]['link']
         self.vprint('latest_url:', latest_url)
         version = latest_url.split('/')[-1][1:]
         self.vprint('version:', version)

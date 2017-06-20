@@ -592,6 +592,7 @@ class UserSatchel(Satchel):
         lm_reset_passwords_on_first_login = lm.reset_passwords_on_first_login or {}
         lm_passwordless = lm.passwordless or {}
         lm_passwords = lm.passwords or {}
+        lm_groups = lm.groups or {}
 
         # Make one-time password changes.
         just_changed = set()
@@ -621,7 +622,15 @@ class UserSatchel(Satchel):
                 r.env.password = password
                 r.sudo('echo "{username}:{password}"|chpasswd')
 
+        # Create new users.
+        r = self.new_local_renderer
+        new_users = set(r.env.groups).difference(lm_groups)
+        for username in new_users:
+            password = r.env.passwords.get(username, '')
+            self.create(username=username, password=password)
+
         # Set groups.
+        r = self.new_local_renderer
         for username, groups in r.env.groups.items():
             self.togroups(username, groups)
 

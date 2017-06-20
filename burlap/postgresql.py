@@ -389,31 +389,33 @@ class PostgreSQLSatchel(DatabaseSatchel):
                 missing_local_dump_error
 
         with settings(warn_only=True):
-            r.run('dropdb --user={db_root_username} {db_name}')
+            r.sudo('dropdb --if-exists --user={db_root_username} {db_name}', user=r.env.postgres_user)
 
-        r.run('psql --user={db_root_username} -c "CREATE DATABASE {db_name};"')
+        r.sudo('psql --user={db_root_username} -c "CREATE DATABASE {db_name};"', user=r.env.postgres_user)
 
         with settings(warn_only=True):
 
             if r.env.engine == POSTGIS:
-                r.run('psql --user={db_root_username} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis;"')
-                r.run('psql --user={db_root_username} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis_topology;"')
+                r.sudo('psql --user={db_root_username} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis;"',
+                    user=r.env.postgres_user)
+                r.sudo('psql --user={db_root_username} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis_topology;"',
+                    user=r.env.postgres_user)
 
         with settings(warn_only=True):
-            r.run('psql --user={db_root_username} -c "REASSIGN OWNED BY {db_user} TO {db_root_username};"')
+            r.sudo('psql --user={db_root_username} -c "REASSIGN OWNED BY {db_user} TO {db_root_username};"', user=r.env.postgres_user)
 
         with settings(warn_only=True):
-            r.run('psql --user={db_root_username} -c "DROP OWNED BY {db_user} CASCADE;"')
+            r.sudo('psql --user={db_root_username} -c "DROP OWNED BY {db_user} CASCADE;"', user=r.env.postgres_user)
 
-        r.run('psql --user={db_root_username} -c "DROP USER IF EXISTS {db_user}; '
+        r.sudo('psql --user={db_root_username} -c "DROP USER IF EXISTS {db_user}; '
             'CREATE USER {db_user} WITH PASSWORD \'{db_password}\'; '
-            'GRANT ALL PRIVILEGES ON DATABASE {db_name} to {db_user};"')
+            'GRANT ALL PRIVILEGES ON DATABASE {db_name} to {db_user};"', user=r.env.postgres_user)
         for createlang in r.env.createlangs:
             r.env.createlang = createlang
-            r.run('createlang -U {db_root_username} {createlang} {db_name} || true')
+            r.sudo('createlang -U {db_root_username} {createlang} {db_name} || true', user=r.env.postgres_user)
 
         if not prep_only:
-            r.run(r.env.load_command)
+            r.sudo(r.env.load_command, user=r.env.postgres_user)
 
     @task
     def shell(self, name='default', site=None, **kwargs):

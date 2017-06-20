@@ -63,8 +63,7 @@ def _task(meth):
             if hasattr(meth, attr):
                 setattr(wrapper, attr, getattr(meth, attr))
         return wrapper
-    else:
-        return meth
+    return meth
 
 def task(*args, **kwargs):
     """
@@ -86,17 +85,17 @@ def task(*args, **kwargs):
     if args and callable(args[0]):
         # direct decoration, @task
         return _task(*args)
-    else:
-        # callable decoration, @task(precursors=['satchel'])
-        def wrapper(meth):
-            if precursors:
-                meth.deploy_before = list(precursors)
-            if post_callback:
-                #from burlap.common import post_callbacks
-                #post_callbacks.append(meth)
-                meth.is_post_callback = True
-            return _task(meth)
-        return wrapper
+
+    # callable decoration, @task(precursors=['satchel'])
+    def wrapper(meth):
+        if precursors:
+            meth.deploy_before = list(precursors)
+        if post_callback:
+            #from burlap.common import post_callbacks
+            #post_callbacks.append(meth)
+            meth.is_post_callback = True
+        return _task(meth)
+    return wrapper
 
 def runs_once(meth):
     """

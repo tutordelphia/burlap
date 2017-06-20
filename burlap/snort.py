@@ -8,8 +8,8 @@ class SnortSatchel(ServiceSatchel):
 
     name = 'snort'
 
-    def set_defaults(self):
-        super(SnortSatchel, self).set_defaults()
+    #def set_defaults(self):
+        #super(SnortSatchel, self).set_defaults()
 
     @property
     def packager_system_packages(self):

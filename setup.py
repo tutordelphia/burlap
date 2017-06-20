@@ -89,7 +89,7 @@ setup(
     zip_safe=False,
     include_package_data=True,
     install_requires=get_reqs('burlap/fixtures/requirements.txt'),
-    setup_requires=[],
+    #setup_requires=[],
     tests_require=get_reqs('requirements-test.txt'),
     cmdclass={
         'test': Tox,

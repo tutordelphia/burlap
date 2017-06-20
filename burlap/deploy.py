@@ -52,7 +52,7 @@ def init_env():
     env.plan_digits = 3
 
 # Prevent globals from being reset by duplicate imports.
-if not 'plan_init' in env:
+if 'plan_init' not in env:
     init_env()
 
 _originals = env.plan_originals
@@ -248,8 +248,7 @@ def open_file(fqfn, mode='r'):
     verbose = common.get_verbose()
     if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
         return RemoteFile(fqfn, mode)
-    else:
-        return open(fqfn, mode)
+    return open(fqfn, mode)
 
 def get_plan_data_dir():
     common.init_burlap_data_dir()
@@ -928,6 +927,10 @@ def thumbprint(components=None, set_satchels=None):
     Creates a manifest file for the current host, listing all current settings
     so that a future deployment can use it as a reference to perform an
     idempotent deployment.
+
+    Paramaters:
+
+    components = comma-delimited list of satchel names to limit the thumbprinting to
     """
 
     only_components = components or []

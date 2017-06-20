@@ -316,10 +316,10 @@ class DjangoSatchel(Satchel):
         site = site or self.genv.SITE
         r = self.local_renderer
         r.env._loaddata_path = path
-        for site, site_data in self.iter_sites(site=site, no_secure=True):
+        for _site, site_data in self.iter_sites(site=site, no_secure=True):
             try:
-                self.set_db(site=site)
-                r.env.SITE = site
+                self.set_db(site=_site)
+                r.env.SITE = _site
                 r.sudo('export SITE={SITE}; export ROLE={ROLE}; '
                     'cd {project_dir}; '
                     '{manage_cmd} loaddata {_loaddata_path}')
@@ -343,6 +343,8 @@ class DjangoSatchel(Satchel):
             ('--%s' % _k if _v in (True, 'True') else '--%s=%s' % (_k, _v))
             for _k, _v in kwargs.iteritems())
         r.env.environs = environs
+        if self.is_local:
+            r.env.project_dir = r.env.local_project_dir
         r.run_or_local('export SITE={SITE}; export ROLE={ROLE};{environs} cd {project_dir}; {manage_cmd} {cmd} {args} {kwargs}')
 
     @task
@@ -474,16 +476,16 @@ class DjangoSatchel(Satchel):
         r = self.local_renderer
         prior_database_names = set()
         #print('iter_unique_databases.begin.site_default:', site)
-        for site, site_data in self.iter_sites(site=site, no_secure=True):
+        for _site, site_data in self.iter_sites(site=site, no_secure=True):
             #print('iter_unique_databases.site:', site)
-            self.set_db(site=site)
+            self.set_db(site=_site)
             key = (r.env.db_name, r.env.db_user, r.env.db_host, r.env.db_engine)
             #print('iter_unique_databases.site:', site, key)
             if key in prior_database_names:
                 continue
             prior_database_names.add(key)
-            r.env.SITE = site
-            yield site, site_data
+            r.env.SITE = _site
+            yield _site, site_data
 
     @task
     def shell(self):
@@ -517,9 +519,12 @@ class DjangoSatchel(Satchel):
         if database:
             r.env.db_syncdb_database = ' --database=%s' % database
 
+        if self.is_local:
+            r.env.project_dir = r.env.local_project_dir
+
         site = site or self.genv.SITE
-        for site, site_data in r.iter_unique_databases(site=site):
-            r.env.SITE = site
+        for _site, site_data in r.iter_unique_databases(site=site):
+            r.env.SITE = _site
             with self.settings(warn_only=ignore_errors):
                 if post_south:
                     r.run_or_local(
@@ -581,6 +586,9 @@ class DjangoSatchel(Satchel):
         self.vprint('project_dir0:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
         self.vprint('migrate_apps:', migrate_apps)
 
+        if self.is_local:
+            r.env.project_dir = r.env.local_project_dir
+
         # CS 2017-3-29 Don't bypass the iterator. That causes reversion to the global env that could corrupt the generated commands.
         #databases = list(self.iter_unique_databases(site=site))#TODO:remove
         # CS 2017-4-24 Don't specify a single site as the default when none is supplied. Otherwise all other sites will be ignored.
@@ -588,30 +596,30 @@ class DjangoSatchel(Satchel):
         site = site or ALL
         databases = self.iter_unique_databases(site=site)
 #         print('databases:', databases)
-        for site, site_data in databases:
+        for _site, site_data in databases:
             self.vprint('-'*80, file=sys.stderr)
-            self.vprint('site:', site, file=sys.stderr)
+            self.vprint('site:', _site, file=sys.stderr)
 
             if self.env.available_sites_by_host:
                 hostname = self.current_hostname
                 sites_on_host = self.env.available_sites_by_host.get(hostname, [])
-                if sites_on_host and site not in sites_on_host:
-                    self.vprint('skipping site:', site, sites_on_host, file=sys.stderr)
+                if sites_on_host and _site not in sites_on_host:
+                    self.vprint('skipping site:', _site, sites_on_host, file=sys.stderr)
                     continue
 
     #         print('migrate_apps:', migrate_apps, file=sys.stderr)
             if not migrate_apps:
                 migrate_apps.append(' ')
 
-            for app in migrate_apps:
-    #             print('app:', app)
+            for _app in migrate_apps:
+    #             print('app:', _app)
                 # In cases where we're migrating built-in apps or apps with dotted names
                 # e.g. django.contrib.auth, extract the name used for the migrate command.
-                r.env.migrate_app = app.split('.')[-1]
+                r.env.migrate_app = _app.split('.')[-1]
     #             print('r.env.migrate_app:', r.env.migrate_app)
                 self.vprint('project_dir1:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
-                #print('dj.SITE:', site)
-                r.env.SITE = site
+                #print('dj.SITE:', _site)
+                r.env.SITE = _site
                 with self.settings(warn_only=ignore_errors):
                     r.run_or_local(
                         'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
@@ -653,16 +661,16 @@ class DjangoSatchel(Satchel):
         """
         exclude_sites = exclude_sites.split(':')
         r = self.local_renderer
-        for site, site_data in self.iter_sites(site=site, no_secure=True):
-            if site in exclude_sites:
+        for _site, site_data in self.iter_sites(site=site, no_secure=True):
+            if _site in exclude_sites:
                 continue
-            r.env.SITE = site
+            r.env.SITE = _site
             r.env.command = command
             r.env.end_email_command = ''
             r.env.recipients = recipients or ''
             r.env.end_email_command = ''
             if end_message:
-                end_message = end_message + ' for ' + site
+                end_message = end_message + ' for ' + _site
                 end_message = end_message.replace(' ', '_')
                 r.env.end_message = end_message
                 r.env.end_email_command = r.format('{manage_cmd} send_mail --subject={end_message} --recipients={recipients}')

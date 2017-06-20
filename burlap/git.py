@@ -315,7 +315,7 @@ class GitCheckerSatchel(Satchel):
         self.vprint('Checking GIT branch...')
         with hide('running', 'stdout', 'stderr', 'warnings'):
             branch_name = self._local('git rev-parse --abbrev-ref HEAD', capture=True).strip()
-            if not self.env.branch == branch_name:
+            if self.env.branch != branch_name:
                 raise AbortDeployment(
                     'You\'re trying to deploy branch "%s" but the target role "%s" only accepts branch "%s".' \
                         % (branch_name, self.genv.ROLE, self.env.branch))

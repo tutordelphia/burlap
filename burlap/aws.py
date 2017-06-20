@@ -6,12 +6,22 @@ from burlap.decorators import task
 
 class EC2MonitorSatchel(Satchel):
     """
-    Manages a script to monitor
+    Wraps the EC2 monitor script provided by Amazon:
 
-    http://docs.aws.amazon.com/AmazonCloudWatch/latest/DeveloperGuide/mon-scripts.html
+        http://docs.aws.amazon.com/AmazonCloudWatch/latest/DeveloperGuide/mon-scripts.html
+
+    Note, the script has package dependencies described at:
+
+        http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/mon-scripts.html#mon-scripts-perl_prereq
     """
 
     name = 'ec2monitor'
+
+    @property
+    def packager_system_packages(self):
+        return {
+            UBUNTU: ['unzip', 'libwww-perl', 'libdatetime-perl'],
+        }
 
     def set_defaults(self):
         self.env.installed = True
@@ -76,7 +86,7 @@ class EC2MonitorSatchel(Satchel):
         local_path = self.env.awscreds.format(role=self.genv.ROLE)
         assert os.path.isfile(local_path), 'Missing cred file: %s' % local_path
 
-        r.sudo('apt-get install --yes unzip libwww-perl libdatetime-perl')
+        r.install_packages()
         r.run('cd ~; curl http://aws-cloudwatch.s3.amazonaws.com/downloads/CloudWatchMonitoringScripts-1.2.1.zip -O')
         r.run('cd ~; unzip -o CloudWatchMonitoringScripts-1.2.1.zip')
         r.run('cd ~; rm CloudWatchMonitoringScripts-1.2.1.zip')

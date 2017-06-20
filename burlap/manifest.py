@@ -52,12 +52,9 @@ def changed(name):
                 if last_manifest == current_manifest:
                     print('No')
                     return False
-                else:
-                    print('Yes')
-                    return True
-            else:
-                print('Yes, first deployment for this component.')
+                print('Yes')
                 return True
-        else:
-            print('Yes, first deployment.')
+            print('Yes, first deployment for this component.')
             return True
+        print('Yes, first deployment.')
+        return True

@@ -20,7 +20,6 @@ def iter_hostnames():
 
     retriever = get_hosts_retriever()
 
-    print('a')
     hosts = list(retriever(extended=1))
     for _hostname, _data in hosts:
         yield _hostname
@@ -301,6 +300,10 @@ class HostSatchel(Satchel):
         # then we assume the host is new or has been reset and needs to be reconfigured.
         if self.env.do_initrole:
             self.initrole()
+
+    def record_manifest(self, *args, **kargs):
+        self.initrole()
+        return super(HostSatchel, self).record_manifest(*args, **kargs)
 
     def configure(self):
         # Just a stub. All the magic happens in deploy_pre_run().

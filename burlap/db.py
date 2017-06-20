@@ -11,8 +11,10 @@ from burlap.constants import *
 from burlap import ServiceSatchel
 from burlap.common import LocalRenderer, pretty_bytes
 from burlap.decorators import task, runs_once
+from burlap.common import str_to_callable
 
 CONNECTION_HANDLER_DJANGO = 'django'
+CONNECTION_HANDLER_CUSTOM = 'custom'
 
 class DatabaseSatchel(ServiceSatchel):
 
@@ -99,8 +101,8 @@ class DatabaseSatchel(ServiceSatchel):
         # Check the new password location.
         key = r.env.get('db_host')
         if self.verbose:
-            print('root login key:', key)
-#         print('r.env.root_logins:', r.env.root_logins)
+            print('db.set_root_login.key:', key)
+            print('db.set_root_logins:', r.env.root_logins)
         if key in r.env.root_logins:
             data = r.env.root_logins[key]
 #             print('data:', data)
@@ -131,15 +133,23 @@ class DatabaseSatchel(ServiceSatchel):
         if key not in self._database_renderers:
             self.vprint('No cached db renderer, generating...')
 
+            if self.verbose:
+                print('db.name:', name)
+                print('db.databases:', self.env.databases)
+                print('db.databases[%s]:' % name, self.env.databases.get(name))
+
             d = type(self.genv)(self.lenv)
             d.update(self.get_database_defaults())
             d.update(self.env.databases.get(name, {}))
             d['db_name'] = name
+            if self.verbose:
+                print('db.d:')
+                pprint(d, indent=4)
+                print('db.connection_handler:', d.connection_handler)
 
             if d.connection_handler == CONNECTION_HANDLER_DJANGO:
                 self.vprint('Using django handler...')
                 dj = self.get_satchel('dj')
-#                 _d = type(self.genv)()
                 if self.verbose:
                     print('Loading Django DB settings for site {} and role {}.'.format(site, role), file=sys.stderr)
                 dj.set_db(name=name, site=site, role=role)
@@ -151,6 +161,15 @@ class DatabaseSatchel(ServiceSatchel):
                         _d[k[3:]] = v
                     del _d[k]
 
+                if self.verbose:
+                    print('Loaded:')
+                    pprint(_d)
+                d.update(_d)
+            elif d.connection_handler.startswith(CONNECTION_HANDLER_CUSTOM+':'):
+
+                _callable_str = d.connection_handler[len(CONNECTION_HANDLER_CUSTOM+':'):]
+                self.vprint('Using custom handler %s...' % _callable_str)
+                _d = str_to_callable(_callable_str)(role=self.genv.ROLE)
                 if self.verbose:
                     print('Loaded:')
                     pprint(_d)
@@ -169,7 +188,7 @@ class DatabaseSatchel(ServiceSatchel):
 
     @task
     def configure(self, *args, **kwargs):
-        raise NotImplementedError
+        super(DatabaseSatchel, self).configure(*args, **kwargs)
 
     @task
     def get_free_space(self):

@@ -202,11 +202,11 @@ class SupervisorSatchel(ServiceSatchel):
         process_groups = []
 
         #TODO:check available_sites_by_host and remove dead?
-        for site, site_data in self.iter_sites(site=site, renderer=self.render_paths):
+        for _site, site_data in self.iter_sites(site=site, renderer=self.render_paths):
             if verbose:
-                print('write_configs.site:', site)
+                print('write_configs.site:', _site)
             for cb in self.genv._supervisor_create_service_callbacks:
-                ret = cb(site=site)
+                ret = cb(site=_site)
                 if isinstance(ret, basestring):
                     supervisor_services.append(ret)
                 elif isinstance(ret, tuple):
@@ -250,9 +250,9 @@ class SupervisorSatchel(ServiceSatchel):
 
         #TODO:check available_sites_by_host and remove dead?
         self.write_configs(site=site)
-        for site, site_data in self.iter_sites(site=site, renderer=self.render_paths):
+        for _site, site_data in self.iter_sites(site=site, renderer=self.render_paths):
             if verbose:
-                print('deploy_services.site:', site)
+                print('deploy_services.site:', _site)
 
             # Only load site configurations that are allowed for this host.
 #             if target_sites is not None:
@@ -263,7 +263,7 @@ class SupervisorSatchel(ServiceSatchel):
             for cb in self.genv._supervisor_create_service_callbacks:
                 if self.verbose:
                     print('cb:', cb)
-                ret = cb(site=site)
+                ret = cb(site=_site)
                 if self.verbose:
                     print('ret:', ret)
                 if isinstance(ret, basestring):

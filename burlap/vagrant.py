@@ -4,6 +4,8 @@ import re
 
 from fabric.api import hide
 
+from six.moves.urllib.request import urlopen
+
 from burlap.constants import *
 from burlap import ContainerSatchel
 from burlap.decorators import task
@@ -14,16 +16,17 @@ def _to_int(val):
     except ValueError:
         return val
 
+DOWNLOAD_LINK_PATTERN = re.compile(r'http[s]{0,1}://[^/]+/vagrant/[0-9\.]+/vagrant[^"]+')
+
 class VagrantSatchel(ContainerSatchel):
 
     name = 'vagrant'
 
-    def set_default(self):
-
-        self.env.vagrant_box = '?'
-        self.env.vagrant_provider = '?'
-        self.env.vagrant_shell_command = 'vagrant ssh'
-
+    def set_defaults(self):
+        self.env.box = '?'
+        self.env.provider = '?'
+        self.env.shell_command = 'vagrant ssh'
+        self.env.download_url = 'https://www.vagrantup.com/downloads.html'
 
     def ssh_config(self, name=''):
         """
@@ -38,7 +41,6 @@ class VagrantSatchel(ContainerSatchel):
             key, value = line.strip().split(' ', 2)
             config[key] = value
         return config
-
 
     def _get_settings(self, config):
         settings = {}
@@ -177,7 +179,6 @@ class VagrantSatchel(ContainerSatchel):
         extra_args = self._settings_dict(config)
         r.genv.update(extra_args)
 
-
     def vagrant_settings(self, name='', *args, **kwargs):
         """
         Context manager that sets a vagrant VM
@@ -198,7 +199,6 @@ class VagrantSatchel(ContainerSatchel):
 
         return self.settings(*args, **kwargs)
 
-
     def status(self, name='default'):
         """
         Get the status of a vagrant machine
@@ -206,20 +206,16 @@ class VagrantSatchel(ContainerSatchel):
         machine_states = dict(self._status())
         return machine_states[name]
 
-
     def _status(self):
         if self.version() >= (1, 4):
             return self._status_machine_readable()
-        else:
-            return self._status_human_readable()
-
+        return self._status_human_readable()
 
     def _status_machine_readable(self):
         with self.settings(hide('running')):
             output = self.local('vagrant status --machine-readable', capture=True)
         tuples = [tuple(line.split(',')) for line in output.splitlines() if line.strip() != '']
         return [(target, data) for timestamp, target, type_, data in tuples if type_ == 'state-human-short']
-
 
     def _status_human_readable(self):
         with self.settings(hide('running')):
@@ -234,13 +230,11 @@ class VagrantSatchel(ContainerSatchel):
             states.append((target, state))
         return states
 
-
     def machines(self):
         """
         Get the list of vagrant machines
         """
         return [name for name, state in self._status()]
-
 
     def base_boxes(self):
         """
@@ -248,13 +242,10 @@ class VagrantSatchel(ContainerSatchel):
         """
         return sorted(list(set([name for name, provider in self._box_list()])))
 
-
     def _box_list(self):
         if self.version() >= (1, 4):
             return self._box_list_machine_readable()
-        else:
-            return self._box_list_human_readable()
-
+        return self._box_list_human_readable()
 
     def _box_list_machine_readable(self):
         r = self.local_renderer
@@ -272,7 +263,6 @@ class VagrantSatchel(ContainerSatchel):
                 raise ValueError('Unknown item type')
         return res
 
-
     def _box_list_human_readable(self):
         r = self.local_renderer
         with self.settings(hide('running')):
@@ -285,5 +275,31 @@ class VagrantSatchel(ContainerSatchel):
             box_provider = mo.group(1) if mo is not None else 'virtualbox'
             res.append((box_name, box_provider))
         return res
+
+    @task
+    def install_from_upstream(self):
+        """
+        Installs Vagrant from the most recent package available from their homepage.
+        """
+        from burlap.system import get_arch, distrib_family
+        r = self.local_renderer
+        content = urlopen(r.env.download_url).read()
+        print(len(content))
+        matches = DOWNLOAD_LINK_PATTERN.findall(content)
+        print(matches)
+        arch = get_arch() # e.g. 'x86_64'
+        family = distrib_family()
+        if family == DEBIAN:
+            ext = '.deb'
+            matches = [match for match in matches if match.endswith(ext) and arch in match]
+            print('matches:', matches)
+            assert matches, "No matches found."
+            assert len(matches) == 1, "Too many matches found: %s" % (', '.join(matches))
+            r.env.final_download_url = matches[0]
+            r.env.local_filename = '/tmp/vagrant%s' % ext
+            r.run('wget -O {local_filename} {final_download_url}')
+            r.sudo('dpkg -i {local_filename}')
+        else:
+            raise NotImplementedError('Unsupported family: %s' % family)
 
 vagrant = VagrantSatchel()
