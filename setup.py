@@ -11,6 +11,9 @@ os.environ['BURLAP_NO_LOAD'] = '1'
 import burlap # pylint: disable=wrong-import-position
 
 try:
+    # Requires both pip and apt packages:
+    #   pip install pypandoc
+    #   sudo apt-get install pandoc
     from pypandoc import convert
     read_md = lambda f: convert(f, 'rst')
 except ImportError:
