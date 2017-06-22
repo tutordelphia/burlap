@@ -165,7 +165,8 @@ class DatabaseSatchel(ServiceSatchel):
                     print('Loaded:')
                     pprint(_d)
                 d.update(_d)
-            elif d.connection_handler.startswith(CONNECTION_HANDLER_CUSTOM+':'):
+
+            elif d.connection_handler and d.connection_handler.startswith(CONNECTION_HANDLER_CUSTOM+':'):
 
                 _callable_str = d.connection_handler[len(CONNECTION_HANDLER_CUSTOM+':'):]
                 self.vprint('Using custom handler %s...' % _callable_str)

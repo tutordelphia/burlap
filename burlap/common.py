@@ -972,7 +972,7 @@ class Satchel(object):
     def install_cron_job(self, name='default', extra=None):
         assert name in self.env.cron
 
-        data = self.env.cron[name]
+        data = type(env)(self.env.cron[name].copy())
         data.update(extra or {})
 
         self.install_script(
@@ -1361,9 +1361,12 @@ class Satchel(object):
         """
         lm = self.last_manifest
         for tracker in self.get_trackers():
-            self.vprint('Checking tracker:', tracker)
+            print('Checking tracker:', tracker)
             last_thumbprint = lm['_tracker_%s' % tracker.get_natural_key_hash()]
-            if tracker.is_changed(last_thumbprint):
+            print('lt:', last_thumbprint)
+            has_changed = tracker.is_changed(last_thumbprint)
+            print('Tracker changed:', has_changed)
+            if has_changed:
                 self.vprint('Change detected!')
                 tracker.act()
 
