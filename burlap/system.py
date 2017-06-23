@@ -149,8 +149,7 @@ def distrib_family():
         return GENTOO
     elif distrib in ['arch', 'manjarolinux']:
         return ARCH
-    else:
-        return 'other'
+    return 'other'
 
 
 def get_hostname():

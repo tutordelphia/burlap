@@ -5,24 +5,29 @@ from fabric.api import settings
 from burlap.constants import *
 from burlap import ServiceSatchel
 from burlap.decorators import task
+from burlap.trackers import FilesystemTracker, SettingsTracker, ORTracker
 
 class BuildBotSatchel(ServiceSatchel):
+    """
+    Configures a Buildbot master and worker on the first host,
+    with a worker on every additional host.
+    """
 
     name = 'buildbot'
 
-    #post_deploy_command = 'reload'
-
-    required_system_packages = {
-        UBUNTU: ['git'],
-        (UBUNTU, '14.04'): ['git'],
-        (UBUNTU, '16.04'): ['git'],
-    }
+    @property
+    def packager_system_packages(self):
+        return {
+            UBUNTU: ['git'],
+        }
 
     def set_defaults(self):
 
         self.env.project_dir = '/usr/local/myproject'
         self.env.virtualenv_dir = '/usr/local/myproject/.env'
         self.env.home_dir = '/var/lib/{bb_user}'
+        self.env.src_dir = 'src/buildbot'
+
         self.env.ssh_bin = '{home_dir}/bin'
         self.env.ssh_dir = '{home_dir}/.ssh'
         self.env.ssh_private_key = None # should be a *.pem file
@@ -62,6 +67,8 @@ class BuildBotSatchel(ServiceSatchel):
 
         self.env.pid_path = 'buildbot/{type}/twistd.pid'
 
+        self.env.worker_names = ['worker']
+
         self.env.cron_check_enabled = False
         self.env.cron_check_schedule = '0,30 * * * *'
         self.env.cron_check_user = 'root'
@@ -95,6 +102,10 @@ class BuildBotSatchel(ServiceSatchel):
 #             },
         }
 
+    @property
+    def is_first_host(self):
+        return self.genv.hosts[0] == self.genv.host_string
+
     @task
     def restart(self):
         self.set_permissions()
@@ -111,6 +122,8 @@ class BuildBotSatchel(ServiceSatchel):
 
     @task
     def restart_master(self, ignore_errors=None):
+        if not self.is_first_host:
+            return
         ignore_errors = self.ignore_errors if ignore_errors is None else ignore_errors
         r = self.local_renderer
         s = {'warn_only':True} if ignore_errors else {}
@@ -120,9 +133,12 @@ class BuildBotSatchel(ServiceSatchel):
     @property
     def restart_worker_command(self):
         r = self.local_renderer
-        r.env.restart_worker_command = r.format(
-            'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
-            '{virtualenv_dir}/bin/buildbot-worker restart worker"')
+        parts = []
+        for worker_name in self.get_worker_names_for_current_host():
+            r.env.worker_name = worker_name
+            parts.append('cd {project_dir}/src/buildbot; {virtualenv_dir}/bin/buildbot-worker restart %s;' % worker_name)
+        parts = ' '.join(parts)
+        r.env.restart_worker_command = r.format('sudo -u {bb_user} bash -c "%s"' % parts)
         return r.env.restart_worker_command
 
     @task
@@ -141,21 +157,40 @@ class BuildBotSatchel(ServiceSatchel):
             r.run(
                 'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
                 '{virtualenv_dir}/bin/buildbot start master"')
-            r.run(
-                'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
-                '{virtualenv_dir}/bin/buildbot-worker start worker"')
+            for worker_name in self.get_worker_names_for_current_host():
+                r.env.worker_name = worker_name
+                r.run(
+                    'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
+                    '{virtualenv_dir}/bin/buildbot-worker start {worker_name}"')
+
+    @property
+    def host_index(self):
+        return self.genv.hosts.index(self.genv.host_string)
+
+    def get_worker_names_for_current_host(self):
+        r = self.local_renderer
+        names = []
+        host_index = self.host_index
+        for i, worker_name in enumerate(r.env.worker_names):
+            if i == host_index:
+                names.append(worker_name)
+        return names
 
     @task
     def stop(self):
         r = self.local_renderer
         s = {'warn_only':True} if self.ignore_errors else {}
         with settings(**s):
-            r.run(
-                'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
-                '{virtualenv_dir}/bin/buildbot stop master"')
-            r.run(
-                'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
-                '{virtualenv_dir}/bin/buildbot-worker stop worker"')
+            if self.is_first_host:
+                r.run(
+                    'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
+                    '{virtualenv_dir}/bin/buildbot stop master"')
+            for worker_name in self.get_worker_names_for_current_host():
+                r.env.worker_name = worker_name
+                with settings(warn_only=True):
+                    r.run(
+                        'sudo -u {bb_user} bash -c "cd {project_dir}/src/buildbot; '
+                        '{virtualenv_dir}/bin/buildbot-worker stop {worker_name}"')
 
     @task
     def reload(self):
@@ -216,6 +251,8 @@ class BuildBotSatchel(ServiceSatchel):
 
     @task
     def install_cron(self):
+        if not self.is_first_host:
+            return
         r = self.local_renderer
         r.sudo(
             'printf \'SHELL=/bin/bash\\nPATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin\\n@reboot '
@@ -324,18 +361,21 @@ class BuildBotSatchel(ServiceSatchel):
             assert passed, 'Check failed: %s' % check['url']
 
     @task
+    def setup_apache(self):
+        r = self.local_renderer
+        if r.env.enable_apache_site and self.is_first_host:
+            apache = self.get_satchel('apache')
+            apache.enable_mod('proxy_http')
+
+    @task
     def setup_user(self):
         r = self.local_renderer
         user = self.get_satchel('user')
         group = self.get_satchel('group')
-
-#         user = buildbot.get_satchel('user')
-#         user.create(username='buildbot', groups='buildbot')
-#
         group.create(self.env.bb_group)
         user.create(
-            username=self.env.bb_user,
-            groups=self.env.bb_group,
+            username=r.env.bb_user,
+            groups=r.env.bb_group,
             create_home=True,
             home_dir=r.format(r.env.home_dir),
             password=False,
@@ -409,7 +449,9 @@ class BuildBotSatchel(ServiceSatchel):
 
     @task
     def update_cron_check(self):
-        if self.param_changed_to('cron_check_enabled', True):
+        if not self.is_first_host:
+            return
+        elif self.param_changed_to('cron_check_enabled', True):
             self.install_cron_check()
         elif self.param_changed_to('cron_check_enabled', False):
             self.uninstall_cron_check()
@@ -428,44 +470,60 @@ class BuildBotSatchel(ServiceSatchel):
         r.sudo('rm -Rf {virtualenv_dir} || true')
         r.sudo('rm -Rf {project_dir} || true')
 
+    def get_trackers(self):
+        r = self.local_renderer
+        return [
+
+            SettingsTracker(
+                satchel=self,
+                names='bb_user bb_group home_dir',
+                action=self.setup_user),
+
+            ORTracker(
+                SettingsTracker(satchel=self, names='virtualenv_dir project_dir'),
+                FilesystemTracker(base_dir=r.format('roles/{ROLE}'), extensions='pip-requirements.txt'),
+                action=self.setup_dir),
+
+            SettingsTracker(
+                satchel=self,
+                names='enable_apache_site',
+                action=self.setup_apache),
+
+            SettingsTracker(
+                satchel=self,
+                names='ssh_dir ssh_private_key ssh_public_key bb_user bb_group',
+                action=self.configure_ssh_key),
+
+            FilesystemTracker(
+                base_dir=r.format(r.env.src_dir), extensions='*.py *.tac *.cfg htpasswd',
+                action=self.deploy_code),
+
+            SettingsTracker(
+                satchel=self,
+                names='project_dir cron_path cron_perms',
+                action=self.install_cron),
+
+            SettingsTracker(
+                satchel=self,
+                names='cron_check_enabled',
+                action=self.update_cron_check),
+
+        ]
+
     @task(precursors=['packager', 'user', 'apache'])
     def configure(self):
+        has_changes = self.has_changes
+        if has_changes:
+            self.vprint('Stopping any existing buildbot server...')
+            with settings(warn_only=True):
+                self.stop()
 
-        self.vprint('Stopping any existing buildbot server...')
-        with settings(warn_only=True):
-            self.stop()
+        super(BuildBotSatchel, self).configure()
 
-        self.vprint('Installing packages...')
-        packager = self.get_satchel('packager')
-#         umv = self.get_satchel('ubuntumultiverse')
-        packager.configure()
-
-        self.vprint('Enabling Apache modules...')
-        if self.env.enable_apache_site:
-            apache = self.get_satchel('apache')
-            apache.enable_mod('proxy_http')
-
-        self.vprint('Setting up user...')
-        self.setup_user()
-
-        #umv.configure()
-
-        self.vprint('Setting up project directory...')
-        self.setup_dir()
-
-        self.vprint('Deploying code...')
-        self.deploy_code()
-
-        self.vprint('Installing cron...')
-        self.install_cron()
-
-        self.configure_ssh_key()
-
-        self.update_cron_check()
-
-        self.restart()
-
-        apache = self.get_satchel('apache')
-        apache.reload()
+        if has_changes:
+            self.restart()
+            if self.is_first_host:
+                apache = self.get_satchel('apache')
+                apache.reload()
 
 buildbot = BuildBotSatchel()

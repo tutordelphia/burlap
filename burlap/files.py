@@ -144,8 +144,7 @@ class FileSatchel(ContainerSatchel):
             if result.failed and 'stat: illegal option' in result:
                 # Try the BSD version of stat
                 return func('stat -f %%Su "%(path)s"' % locals())
-            else:
-                return result
+            return result
 
     @task
     def get_group(self, path, use_sudo=False):
@@ -160,8 +159,7 @@ class FileSatchel(ContainerSatchel):
             if result.failed and 'stat: illegal option' in result:
                 # Try the BSD version of stat
                 return func('stat -f %%Sg "%(path)s"' % locals())
-            else:
-                return result
+            return result
 
 
     def get_mode(self, path, use_sudo=False):
@@ -179,8 +177,7 @@ class FileSatchel(ContainerSatchel):
             if result.failed and 'stat: illegal option' in result:
                 # Try the BSD version of stat
                 return func('stat -f %%Op "%(path)s"|cut -c 4-6' % locals())
-            else:
-                return result
+            return result
 
     @task
     def umask(self, use_sudo=False):
@@ -272,7 +269,7 @@ class FileSatchel(ContainerSatchel):
 
         if res.succeeded:
             parts = res.split()
-            _md5sum = len(parts) > 0 and parts[0] or None
+            _md5sum = parts and parts[0] or None
         else:
             warn(res)
             _md5sum = None
@@ -287,10 +284,8 @@ class FileSatchel(ContainerSatchel):
         func = run_as_root if use_sudo else self.run
         res = func('cat %s' % quote(filename), quiet=True)
         if res.succeeded:
-            return [line for line in res.splitlines()
-                    if line and not line.startswith('#')]
-        else:
-            return []
+            return [line for line in res.splitlines() if line and not line.startswith('#')]
+        return []
 
 
     def getmtime(self, path, use_sudo=False):

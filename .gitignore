@@ -66,3 +66,4 @@ docs/_build/
 /.cache/
 /site/
 /*.geany
+/*.out

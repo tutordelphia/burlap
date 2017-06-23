@@ -340,16 +340,16 @@ class ApacheSatchel(ServiceSatchel):
 
         target_sites = self.genv.available_sites_by_host.get(hostname, None)
 
-        for site, site_data in self.iter_sites(site=site, setter=self.set_site_specifics):
+        for _site, site_data in self.iter_sites(site=site, setter=self.set_site_specifics):
             if self.verbose:
                 print('~'*80, file=sys.stderr)
-                print('Site:', site, file=sys.stderr)
+                print('Site:', _site, file=sys.stderr)
                 print('env.apache_auth_basic:', r.env.auth_basic, file=sys.stderr)
 
             # Only load site configurations that are allowed for this host.
             if target_sites is not None:
                 assert isinstance(target_sites, (tuple, list))
-                if site not in target_sites:
+                if _site not in target_sites:
                     continue
 
             if not r.env.auth_basic:
@@ -401,8 +401,8 @@ class ApacheSatchel(ServiceSatchel):
             sync_sets = [sync_set]
 
         ret_paths = []
-        for sync_set in sync_sets:
-            for paths in r.env.sync_sets[sync_set]:
+        for _sync_set in sync_sets:
+            for paths in r.env.sync_sets[_sync_set]:
                 #print 'paths:',paths
                 r.env.sync_local_path = os.path.abspath(paths['local_path'] % self.genv)
                 if paths['local_path'].endswith('/') and not r.env.sync_local_path.endswith('/'):
@@ -562,13 +562,13 @@ class ApacheSatchel(ServiceSatchel):
             r.sudo('rm -f {sites_available}/*')
             r.sudo('rm -f {sites_enabled}/*')
 
-        for site, site_data in self.iter_sites(site=site, setter=self.set_site_specifics):
+        for _site, site_data in self.iter_sites(site=site, setter=self.set_site_specifics):
             r = self.local_renderer
 
             #r.env.site = site
             if self.verbose:
                 print('-'*80, file=sys.stderr)
-                print('Site:', site, file=sys.stderr)
+                print('Site:', _site, file=sys.stderr)
                 print('-'*80, file=sys.stderr)
 
             r.env.server_name = r.format(r.env.domain_template)
@@ -576,7 +576,7 @@ class ApacheSatchel(ServiceSatchel):
 
             # Write WSGI template
             if r.env.wsgi_enabled:
-                r.pc('Writing WSGI template for site %s...' % site)
+                r.pc('Writing WSGI template for site %s...' % _site)
                 r.env.wsgi_scriptalias = r.format(r.env.wsgi_scriptalias)
                 fn = self.render_to_file(r.env.wsgi_template)
                 r.env.wsgi_dir = r.env.remote_dir = os.path.split(r.env.wsgi_scriptalias)[0]
@@ -584,7 +584,7 @@ class ApacheSatchel(ServiceSatchel):
                 r.put(local_path=fn, remote_path=r.env.wsgi_scriptalias, use_sudo=True)
 
             # Write site configuration.
-            r.pc('Writing site configuration for site %s...' % site)
+            r.pc('Writing site configuration for site %s...' % _site)
             from functools import partial
             genv = r.collect_genv()
             print('*'*80)
@@ -593,11 +593,11 @@ class ApacheSatchel(ServiceSatchel):
                 self.env.site_template,
                 extra=genv,
                 formatter=partial(r.format, ignored_variables=self.env.ignored_template_variables))
-            r.env.site_conf = site+'.conf'
+            r.env.site_conf = _site+'.conf'
             r.env.site_conf_fqfn = os.path.join(r.env.sites_available, r.env.site_conf)
             r.put(local_path=fn, remote_path=r.env.site_conf_fqfn, use_sudo=True)
 
-            self.enable_site(site)
+            self.enable_site(_site)
 
             self.clear_local_renderer()
 

@@ -366,9 +366,9 @@ class PackagerSatchel(Satchel):
             types = [type]
         else:
             types = PACKAGE_TYPES
-        for type in types:
-            if type == SYSTEM:
-                content = '\n'.join(self.list_required(type=type, service=service))
+        for _type in types:
+            if _type == SYSTEM:
+                content = '\n'.join(self.list_required(type=_type, service=service))
                 if list_only:
                     lst.extend(_ for _ in content.split('\n') if _.strip())
                     if self.verbose:

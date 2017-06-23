@@ -14,7 +14,7 @@ from burlap import ContainerSatchel
 from burlap.decorators import task, runs_once
 
 def list_to_str_or_unknown(lst):
-    if len(lst):
+    if lst:
         return ', '.join(map(str, lst))
     return 'unknown'
 
@@ -25,6 +25,7 @@ class DebugSatchel(ContainerSatchel):
     def set_defaults(self):
         self.env.shell_default_dir = '~'
         self.env.shell_interactive_cmd = '/bin/bash -i'
+        #self.env.shell_interactive_cmd = 'cd {start_dir}; /bin/bash -i'
         self.env.shell_default_options = ['-o StrictHostKeyChecking=no']
 
     @task
@@ -62,8 +63,8 @@ class DebugSatchel(ContainerSatchel):
     @task
     def list_sites(self, site='all', *args, **kwargs):
         kwargs['site'] = site
-        for site, data in self.iter_sites(*args, **kwargs):
-            print(site)
+        for _site, data in self.iter_sites(*args, **kwargs):
+            print(_site)
 
     @task
     def list_server_specs(self, cpu=1, memory=1, hdd=1):
@@ -181,7 +182,6 @@ class DebugSatchel(ContainerSatchel):
     def list_hosts(self):
         print('hosts:', self.genv.hosts)
 
-
     @task
     def info(self):
         print('Info')
@@ -189,14 +189,17 @@ class DebugSatchel(ContainerSatchel):
         print('\tSITE:', self.genv.SITE)
         print('\tdefault_site:', self.genv.default_site)
 
-
     @task
     @runs_once
-    def shell(self, gui=0, command=''):
+    def shell(self, gui=0, command='', dryrun=None, shell_interactive_cmd_str=None):
         """
         Opens an SSH connection.
         """
         from burlap.common import get_hosts_for_site
+
+        if dryrun is not None:
+            self.dryrun = dryrun
+
         r = self.local_renderer
 
         if r.genv.SITE != r.genv.default_site:
@@ -223,7 +226,7 @@ class DebugSatchel(ContainerSatchel):
         if command:
             r.env.shell_interactive_cmd_str = command
         else:
-            r.env.shell_interactive_cmd_str = r.format(r.env.shell_interactive_cmd)
+            r.env.shell_interactive_cmd_str = r.format(shell_interactive_cmd_str or r.env.shell_interactive_cmd)
 
         r.env.shell_default_options_str = ' '.join(r.env.shell_default_options)
         if self.is_local:

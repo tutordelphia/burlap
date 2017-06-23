@@ -69,7 +69,7 @@ except (ImportError, NameError) as e:
     print('Unable to initialize debug: %s' % e, file=sys.stderr)
     debug = None
 
-VERSION = (0, 9, 26)
+VERSION = (0, 9, 27)
 __version__ = '.'.join(map(str, VERSION))
 
 burlap_populate_stack = int(os.environ.get('BURLAP_POPULATE_STACK', 1))
@@ -172,6 +172,9 @@ def _get_environ_handler(name, d):
 
         # Ensure satchels don't cache values from previously loaded roles.
         common.reset_all_satchels()
+
+        if env.hosts and not env.host_string:
+            env.host_string = env.hosts[0]
 
         print('Loaded role %s.' % (name,), file=sys.stderr)
     func.__doc__ = 'Sets enivronment variables for the "%s" role.' % (name,)

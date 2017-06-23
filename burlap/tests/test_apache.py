@@ -20,7 +20,7 @@ class ApacheTests(TestCase):
         """
         Confirm on a multi-site multi-host environment, apache correctly reports change.
         """
-
+        env.disable_known_hosts = True
         burlap_dir = os.path.abspath(os.path.split(burlap.__file__)[0])
 
         d = '/tmp/test_apache_change'

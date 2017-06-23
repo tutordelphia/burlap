@@ -142,8 +142,8 @@ class MySQLSatchel(DatabaseSatchel):
 
     @task
     def set_collation_all(self, name=None, site=None):
-        for site in self.genv.available_sites:
-            self.set_collation(name=name, site=site)
+        for _site in self.genv.available_sites:
+            self.set_collation(name=name, site=_site)
 
     @task
     def set_max_packet_size(self, name=None, site=None):
@@ -184,7 +184,7 @@ class MySQLSatchel(DatabaseSatchel):
     @task
     def assert_mysql_stopped(self):
         with self.settings(warn_only=True):
-            ret = (self.run('ps aux |grep -i mysql|grep -v grep|grep -v vagrant') or '').strip()
+            ret = (self.run('ps aux |grep -i mysql|grep -v grep|grep -v vagrant|grep -v python') or '').strip()
         assert not ret
 
     @task
@@ -225,7 +225,7 @@ class MySQLSatchel(DatabaseSatchel):
                 r.run('sleep 1')
                 with self.settings(warn_only=True):
                     ret = (r.run('ps aux|grep -i mysql|grep -v grep|grep -v vagrant') or '').strip()
-                if len(ret):
+                if ret:
                     running = True
                     break
             if not running and not self.dryrun:

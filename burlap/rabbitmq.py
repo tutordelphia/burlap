@@ -192,10 +192,10 @@ class RabbitMQSatchel(ServiceSatchel):
         if self.env.user_lookup_method == DJANGO:
             # Retrieve user settings from one or more assoicated Django sites.
             dj = self.get_satchel('dj')
-            for site, site_data in self.iter_sites(site=site, renderer=self.render_paths, no_secure=True):
+            for _site, site_data in self.iter_sites(site=site, renderer=self.render_paths, no_secure=True):
                 if self.verbose:
                     print('!'*80, file=sys.stderr)
-                    print('site:', site, file=sys.stderr)
+                    print('site:', _site, file=sys.stderr)
 
                 # Only load site configurations that are allowed for this host.
     #             if target_sites is not None:
@@ -203,7 +203,7 @@ class RabbitMQSatchel(ServiceSatchel):
     #                 if site not in target_sites:
     #                     continue
 
-                _settings = dj.get_settings(site=site)
+                _settings = dj.get_settings(site=_site)
                 if not _settings:
                     continue
 

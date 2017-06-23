@@ -617,7 +617,7 @@ class RaspberryPiSatchel(Satchel):
         else:
             pass
 
-    @task(precursors=['packager', 'user', 'timezone', 'arduino', 'avahi', 'nm', 'ntpclient', 'sshnice'])
+    @task(precursors=['packager', 'user', 'timezone', 'avahi', 'nm', 'ntpclient', 'sshnice'])
     def configure(self):
         self.update_firmware()
         self.configure_i2c()

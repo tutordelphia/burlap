@@ -12,6 +12,14 @@ class BuildbotTests(TestCase):
 
     def test_cron_check(self):
         try:
+            # Create a mock deployment settings directory.
+            deploy_from_dir = tempfile.mkdtemp()
+            print('deploy_from_dir:', deploy_from_dir)
+            os.makedirs(os.path.join(deploy_from_dir, 'roles/all'))
+            os.makedirs(os.path.join(deploy_from_dir, 'roles/local'))
+            os.makedirs(os.path.join(deploy_from_dir, buildbot.env.src_dir))
+            os.chdir(deploy_from_dir)
+
             buildbot.genv.ROLE = 'local'
             buildbot.genv.services = ['buildbot']
             buildbot.clear_caches()

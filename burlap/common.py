@@ -560,6 +560,9 @@ class Renderer(object):
                 e['%s_%s' % (self.obj.name.lower(), k)] = v
         return e
 
+    def __getitem__(self, key):
+        return getattr(self, key)
+
     def __getattr__(self, attrname):
 
         # Alias .env to the default type.
@@ -652,7 +655,8 @@ class Renderer(object):
         elif attrname.startswith('reboot'):
             ret = wrap2(ret)
         elif attrname.startswith('put') \
-        or attrname.startswith('install_script'):
+        or attrname.startswith('install_script') \
+        or attrname.startswith('install_config'):
             ret = put_wrap2(ret)
         elif attrname.startswith('sed'):
             ret = sed_wrap2(ret)
@@ -790,6 +794,11 @@ class Satchel(object):
         self._local_renderer = None
         self._last_manifest = None
         self._os_version_cache = {}
+
+    @property
+    def new_local_renderer(self):
+        self._local_renderer = None
+        return self.local_renderer
 
     def register(self):
         """
@@ -963,7 +972,7 @@ class Satchel(object):
     def install_cron_job(self, name='default', extra=None):
         assert name in self.env.cron
 
-        data = self.env.cron[name]
+        data = type(env)(self.env.cron[name].copy())
         data.update(extra or {})
 
         self.install_script(
@@ -1034,8 +1043,7 @@ class Satchel(object):
         current_value = self.current_manifest.get(key)
         if from_value is not None:
             return last_value == from_value and current_value == to_value
-        else:
-            return last_value != to_value and current_value == to_value
+        return last_value != to_value and current_value == to_value
 
     def sleep(self, seconds):
         if self.dryrun:
@@ -1086,6 +1094,9 @@ class Satchel(object):
 
     def install_script(self, *args, **kwargs):
         return install_script(*args, **kwargs)
+
+    def install_config(self, *args, **kwargs):
+        return install_config(*args, **kwargs)
 
     def set_site_specifics(self, site):
         """
@@ -1236,8 +1247,7 @@ class Satchel(object):
     def run_or_local(self, *args, **kwargs):
         if is_local():
             return local_or_dryrun(*args, **kwargs)
-        else:
-            return run_or_dryrun(*args, **kwargs)
+        return run_or_dryrun(*args, **kwargs)
 
     def local_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.local() instead.', DeprecationWarning, stacklevel=2)
@@ -1250,6 +1260,10 @@ class Satchel(object):
         return files_exists_or_dryrun(*args, **kwargs)
 
     def file_contains(self, *args, **kwargs):
+        """
+        filename text
+        http://docs.fabfile.org/en/1.13/api/contrib/files.html#fabric.contrib.files.contains
+        """
         from fabric.contrib.files import contains
         return contains(*args, **kwargs)
 
@@ -1277,8 +1291,7 @@ class Satchel(object):
     def sudo_or_local(self, *args, **kwargs):
         if is_local():
             return local_or_dryrun(*args, **kwargs)
-        else:
-            return sudo_or_dryrun(*args, **kwargs)
+        return sudo_or_dryrun(*args, **kwargs)
 
     def sudo_if_missing(self, fn, cmd, **kwargs):
         _cmd = "[ ! -f '%s' ] && %s || true" % (fn, cmd)
@@ -1299,6 +1312,9 @@ class Satchel(object):
 
     def get_templates(self):
         return [_ for _ in list(self.templates or []) if _]
+
+    def get_trackers(self):
+        return []
 
     def record_manifest(self):
         """
@@ -1322,13 +1338,37 @@ class Satchel(object):
             assert fqfn, 'Unable to find template: %s/%s' % (self.name, template)
             manifest['_%s' % template] = get_file_hash(fqfn)
 
+        for tracker in self.get_trackers():
+            manifest['_tracker_%s' % tracker.get_natural_key_hash()] = tracker.get_thumbprint()
+
         return manifest
+
+    @property
+    def has_changes(self):
+        """
+        Returns true if at least one tracker detects a change.
+        """
+        lm = self.last_manifest
+        for tracker in self.get_trackers():
+            last_thumbprint = lm['_tracker_%s' % tracker.get_natural_key_hash()]
+            if tracker.is_changed(last_thumbprint):
+                return True
+        return False
 
     def configure(self):
         """
         The standard method called to apply functionality when the manifest changes.
         """
-        raise NotImplementedError
+        lm = self.last_manifest
+        for tracker in self.get_trackers():
+            print('Checking tracker:', tracker)
+            last_thumbprint = lm['_tracker_%s' % tracker.get_natural_key_hash()]
+            print('lt:', last_thumbprint)
+            has_changed = tracker.is_changed(last_thumbprint)
+            print('Tracker changed:', has_changed)
+            if has_changed:
+                self.vprint('Change detected!')
+                tracker.act()
 
     # List of satchels that should be run before this one during deployments.
     configure.deploy_before = []
@@ -1357,8 +1397,7 @@ class Satchel(object):
     def verbose(self):
         if self._verbose is None:
             return get_verbose()
-        else:
-            return self._verbose
+        return self._verbose
 
     @verbose.setter
     def verbose(self, v):
@@ -1504,12 +1543,7 @@ class Service(object):
         return ret
 
 class ServiceSatchel(Satchel, Service):
-
-    def configure(self):
-        """
-        The standard method called to apply functionality when the manifest changes.
-        """
-        raise NotImplementedError
+    pass
 
 class ContainerSatchel(Satchel):
     """
@@ -1613,6 +1647,8 @@ def print_command(cmd):
 def append_or_dryrun(*args, **kwargs):
     """
     Wrapper around Fabric's contrib.files.append() to give it a dryrun option.
+
+    text filename
 
     http://docs.fabfile.org/en/0.9.1/api/contrib/files.html#fabric.contrib.files.append
     """
@@ -1853,12 +1889,16 @@ def run_or_dryrun(*args, **kwargs):
 
 def sudo_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
+    user = kwargs.get('user')
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
     if dryrun:
         cmd = args[0]
         if BURLAP_COMMAND_PREFIX:
-            print('%s sudo: %s' % (render_command_prefix(), cmd))
+            if user:
+                print('%s run: sudo -u %s bash -c "%s"' % (render_command_prefix(), user, cmd))
+            else:
+                print('%s run: sudo bash -c "%s"' % (render_command_prefix(), cmd))
         else:
             print(cmd)
     else:
@@ -2226,8 +2266,7 @@ class QueuedCommand(object):
         params = (self.name, ','.join(kwargs))
         if params[1]:
             return ('%s:%s' % params).strip()
-        else:
-            return (params[0]).strip()
+        return (params[0]).strip()
 
     def __cmp__(self, other):
         """
@@ -2467,6 +2506,7 @@ def render_to_file(template, fn=None, extra=None, **kwargs):
     append_newline = kwargs.pop('append_newline', True)
     style = kwargs.pop('style', 'cat') # |echo
     formatter = kwargs.pop('formatter', None)
+    #pprint(extra, indent=4)
     content = render_to_string(template, extra=extra)
     if append_newline and not content.endswith('\n'):
         content += '\n'
@@ -2505,13 +2545,15 @@ def render_to_file(template, fn=None, extra=None, **kwargs):
 
     return fn
 
-def install_script(local_path=None, remote_path=None, render=True, extra=None):
+def install_config(local_path=None, remote_path=None, render=True, extra=None):
     local_path = find_template(local_path)
     if render:
         extra = extra or {}
-#         print('extra:', extra.keys())
         local_path = render_to_file(template=local_path, extra=extra)
     put_or_dryrun(local_path=local_path, remote_path=remote_path, use_sudo=True)
+
+def install_script(*args, **kwargs):
+    install_config(*args, **kwargs)
     sudo_or_dryrun('chmod +x %s' % env.put_remote_path)
 
 def write_to_file(content, fn=None, **kwargs):
@@ -2575,9 +2617,8 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
 #    print('iter_sites.sites1:', sorted(sites))
     renderer = renderer #or render_remote_paths
     env_default = save_env()
-    for site, site_data in sorted(sites):
-#         print('iter_sites.sites3a:', site)
-        if no_secure and site.endswith('_secure'):
+    for _site, site_data in sorted(sites):
+        if no_secure and _site.endswith('_secure'):
             continue
 
         # Only load site configurations that are allowed for this host.
@@ -2585,20 +2626,19 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
             pass
         else:
             assert isinstance(target_sites, (tuple, list))
-            if site not in target_sites:
+            if _site not in target_sites:
                 if verbose:
-                    print('Skipping site %s because not in among target sites.' % site)
+                    print('Skipping site %s because not in among target sites.' % _site)
                 continue
 
         env.update(env_default)
-        env.update(env.sites.get(site, {}))
-        env.SITE = site
-#         print('iter_sites.sites3b:', site)
+        env.update(env.sites.get(_site, {}))
+        env.SITE = _site
         if callable(renderer):
             renderer()
         if setter:
-            setter(site)
-        yield site, site_data
+            setter(_site)
+        yield _site, site_data
 
     # Revert modified keys.
     env.update(env_default)

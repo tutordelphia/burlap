@@ -316,7 +316,7 @@ set_by_include3: 'some special setting'
             'APACHE', 'AVAHI', 'BLUETOOTH', 'BUILDBOT', 'CELERY', 'CLOUDFRONT', 'CRON',
             'DEBUG', 'DEPLOYMENTNOTIFIER', 'DJ', 'DNS', 'EC2MONITOR', 'ELASTICSEARCH', 'FILE',
             'GIT', 'GITCHECKER', 'GITTRACKER', 'GPSD', 'GROUP', 'HOST', 'HOSTNAME', 'HOSTSFILE',
-            'IP', 'JIRAHELPER', 'JSHINT', 'LOCALES', 'LOGINNOTIFIER', 'MOTION', 'MYSQL', 'MYSQLCLIENT', 'NM',
+            'IP', 'JIRAHELPER', 'JSHINT', 'LOCALES', 'LOGINNOTIFIER', 'MONGODB', 'MOTION', 'MYSQL', 'MYSQLCLIENT', 'NM',
             'NTPCLIENT', 'PACKAGER', 'PHANTOMJS', 'PIP', 'POSTFIX', 'POSTGRESQL', 'POSTGRESQLCLIENT', 'PROJECT',
             'RABBITMQ', 'RPI', 'RSYNC', 'S3', 'SELENIUM', 'SERVICE', 'SNORT', 'SOFTWARERAID',
             'SSHNICE', 'SSL', 'SUPERVISOR', 'TARBALL', 'TIMEZONE', 'UBUNTUMULTIVERSE',
@@ -330,7 +330,7 @@ set_by_include3: 'some special setting'
 
         clear_state()
         print('all_satchels.b:', sorted(all_satchels.keys()))
-        assert len(all_satchels) == 0
+        assert not all_satchels
 
         set_state(burlap_state)
         print('all_satchels.c:', sorted(all_satchels.keys()))

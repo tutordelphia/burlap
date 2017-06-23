@@ -77,7 +77,7 @@ class CronSatchel(ServiceSatchel):
         cron_crontabs = []
 #         if self.verbose:
 #             print('hostname: "%s"' % (hostname,), file=sys.stderr)
-        for site, site_data in self.iter_sites(site=site):
+        for _site, site_data in self.iter_sites(site=site):
             if self.verbose:
                 print('site:', site, file=sys.stderr)
                 print('env.crontabs_selected:', self.env.crontabs_selected, file=sys.stderr)

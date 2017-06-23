@@ -1,0 +1,9 @@
+# Ubuntu 16.04 packages necessary to run the full test suite locally.
+# Install with: sudo apt-get install -y `cat "apt-requirements-test.txt"| sed '/^#/ d' | tr "\\n" " "`
+qemu
+qemu-kvm
+libvirt-bin
+build-essential
+pandoc
+# Not strictly necessary, but useful for debugging and managing local VM instances.
+virt-manager

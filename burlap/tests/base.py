@@ -80,6 +80,10 @@ class TestCase(unittest.TestCase):
         init_env()
         deploy_init_env()
 
+        # Save cwd.
+        self._cwd = os.getcwd()
+        print('cwd:', self._cwd)
+
         # Save burlap state.
         self._burlap_state = get_state()
 
@@ -121,6 +125,9 @@ class TestCase(unittest.TestCase):
 
         set_dryrun(self._dryrun)
         set_verbose(self._verbose)
+
+        # Restore CWD.
+        os.chdir(self._cwd)
 
         # Restore fabric state.
         self.clear_env()
