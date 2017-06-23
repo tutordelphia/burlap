@@ -50,6 +50,7 @@ def init_env():
     env.plan = None
     env.plan_data_dir = '%(burlap_data_dir)s/plans'
     env.plan_digits = 3
+    env.plan_auto_truncate = False
 
 # Prevent globals from being reset by duplicate imports.
 if 'plan_init' not in env:
@@ -1155,6 +1156,9 @@ def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, ena
     if enable_plans and not preview and not common.get_dryrun():
         plan = Plan.get_or_create_next(last_plan=last_plan)
         plan.record_thumbprint(only_components=only_components)
+
+        if env.plan_auto_truncate:
+            truncate()
 
 @task_or_dryrun
 def run(*args, **kwargs):

@@ -45,8 +45,8 @@ class MongoDBSatchel(DatabaseSatchel):
                     d = {
                         APT_SOURCE: [
                             (
-                                'echo "deb [ arch=amd64 ] http://repo.mongodb.org/apt/ubuntu trusty/mongodb-org/3.4 multiverse" | '
-                                'sudo tee /etc/apt/sources.list.d/mongodb-org-3.4.list',
+                                'deb [ arch=amd64 ] http://repo.mongodb.org/apt/ubuntu trusty/mongodb-org/3.4 multiverse',
+                                '/etc/apt/sources.list.d/mongodb-org-3.4.list',
                             ),
                         ],
                         APT_KEY: [
@@ -58,8 +58,8 @@ class MongoDBSatchel(DatabaseSatchel):
                     d = {
                         APT_SOURCE: [
                             (
-                                'echo "deb [ arch=amd64,arm64 ] http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.4 multiverse" | '
-                                'sudo tee /etc/apt/sources.list.d/mongodb-org-3.4.list',
+                                'deb [ arch=amd64,arm64 ] http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.4 multiverse',
+                                '/etc/apt/sources.list.d/mongodb-org-3.4.list',
                             ),
                         ],
                         APT_KEY: [
