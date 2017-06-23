@@ -38,18 +38,41 @@ class MongoDBSatchel(DatabaseSatchel):
 
     @property
     def packager_repositories(self):
-        d = {
-            APT_SOURCE: [
-                (
-                    'deb [ arch=amd64,arm64 ] http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.4 multiverse',
-                    '/etc/apt/sources.list.d/mongodb-org-3.4.list',
-                ),
-            ],
-            APT_KEY: [
-                ('hkp://keyserver.ubuntu.com:80', '0C49F3730359A14518585931BC711F9BA15703C6'),
-            ],
-        }
-        return d
+        ver = self.os_version
+        if ver.type == LINUX:
+            if ver.distro == UBUNTU:
+                if ver.release == '14.04':
+                    d = {
+                        APT_SOURCE: [
+                            (
+                                'echo "deb [ arch=amd64 ] http://repo.mongodb.org/apt/ubuntu trusty/mongodb-org/3.4 multiverse" | '
+                                'sudo tee /etc/apt/sources.list.d/mongodb-org-3.4.list',
+                            ),
+                        ],
+                        APT_KEY: [
+                            ('hkp://keyserver.ubuntu.com:80', '0C49F3730359A14518585931BC711F9BA15703C6'),
+                        ],
+                    }
+                    return d
+                elif ver.release == '16.04':
+                    d = {
+                        APT_SOURCE: [
+                            (
+                                'echo "deb [ arch=amd64,arm64 ] http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.4 multiverse" | '
+                                'sudo tee /etc/apt/sources.list.d/mongodb-org-3.4.list',
+                            ),
+                        ],
+                        APT_KEY: [
+                            ('hkp://keyserver.ubuntu.com:80', '0C49F3730359A14518585931BC711F9BA15703C6'),
+                        ],
+                    }
+                    return d
+                else:
+                    raise NotImplementedError
+            else:
+                raise NotImplementedError
+        else:
+            raise NotImplementedError
 
     @task
     @runs_once
