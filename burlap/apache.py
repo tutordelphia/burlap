@@ -359,10 +359,12 @@ class ApacheSatchel(ServiceSatchel):
             for username, password in r.env.auth_basic_users:
                 r.env.auth_basic_username = username
                 r.env.auth_basic_password = password
-                if self.files.exists(r.env.auth_basic_authuserfile):
-                    r.sudo('htpasswd -b {auth_basic_authuserfile} {auth_basic_username} {auth_basic_password}')
+                r.env.apache_site = _site
+                r.env.fn = r.format(r.env.auth_basic_authuserfile)
+                if self.files.exists(r.env.fn):
+                    r.sudo('htpasswd -b {fn} {auth_basic_username} {auth_basic_password}')
                 else:
-                    r.sudo('htpasswd -b -c {auth_basic_authuserfile} {auth_basic_username} {auth_basic_password}')
+                    r.sudo('htpasswd -b -c {fn} {auth_basic_username} {auth_basic_password}')
 
     @task
     def install_auth_basic_user_file_all(self):
@@ -571,6 +573,7 @@ class ApacheSatchel(ServiceSatchel):
                 print('Site:', _site, file=sys.stderr)
                 print('-'*80, file=sys.stderr)
 
+            r.env.apache_site = _site
             r.env.server_name = r.format(r.env.domain_template)
             print('r.env.server_name:', r.env.server_name)
 
@@ -589,6 +592,8 @@ class ApacheSatchel(ServiceSatchel):
             genv = r.collect_genv()
             print('*'*80)
             print('apache_wsgi_scriptalias:', genv.apache_wsgi_scriptalias)
+            print('apache_auth_basic_authuserfile:', self.env.auth_basic_authuserfile)
+            r.env.auth_basic_authuserfile = r.format(self.env.auth_basic_authuserfile)
             fn = self.render_to_file(
                 self.env.site_template,
                 extra=genv,

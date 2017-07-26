@@ -102,6 +102,9 @@ class SupervisorSatchel(ServiceSatchel):
         self.env.max_restart_wait_minutes = 5
         self.env.services_rendered = ''
 
+        # If true, then all configuration files not explicitly managed by use will be deleted.
+        self.env.purge_all_confs = True
+
         self.env.services = []
 
         # Functions that, when called, should return a supervisor service text
@@ -167,6 +170,10 @@ class SupervisorSatchel(ServiceSatchel):
             print('Waiting for supervisor to start (%i of %i)...' % (_, n))
             time.sleep(sleep_n)
         raise Exception('Failed to restart service %s!' % self.name)
+
+    def reload(self):
+        r = self.local_renderer
+        r.sudo('supervisorctl reload all')
 
     def record_manifest(self):
         """
@@ -246,7 +253,8 @@ class SupervisorSatchel(ServiceSatchel):
 
         process_groups = []
 
-        r.sudo('rm -Rf /etc/supervisor/conf.d/*')
+        if r.env.purge_all_confs:
+            r.sudo('rm -Rf /etc/supervisor/conf.d/*')
 
         #TODO:check available_sites_by_host and remove dead?
         self.write_configs(site=site)

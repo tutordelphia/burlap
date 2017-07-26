@@ -29,15 +29,7 @@ from burlap.common import (
 )
 from burlap.decorators import task_or_dryrun, runs_once
 from burlap import exceptions
-
-LOCALHOSTS = ('localhost', '127.0.0.1')
-
-STORAGE_LOCAL = 'local'
-STORAGE_REMOTE = 'remote'
-STORAGES = (
-    STORAGE_LOCAL,
-    STORAGE_REMOTE,
-)
+from burlap.constants import LOCALHOSTS, STORAGE_LOCAL, STORAGE_REMOTE
 
 default_remote_path = '/var/local/burlap'
 
@@ -161,10 +153,7 @@ class RemoteFile(object):
     def __new__(cls, fqfn, *args, **kwargs):
         # Remember and cache every class instance per unique file name.
         if fqfn not in cls._file_cache:
-#             print('creating new instance:', fqfn)
             cls._file_cache[fqfn] = super(RemoteFile, cls).__new__(cls, fqfn, *args, **kwargs)
-#         else:
-#             print('using cache:', fqfn)
         return cls._file_cache[fqfn]
 
     def __init__(self, fqfn, mode='r'):
@@ -231,6 +220,8 @@ class RemoteFile(object):
         #print(self.content)
         fout.write(self.content)
         fout.close()
+        fqdir = os.path.split(self.fqfn)[0]
+        _sudo('mkdir -p %s' % fqdir)
         put_or_dryrun(
             local_path=tmp_fn,
             remote_path=self.fqfn,

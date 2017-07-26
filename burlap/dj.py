@@ -513,6 +513,9 @@ class DjangoSatchel(Satchel):
 
         post_south = self.version_tuple >= (1, 7, 0)
 
+        use_run_syncdb = self.version_tuple >= (1, 9, 0)
+
+        # DEPRECATED: removed in Django>=1.7
         r.env.db_syncdb_all_flag = '--all' if int(all) else ''
 
         r.env.db_syncdb_database = ''
@@ -527,9 +530,15 @@ class DjangoSatchel(Satchel):
             r.env.SITE = _site
             with self.settings(warn_only=ignore_errors):
                 if post_south:
-                    r.run_or_local(
-                        'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
-                        '{manage_cmd} migrate --run-syncdb --noinput {db_syncdb_database}')
+                    if use_run_syncdb:
+                        r.run_or_local(
+                            'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
+                            '{manage_cmd} migrate --run-syncdb --noinput {db_syncdb_database}')
+                    else:
+                        # Between Django>=1.7,<1.9 we can only do a regular migrate, no true syncdb.
+                        r.run_or_local(
+                            'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
+                            '{manage_cmd} migrate --noinput {db_syncdb_database}')
                 else:
                     r.run_or_local(
                         'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '

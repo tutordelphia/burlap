@@ -4,7 +4,7 @@ from pprint import pprint
 
 from burlap.constants import *
 from burlap import Satchel
-from burlap.decorators import task
+from burlap.decorators import task, runs_once
 from burlap.common import print_success
 
 GODADDY = 'godaddy'
@@ -35,21 +35,22 @@ class DNSSatchel(Satchel):
             'Domain %s is invalid this account. Only domains %s are allowed.' % (domain, ', '.join(sorted(allowed_domains)))
         #client.add_record(domain, {'data':'1.2.3.4','name':'test','ttl':3600, 'type':'A'})
         print('Adding record:', domain, record_type, record)
-        try:
-            client.add_record(
-                domain,
-                {
-                    'data': record.get('ip', record.get('alias')),
-                    'name': record['name'],
-                    'ttl': record['ttl'],
-                    'type': record_type.upper()
-                })
-            print_success('Record added!')
-        except BadResponse as e:
-            if e._message['code'] == 'DUPLICATE_RECORD':
-                print('Ignoring duplicate record.')
-            else:
-                raise
+        if not self.dryrun:
+            try:
+                client.add_record(
+                    domain,
+                    {
+                        'data': record.get('ip', record.get('alias')),
+                        'name': record['name'],
+                        'ttl': record['ttl'],
+                        'type': record_type.upper()
+                    })
+                print_success('Record added!')
+            except BadResponse as e:
+                if e._message['code'] == 'DUPLICATE_RECORD':
+                    print('Ignoring duplicate record.')
+                else:
+                    raise
 
     def get_last_zonefile(self, fn):
         lm = self.last_manifest
@@ -57,6 +58,7 @@ class DNSSatchel(Satchel):
         return zone_files.get(fn)
 
     @task
+    @runs_once
     def update_dns(self):
         from blockstack_zones import parse_zone_file
         #from blockstack_zones import parse_zone_file

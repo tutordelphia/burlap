@@ -120,7 +120,16 @@ class PackagerSatchel(Satchel):
         elif packager == YUM:
             return self.install_yum(*args, **kwargs)
         else:
-            raise Exception('Unknown packager: %s' % (packager,))
+            raise NotImplementedError('Unknown packager: %s' % (packager,))
+
+    @task
+    def autoclean(self):
+        r = self.local_renderer
+        packager = self.packager
+        if packager == APT:
+            r.sudo('DEBIAN_FRONTEND=noninteractive apt-get -yq autoclean')
+        else:
+            raise NotImplementedError('Unknown packager: %s' % (packager,))
 
     @task
     def kill_apt_get(self):

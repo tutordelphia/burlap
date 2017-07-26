@@ -70,3 +70,12 @@ ROLE = 'ROLE'
 LOCALHOSTS = ('localhost', '127.0.0.1')
 
 UTF8 = 'UTF8'
+
+STORAGE_LOCAL = 'local'
+STORAGE_REMOTE = 'remote'
+STORAGES = (
+    STORAGE_LOCAL,
+    STORAGE_REMOTE,
+)
+
+LOCALHOSTS = ('localhost', '127.0.0.1')

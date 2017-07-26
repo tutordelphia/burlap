@@ -1597,8 +1597,9 @@ def shellquote(s, singleline=True):
 
 def init_burlap_data_dir():
     d = env.burlap_data_dir
-    if not os.path.isdir(env.burlap_data_dir):
-        os.mkdir(d)
+    if env.plan_storage == 'local':
+        if not os.path.isdir(env.burlap_data_dir):
+            os.mkdir(d)
 
 def set_dryrun(dryrun):
     global _dryrun

@@ -134,7 +134,7 @@ class JiraHelperSatchel(ContainerSatchel):
                 issue = jira.issue(ticket)
                 print('Ticket %s retrieved.' % ticket)
                 transition_to_id = dict((t['name'], t['id']) for t in jira.transitions(issue))
-                print('%i allowable transitions found:')
+                print('%i allowable transitions found:' % len(transition_to_id))
                 pprint(transition_to_id)
                 print('issue.fields.status.id:', issue.fields.status.id)
                 print('issue.fields.status.name:', issue.fields.status.name)
@@ -158,16 +158,15 @@ class JiraHelperSatchel(ContainerSatchel):
                     print('Updating ticket %s to status %s (%s) and assigning it to %s.' \
                         % (ticket, next_transition_name, next_transition_id, new_assignee))
                     if not self.dryrun:
-                        try:
-                            jira.transition_issue(
-                                issue,
-                                next_transition_id,
-                            )
-                            recheck = True
-                        except AttributeError as e:
-                            print('Unable to transition ticket %s to %s: %s' \
-                                % (ticket, next_transition_name, e), file=sys.stderr)
-                            traceback.print_exc()
+
+                        if next_transition_id:
+                            try:
+                                jira.transition_issue(issue, next_transition_id)
+                                recheck = True
+                            except AttributeError as e:
+                                print('Unable to transition ticket %s to %s: %s' \
+                                    % (ticket, next_transition_name, e), file=sys.stderr)
+                                traceback.print_exc()
 
                         # Note assignment should happen after transition, since the assignment may
                         # effect remove transitions that we need.
