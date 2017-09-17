@@ -6,4 +6,4 @@ python-dateutil>=2.2
 lockfile>=0.9.1
 requirements-parser>=0.1.0
 Jinja2>=2.8
-six==1.10.0
+six==1.11.0
