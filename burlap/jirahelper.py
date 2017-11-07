@@ -53,6 +53,7 @@ class JiraHelperSatchel(ContainerSatchel):
         from jira import JIRA, JIRAError
         from burlap.common import print_success, print_fail
         try:
+            print('Connecting to %s with user %s...' % (self.env.server, self.env.basic_auth_username))
             jira = JIRA({
                 'server': self.env.server
             }, basic_auth=(self.env.basic_auth_username, self.env.basic_auth_password))
