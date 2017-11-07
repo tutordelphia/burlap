@@ -74,8 +74,8 @@ class SSLSatchel(ServiceSatchel):
             os.makedirs(ssl_dst)
         for site, site_data in self.iter_sites():
             print('site.csr1:', site, file=sys.stderr)
-            assert self.env.domain, 'No SSL domain defined.'
-            r.env.ssl_base_dst = '%s/%s' % (ssl_dst, self.env.domain.replace('*.', ''))
+            assert r.env.domain, 'No SSL domain defined.'
+            r.env.ssl_base_dst = '%s/%s' % (ssl_dst, r.env.domain.replace('*.', ''))
             r.env.ssl_csr_year = date.today().year
             r.local('openssl req -nodes -newkey rsa:{ssl_length} '
                 '-subj "/C={ssl_country}/ST={ssl_state}/L={ssl_city}/O={ssl_organization}/CN={ssl_domain}" '

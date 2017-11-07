@@ -53,6 +53,13 @@ class DeploymentNotifierSatchel(Satchel):
         s.quit()
 
     @task
+    def test(self):
+        self.send_email(
+            subject='Test',
+            message='Test',
+            recipient_list=self.env.email_recipient_list)
+
+    @task
     def notify_post_deployment(self, subject=None, message=None, force=0):
         from burlap import common
         force = int(force)

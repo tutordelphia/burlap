@@ -1071,6 +1071,7 @@ class Satchel(object):
         warnings.warn('Use self.run() instead.', DeprecationWarning, stacklevel=2)
         self.reboot(*args, **kwargs)
 
+    @task
     def reboot(self, *args, **kwargs):
         """
         Reboots the server and waits for it to come back.
@@ -1237,10 +1238,14 @@ class Satchel(object):
     def put(self, *args, **kwargs):
         return put_or_dryrun(*args, **kwargs)
 
+    def rsync(self, **kwargs):
+        return rsync_or_dryrun(**kwargs)
+
     def run_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.run() instead.', DeprecationWarning, stacklevel=2)
         return run_or_dryrun(*args, **kwargs)
 
+    @task
     def run(self, *args, **kwargs):
         return run_or_dryrun(*args, **kwargs)
 
@@ -1285,6 +1290,7 @@ class Satchel(object):
         warnings.warn('Use self.sudo() instead.', DeprecationWarning, stacklevel=2)
         return sudo_or_dryrun(*args, **kwargs)
 
+    @task
     def sudo(self, *args, **kwargs):
         return sudo_or_dryrun(*args, **kwargs)
 
@@ -2012,6 +2018,18 @@ def reboot_or_dryrun(*args, **kwargs):
 #         return [real_local_path]
 #     else:
 #         return _get(**kwargs)
+
+def rsync_or_dryrun(**kwargs):
+    dryrun = get_dryrun(kwargs.get('dryrun'))
+    use_sudo = kwargs.get('use_sudo', False)
+    local_path = kwargs.pop('local_path')
+    remote_path = kwargs.pop('remote_path')
+    #cmd = 'rsync --progress --verbose %s %s@%s:%s' % (local_path, env.user, env.host_string, remote_path)
+    cmd = 'rsync -avz --progress --rsh "ssh -i %s" "%s" %s@%s:"%s"' % (env.key_filename, local_path, env.user, env.host_string, remote_path)
+    if dryrun:
+        print(cmd)
+    else:
+        _local(cmd, **kwargs)
 
 def put_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))

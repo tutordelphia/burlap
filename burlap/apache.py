@@ -195,6 +195,12 @@ class ApacheSatchel(ServiceSatchel):
         self.env.specifics[LINUX][UBUNTU].log_dir = '/var/log/apache2'
         self.env.specifics[LINUX][UBUNTU].pid = '/var/run/apache2/apache2.pid'
 
+        self.env.delete_site_command = None
+
+        self.env.manage_httpd_conf = True
+        self.env.manage_ports_conf = True
+        self.env.manage_site_conf = True
+
         self.env.ssl_certificates = None
         self.env.ssl_certificates_templates = []
 
@@ -215,6 +221,7 @@ class ApacheSatchel(ServiceSatchel):
             'HTTP:X-Forwarded-Proto',
             'HTTPS',
             'HTTP',
+            'HTTP_HOST',
         ]
 
         # The local and remote relative directory where the SSL certificates are stored.
@@ -235,7 +242,8 @@ class ApacheSatchel(ServiceSatchel):
 
     @task
     def disable_mod(self, name):
-        self.sudo('a2dismod %s' % name)
+        with self.settings(warn_only=True):
+            self.sudo('a2dismod %s' % name)
 
     @task
     def enable_site(self, name):
@@ -564,47 +572,53 @@ class ApacheSatchel(ServiceSatchel):
             r.sudo('rm -f {sites_available}/*')
             r.sudo('rm -f {sites_enabled}/*')
 
-        for _site, site_data in self.iter_sites(site=site, setter=self.set_site_specifics):
-            r = self.local_renderer
+        if r.env.manage_site_conf:
 
-            #r.env.site = site
-            if self.verbose:
-                print('-'*80, file=sys.stderr)
-                print('Site:', _site, file=sys.stderr)
-                print('-'*80, file=sys.stderr)
+            # Run an optional customizable command to clear or delete old sites before writing the new ones.
+            if r.env.delete_site_command:
+                r.sudo(r.env.delete_site_command)
 
-            r.env.apache_site = _site
-            r.env.server_name = r.format(r.env.domain_template)
-            print('r.env.server_name:', r.env.server_name)
+            for _site, site_data in self.iter_sites(site=site, setter=self.set_site_specifics):
+                r = self.local_renderer
 
-            # Write WSGI template
-            if r.env.wsgi_enabled:
-                r.pc('Writing WSGI template for site %s...' % _site)
-                r.env.wsgi_scriptalias = r.format(r.env.wsgi_scriptalias)
-                fn = self.render_to_file(r.env.wsgi_template)
-                r.env.wsgi_dir = r.env.remote_dir = os.path.split(r.env.wsgi_scriptalias)[0]
-                r.sudo('mkdir -p {remote_dir}')
-                r.put(local_path=fn, remote_path=r.env.wsgi_scriptalias, use_sudo=True)
+                #r.env.site = site
+                if self.verbose:
+                    print('-'*80, file=sys.stderr)
+                    print('Site:', _site, file=sys.stderr)
+                    print('-'*80, file=sys.stderr)
 
-            # Write site configuration.
-            r.pc('Writing site configuration for site %s...' % _site)
-            from functools import partial
-            genv = r.collect_genv()
-            print('*'*80)
-            print('apache_wsgi_scriptalias:', genv.apache_wsgi_scriptalias)
-            print('apache_auth_basic_authuserfile:', self.env.auth_basic_authuserfile)
-            r.env.auth_basic_authuserfile = r.format(self.env.auth_basic_authuserfile)
-            fn = self.render_to_file(
-                self.env.site_template,
-                extra=genv,
-                formatter=partial(r.format, ignored_variables=self.env.ignored_template_variables))
-            r.env.site_conf = _site+'.conf'
-            r.env.site_conf_fqfn = os.path.join(r.env.sites_available, r.env.site_conf)
-            r.put(local_path=fn, remote_path=r.env.site_conf_fqfn, use_sudo=True)
+                r.env.apache_site = _site
+                r.env.server_name = r.format(r.env.domain_template)
+                print('r.env.server_name:', r.env.server_name)
 
-            self.enable_site(_site)
+                # Write WSGI template
+                if r.env.wsgi_enabled:
+                    r.pc('Writing WSGI template for site %s...' % _site)
+                    r.env.wsgi_scriptalias = r.format(r.env.wsgi_scriptalias)
+                    fn = self.render_to_file(r.env.wsgi_template)
+                    r.env.wsgi_dir = r.env.remote_dir = os.path.split(r.env.wsgi_scriptalias)[0]
+                    r.sudo('mkdir -p {remote_dir}')
+                    r.put(local_path=fn, remote_path=r.env.wsgi_scriptalias, use_sudo=True)
 
-            self.clear_local_renderer()
+                # Write site configuration.
+                r.pc('Writing site configuration for site %s...' % _site)
+                from functools import partial
+                genv = r.collect_genv()
+                print('*'*80)
+                print('apache_wsgi_scriptalias:', genv.apache_wsgi_scriptalias)
+                print('apache_auth_basic_authuserfile:', self.env.auth_basic_authuserfile)
+                r.env.auth_basic_authuserfile = r.format(self.env.auth_basic_authuserfile)
+                fn = self.render_to_file(
+                    self.env.site_template,
+                    extra=genv,
+                    formatter=partial(r.format, ignored_variables=self.env.ignored_template_variables))
+                r.env.site_conf = _site+'.conf'
+                r.env.site_conf_fqfn = os.path.join(r.env.sites_available, r.env.site_conf)
+                r.put(local_path=fn, remote_path=r.env.site_conf_fqfn, use_sudo=True)
+
+                self.enable_site(_site)
+
+                self.clear_local_renderer()
 
         # Enable modules.
         for mod_name in r.env.mods_enabled:
@@ -613,12 +627,14 @@ class ApacheSatchel(ServiceSatchel):
 
         if int(full):
             # Write master Apache configuration file.
-            fn = self.render_to_file('apache/apache_httpd.template.conf')
-            r.put(local_path=fn, remote_path=r.env.conf, use_sudo=True)
+            if r.env.manage_httpd_conf:
+                fn = self.render_to_file('apache/apache_httpd.template.conf')
+                r.put(local_path=fn, remote_path=r.env.conf, use_sudo=True)
 
             # Write Apache listening ports configuration.
-            fn = self.render_to_file('apache/apache_ports.template.conf')
-            r.put(local_path=fn, remote_path=r.env.ports_path, use_sudo=True)
+            if r.env.manage_ports_conf:
+                fn = self.render_to_file('apache/apache_ports.template.conf')
+                r.put(local_path=fn, remote_path=r.env.ports_path, use_sudo=True)
 
         r.sudo('chown -R {apache_web_user}:{apache_web_group} {apache_root}')
 
@@ -627,7 +643,7 @@ class ApacheSatchel(ServiceSatchel):
         self.configure_modevasive()
         self.configure_modsecurity()
         self.configure_modrpaf()
-        self.configure_site(full=1, site=ALL, delete_old=1)
+        self.configure_site(full=1, site=ALL)
         self.install_auth_basic_user_file(site=ALL)
         self.sync_media()
         #self.install_ssl(site=ALL)

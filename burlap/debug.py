@@ -72,6 +72,7 @@ class DebugSatchel(ContainerSatchel):
         Displays a list of common servers characteristics, like number
         of CPU cores, amount of memory and hard drive capacity.
         """
+        r = self.local_renderer
 
         cpu = int(cpu)
         memory = int(memory)
@@ -80,7 +81,7 @@ class DebugSatchel(ContainerSatchel):
         # CPU
         if cpu:
             cmd = 'cat /proc/cpuinfo | grep -i "model name"'
-            ret = self.run(cmd)
+            ret = r.run(cmd)
             matches = map(str.strip, re.findall(r'model name\s+:\s*([^\n]+)', ret, re.DOTALL|re.I))
             cores = {}
             for match in matches:
@@ -90,7 +91,7 @@ class DebugSatchel(ContainerSatchel):
         # Memory
         if memory:
             cmd = 'dmidecode --type 17'
-            ret = self.sudo(cmd)
+            ret = r.sudo(cmd)
             #print repr(ret)
             matches = re.findall(r'Memory\s+Device\r\n(.*?)(?:\r\n\r\n|$)', ret, flags=re.DOTALL|re.I)
             #print len(matches)
@@ -120,23 +121,24 @@ class DebugSatchel(ContainerSatchel):
                 _v = memory_dict['Form Factor']
                 if _v != 'Unknown':
                     memory_forms.add(_v)
-                _v = memory_dict['Speed']
-                if _v != 'Unknown':
-                    memory_speeds.add(_v)
+                #_v = memory_dict['Speed']
+                #if _v != 'Unknown':
+                    #memory_speeds.add(_v)
 
         # Storage
         if hdd:
             #cmd = 'ls /dev/*d* | grep "/dev/[a-z]+d[a-z]$"'
             cmd = 'find /dev -maxdepth 1 | grep -E "/dev/[a-z]+d[a-z]$"'
-            devices = map(str.strip, self.run(cmd).split('\n'))
+            devices = map(str.strip, r.run(cmd).split('\n'))
             total_drives = len(devices)
             total_physical_storage_gb = 0
             total_logical_storage_gb = 0
             drive_transports = set()
             for device in devices:
-                cmd = 'udisks --show-info %s |grep -i "  size:"' % (device)
-                ret = self.run(cmd)
-                size_bytes = float(re.findall(r'size:\s*([0-9]+)', ret)[0].strip())
+                #cmd = 'udisks --show-info %s |grep -i "  size:"' % (device)
+                cmd = 'udisksctl info -b %s |grep -i "  size:"' % (device)
+                ret = r.run(cmd)
+                size_bytes = float(re.findall(r'size:\s*([0-9]+)', ret, flags=re.I)[0].strip())
                 size_gb = int(round(size_bytes/1024/1024/1024))
                 #print device, size_gb
                 total_physical_storage_gb += size_gb
@@ -147,8 +149,8 @@ class DebugSatchel(ContainerSatchel):
                     if ret and not ret.return_code:
                         drive_transports.add(ret.split('Transport:')[-1].strip())
 
-            cmd = "df | grep '^/dev/[mhs]d*' | awk '{s+=$2} END {print s/1048576}'"
-            ret = self.run(cmd)
+            cmd = "df | grep '^/dev/[mhs]d*' | awk '{{s+=$2}} END {{print s/1048576}}'"
+            ret = r.run(cmd)
             total_logical_storage_gb = float(ret)
 
         if cpu:
@@ -247,11 +249,6 @@ class DebugSatchel(ContainerSatchel):
             self.vprint('Using nothing.')
             cmd = 'ssh -t {shell_default_options_str} {shell_host_string} "{shell_interactive_cmd_str}"'
         r.local(cmd)
-
-    @task
-    def run(self, command):
-        with self.settings(warn_only=True):
-            self.run(command)
 
     @task
     def disk(self):

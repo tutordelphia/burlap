@@ -189,6 +189,8 @@ class RabbitMQSatchel(ServiceSatchel):
     def get_user_vhosts(self, site=None):
         params = set() # [(user, password, vhost)]
         site = site or ALL
+        if self.verbose:
+            print('Using looking method:', self.env.user_lookup_method)
         if self.env.user_lookup_method == DJANGO:
             # Retrieve user settings from one or more assoicated Django sites.
             dj = self.get_satchel('dj')

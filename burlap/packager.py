@@ -238,7 +238,7 @@ class PackagerSatchel(Satchel):
             if repo_type is APT:
                 for repo_name in repo_lst:
                     r.env.repo_name = repo_name
-                    r.sudo('add-apt-repository -y {repo_name}')
+                    r.sudo('add-apt-repository -y "{repo_name}"')
                 r.sudo('DEBIAN_FRONTEND=noninteractive apt-get update -yq')
             else:
                 raise NotImplementedError, 'Unsupported repository type: %s' % repo_type

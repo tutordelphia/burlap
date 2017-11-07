@@ -66,6 +66,8 @@ class DjangoSatchel(Satchel):
 
         self.env.media_dirs = ['static']
 
+        self.env.migrate_pre_command = ''
+
         # The path relative to fab where the code resides.
         self.env.src_dir = 'src'
 
@@ -75,6 +77,8 @@ class DjangoSatchel(Satchel):
 
         # Modules whose name start with one of these values will be deleted before settings are imported.
         self.env.delete_module_with_prefixes = []
+
+        self.env.configure_media_command = 'cd {local_project_dir}; {manage_cmd} collectstatic --noinput'
 
     def has_database(self, name, site=None, role=None):
         settings = self.get_settings(site=site, role=role)
@@ -129,6 +133,8 @@ class DjangoSatchel(Satchel):
                     r.env.settings_module = r.genv.django_settings_module
                 else:
                     r.env.settings_module = r.env.settings_module or r.genv.dj_settings_module
+                if self.verbose:
+                    print('r.env.settings_module:', r.env.settings_module, r.format(r.env.settings_module))
                 module = import_module(r.format(r.env.settings_module))
 
                 # Works as long as settings.py doesn't also reload anything.
@@ -436,24 +442,32 @@ class DjangoSatchel(Satchel):
         self.load_django_settings()
         from django.contrib.staticfiles import finders, storage
         for finder in finders.get_finders():
-            for _n, _s in finder.storages.iteritems():
-                yield _s.location
+            #print('finder:', finder)
+            #print('finder.storage:', finder.storage)
+            #for _n, _s in finder.storages.iteritems():
+                #yield _s.location
+            for path, _storage in finder.list(ignore_patterns=[]):
+                yield path
 
     def iter_app_directories(self, ignore_import_error=False):
-        #sys.path.insert(0, 'src')
         settings = self.load_django_settings()
         if not settings:
             return
-
-        for app in settings.INSTALLED_APPS:
-            try:
-                mod = import_module(app)
-            except ImportError:
-                if ignore_import_error:
-                    continue
-                else:
-                    raise
-            yield app, os.path.dirname(mod.__file__)
+        _cwd = os.getcwd()
+        if self.env.local_project_dir:
+            os.chdir(self.env.local_project_dir)
+        try:
+            for app in settings.INSTALLED_APPS:
+                try:
+                    mod = import_module(app)
+                except ImportError:
+                    if ignore_import_error:
+                        continue
+                    else:
+                        raise
+                yield app, os.path.dirname(mod.__file__)
+        finally:
+            os.chdir(_cwd)
 
     def iter_south_directories(self, *args, **kwargs):
         for app_name, base_app_dir in self.iter_app_directories(*args, **kwargs):
@@ -631,7 +645,7 @@ class DjangoSatchel(Satchel):
                 r.env.SITE = _site
                 with self.settings(warn_only=ignore_errors):
                     r.run_or_local(
-                        'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
+                        'export SITE={SITE}; export ROLE={ROLE}; {migrate_pre_command} cd {project_dir}; '
                         '{manage_cmd} migrate --noinput {migrate_merge} --traceback '
                         '{migrate_database} {delete_ghosts} {migrate_app} {migrate_migration} '
                         '{migrate_fake_str}')
@@ -712,7 +726,7 @@ class DjangoSatchel(Satchel):
 
     def get_migration_fingerprint(self):
         data = {} # {app: latest_migration_name}
-        for app_name, _dir in self.iter_app_directories():
+        for app_name, _dir in self.iter_app_directories(ignore_import_error=True):
             #print('app_name, _dir:', app_name, _dir)
             migration_dir = os.path.join(_dir, 'migrations')
             if not os.path.isdir(migration_dir):
@@ -735,7 +749,7 @@ class DjangoSatchel(Satchel):
         if self.has_media_changed():
             r = self.local_renderer
             assert r.env.local_project_dir
-            r.local('cd {local_project_dir}; {manage_cmd} collectstatic --noinput')
+            r.local(r.env.configure_media_command)
 
     @task(precursors=['packager', 'apache', 'pip', 'tarball', 'postgresql', 'mysql'])
     def configure_migrations(self):

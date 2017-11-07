@@ -135,7 +135,8 @@ class PostgreSQLSatchel(DatabaseSatchel):
         return {
             (UBUNTU, '12.04'): ['postgresql-9.1'],
             (UBUNTU, '14.04'): ['postgresql-9.3'],
-            (UBUNTU, '16.04'): ['postgresql-9.5'],
+            #(UBUNTU, '16.04'): ['postgresql-9.5'],
+            (UBUNTU, '16.04'): ['postgresql-9.6'],
         }
 
     def set_defaults(self):
@@ -166,6 +167,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
 
         self.env.apt_repo_enabled = False
 
+        # https://askubuntu.com/questions/831292/how-to-install-postgresql-9-6-on-any-ubuntu-version
         # Populated from https://www.postgresql.org/download/linux/ubuntu/
         self.env.apt_repo = None
 
@@ -191,6 +193,25 @@ class PostgreSQLSatchel(DatabaseSatchel):
                 UBUNTU: 'service postgresql status',
             },
         }
+
+    #https://askubuntu.com/questions/831292/how-to-install-postgresql-9-6-on-any-ubuntu-version
+    @property
+    def packager_repositories(self):
+        ver = self.os_version
+        if ver.type == LINUX:
+            if ver.distro == UBUNTU:
+                if ver.release == '16.04':
+                    d = {
+                        APT: ['deb http://apt.postgresql.org/pub/repos/apt/ xenial-pgdg main'],
+                        APT_KEY: ['https://www.postgresql.org/media/keys/ACCC4CF8.asc',],
+                    }
+                    return d
+                else:
+                    raise NotImplementedError
+            else:
+                raise NotImplementedError
+        else:
+            raise NotImplementedError
 
     @task
     def write_pgpass(self, name=None, site=None, use_sudo=0, root=0):
@@ -335,9 +356,12 @@ class PostgreSQLSatchel(DatabaseSatchel):
             r.run('psql --user={postgres_user} --no-password --command="CREATE USER {db_user} WITH PASSWORD \'{db_password}\';"')
 
         r.pc('Creating database...')
-        r.run('psql --user={postgres_user} --no-password --command="'
-            'CREATE DATABASE {db_name} WITH OWNER={db_user} ENCODING=\'{encoding}\' LC_CTYPE=\'{locale}\' LC_COLLATE=\'{locale}\''
-        '"')
+        with settings(warn_only=True):
+            ret = r.run('psql --user={postgres_user} --no-password --command="'
+                'CREATE DATABASE {db_name} WITH OWNER={db_user} ENCODING=\'{encoding}\' LC_CTYPE=\'{locale}\' LC_COLLATE=\'{locale}\''
+            '"')
+        if isinstance(ret, basestring) and 'ERROR:' in ret and 'already exists' not in ret:
+            raise Exception('Error creating database: %s' % ret)
 
         with settings(warn_only=True):
             r.pc('Enabling plpgsql on database...')

@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import time
 from pprint import pprint
 
 from burlap.constants import *
@@ -37,15 +38,25 @@ class DNSSatchel(Satchel):
         print('Adding record:', domain, record_type, record)
         if not self.dryrun:
             try:
-                client.add_record(
-                    domain,
-                    {
-                        'data': record.get('ip', record.get('alias')),
-                        'name': record['name'],
-                        'ttl': record['ttl'],
-                        'type': record_type.upper()
-                    })
-                print_success('Record added!')
+                max_retries = 10
+                for retry in xrange(max_retries):
+                    try:
+                        client.add_record(
+                            domain,
+                            {
+                                'data': record.get('ip', record.get('alias')),
+                                'name': record['name'],
+                                'ttl': record['ttl'],
+                                'type': record_type.upper()
+                            })
+                        print_success('Record added!')
+                        break
+                    except ValueError as exc:
+                        print('Error adding DNS record on attempt %i of %i: %s' % (retry+1, max_retries, exc))
+                        if retry + 1 == max_retries:
+                            raise
+                        else:
+                            time.sleep(3)
             except BadResponse as e:
                 if e._message['code'] == 'DUPLICATE_RECORD':
                     print('Ignoring duplicate record.')
@@ -97,6 +108,7 @@ class DNSSatchel(Satchel):
 
     @task
     def configure(self):
-        self.update_dns()
+        if self.genv.hosts and self.genv.host_string == self.genv.hosts[0]:
+            self.update_dns()
 
 dns = DNSSatchel()

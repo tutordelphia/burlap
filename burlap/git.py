@@ -359,6 +359,7 @@ class GitTrackerSatchel(Satchel):
             print(ret)
         return str(ret)
 
+    @task
     def get_current_commit(self):
         """
         Retrieves the git commit number of the current head branch.

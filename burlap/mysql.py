@@ -409,16 +409,17 @@ class MySQLSatchel(DatabaseSatchel):
                 missing_local_dump_error
 
         # Drop the database if it's there.
-        r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "
-            "--execute='DROP DATABASE IF EXISTS {db_name}'")
+        r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' --execute='DROP DATABASE IF EXISTS {db_name}'")
 
         # Now, create the database.
         r.run("mysqladmin -h {db_host} -u {db_root_username} -p'{db_root_password}' create {db_name}")
 
         # Create user
         with settings(warn_only=True):
-            r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' "
-                "--execute=\"CREATE USER '{db_user}'@'%%' IDENTIFIED BY '{db_password}'; "
+            r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' --execute=\"DROP USER '{db_user}'@'%%';"
+                "FLUSH PRIVILEGES;\"")
+        with settings(warn_only=True):
+            r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' --execute=\"CREATE USER '{db_user}'@'%%' IDENTIFIED BY '{db_password}'; "
                 "GRANT ALL PRIVILEGES ON *.* TO '{db_user}'@'%%' WITH GRANT OPTION; "
                 "FLUSH PRIVILEGES;\"")
         self.set_collation(name=name, site=site)
@@ -470,6 +471,8 @@ class MySQLSatchel(DatabaseSatchel):
         self.set_root_password()
 
         if r.env.custom_mycnf:
+            r.env.conf = self.conf_path
+            self.vprint('mysql.conf:', r.env.conf)
             fn = r.render_to_file('mysql/my.template.cnf', extra=r.env)
             r.put(
                 local_path=fn,

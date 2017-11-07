@@ -130,24 +130,30 @@ class BuildBotSatchel(ServiceSatchel):
         with settings(**s):
             r.run(self.restart_master_command)
 
-    @property
-    def restart_worker_command(self):
+    def get_restart_worker_command(self, name=None):
         r = self.local_renderer
         parts = []
         for worker_name in self.get_worker_names_for_current_host():
+            if name and worker_name != name:
+                continue
             r.env.worker_name = worker_name
             parts.append('cd {project_dir}/src/buildbot; {virtualenv_dir}/bin/buildbot-worker restart %s;' % worker_name)
+        if not parts:
+            return
         parts = ' '.join(parts)
         r.env.restart_worker_command = r.format('sudo -u {bb_user} bash -c "%s"' % parts)
         return r.env.restart_worker_command
 
     @task
-    def restart_worker(self, ignore_errors=None):
+    def restart_worker(self, ignore_errors=None, name=None):
         ignore_errors = self.ignore_errors if ignore_errors is None else ignore_errors
         r = self.local_renderer
         s = {'warn_only':True} if ignore_errors else {}
         with settings(**s):
-            r.run(self.restart_worker_command)
+            cmd = self.get_restart_worker_command(name=name)
+            if cmd:
+                print('cmd:', cmd)
+                r.run(cmd)
 
     @task
     def start(self):
@@ -179,7 +185,7 @@ class BuildBotSatchel(ServiceSatchel):
     @task
     def stop(self):
         r = self.local_renderer
-        s = {'warn_only':True} if self.ignore_errors else {}
+        s = {'warn_only': True}
         with settings(**s):
             if self.is_first_host:
                 r.run(
@@ -422,7 +428,7 @@ class BuildBotSatchel(ServiceSatchel):
         # Install script to perform the actual check.
         assert r.env.cron_check_worker_pid_path, 'Worker PID path not set.'
         self.restart_master_command
-        self.restart_worker_command
+        self.get_restart_worker_command()
         self.install_script(
             local_path=r.env.cron_check_command_template,
             remote_path=r.env.cron_check_command_path,
