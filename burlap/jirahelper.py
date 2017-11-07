@@ -49,6 +49,20 @@ class JiraHelperSatchel(ContainerSatchel):
         return tickets
 
     @task
+    def test_connection(self):
+        from jira import JIRA, JIRAError
+        from burlap.common import print_success, print_fail
+        try:
+            jira = JIRA({
+                'server': self.env.server
+            }, basic_auth=(self.env.basic_auth_username, self.env.basic_auth_password))
+            result = jira.search_issues('status=resolved')
+            #print('result:', result)
+            print_success('OK')
+        except Exception as exc:
+            print_fail('ERROR: %s' % exc)
+
+    @task
     def update_tickets_from_git(self, from_commit=None, to_commit=None):
         """
         Run during a deployment.
