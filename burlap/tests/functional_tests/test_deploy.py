@@ -27,7 +27,7 @@ class DeployTests(TestCase):
             assert 'apache_specifics' in env
 
             print('all_satchels:', sorted(all_satchels.keys()))
-            assert len(all_satchels.keys()) == 58
+            assert len(all_satchels.keys()) == 59
             print('env.host_string:', env.host_string)
             print('env.hosts:', env.hosts)
             print('env.user:', env.user)
