@@ -323,7 +323,17 @@ class DatabaseSatchel(ServiceSatchel):
         Exports the target database to a single transportable file on the localhost,
         appropriate for loading using load().
         """
+        r = self.local_renderer
+
+        site = site or self.genv.SITE
+
         r = self.database_renderer(name=name, site=site)
+
+        # Load optional site-specific command, if given.
+        try:
+            r.env.dump_command = self.genv.sites[site]['postgresql_dump_command']
+        except KeyError:
+            pass
 
         use_sudo = int(use_sudo)
 

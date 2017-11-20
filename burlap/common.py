@@ -1254,6 +1254,17 @@ class Satchel(object):
             return local_or_dryrun(*args, **kwargs)
         return run_or_dryrun(*args, **kwargs)
 
+    @task
+    def run_on_all_sites(self, cmd, *args, **kwargs):
+        """
+        Like run(), but re-runs the command for each site in the current role.
+        """
+        r = self.local_renderer
+        for _site, _data in iter_sites():
+            r.env.SITE = _site
+            with self.settings(warn_only=True):
+                r.run('export SITE={SITE}; export ROLE={ROLE}; '+cmd)
+
     def local_or_dryrun(self, *args, **kwargs):
         warnings.warn('Use self.local() instead.', DeprecationWarning, stacklevel=2)
         return local_or_dryrun(*args, **kwargs)
@@ -1389,12 +1400,12 @@ class Satchel(object):
 
     @property
     def current_manifest(self):
-        from burlap import manifest
+        from burlap.manifest import manifest
         return manifest.get_current(name=self.name)
 
     @property
     def last_manifest(self):
-        from burlap import manifest
+        from burlap.manifest import manifest
         if not self._last_manifest:
             self._last_manifest = LocalRenderer(self, lenv=manifest.get_last(name=self.name), set_default=True)
         return self._last_manifest
@@ -2149,7 +2160,7 @@ def get_last_modified_timestamp(path, ignore=None):
     if ignore:
         assert isinstance(ignore, (tuple, list))
         ignore_str = ' '.join("! -name '%s'" % _ for _ in ignore)
-    cmd = 'find '+path+' ' + ignore_str + ' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
+    cmd = 'find "'+path+'" ' + ignore_str + ' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -f 1 -d " "'
          #'find '+path+' -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d " " -f1
     ret = subprocess.check_output(cmd, shell=True)
     # Note, we round now to avoid rounding errors later on where some formatters
@@ -2615,25 +2626,17 @@ def iter_sites(sites=None, site=None, renderer=None, setter=None, no_secure=Fals
         verbose = get_verbose()
 
     hostname = get_current_hostname()
-#     print('iter_sites.hostname:', hostname)
 
     target_sites = env.available_sites_by_host.get(hostname, None)
-
-#    print('iter_sites.site:', site)
-#    print('iter_sites.sites0:', sites)
-#     print('iter_sites.target_sites:', target_sites)
 
     if sites is None:
         site = site or env.SITE or ALL
         if site == ALL:
             sites = list(six.iteritems(env.sites))
-#             print('iter_sites.sites2a:', sites)
         else:
             sys.stderr.flush()
             sites = [(site, env.sites.get(site))]
-#             print('iter_sites.sites2b:', sites)
 
-#    print('iter_sites.sites1:', sorted(sites))
     renderer = renderer #or render_remote_paths
     env_default = save_env()
     for _site, site_data in sorted(sites):

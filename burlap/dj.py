@@ -75,6 +75,9 @@ class DjangoSatchel(Satchel):
 
         self.env.ignore_migration_errors = 0
 
+        # The relative or absolute path of the root static directory where collect_static places content.
+        self.env.static_root = 'static'
+
         # Modules whose name start with one of these values will be deleted before settings are imported.
         self.env.delete_module_with_prefixes = []
 
@@ -703,26 +706,42 @@ class DjangoSatchel(Satchel):
                 'export ROLE={ROLE}; cd {project_dir}; '\
                 '{manage_cmd} {command} --traceback; {end_email_command}"; sleep 3;')
 
-    def get_media_timestamp(self):
-        latest_timestamp = -1e9999999999999999
+    @task
+    def get_media_timestamp(self, last_timestamp=None):
+        """
+        Retrieves the most recent timestamp of the media in the static root.
+
+        If last_timestamp is given, retrieves the first timestamp more recent than this value.
+        """
+        r = self.local_renderer
+        _latest_timestamp = -1e9999999999999999
         for path in self.iter_static_paths():
-            if self.verbose:
-                print('checking timestamp of path:', path)
-            latest_timestamp = max(
-                latest_timestamp,
-                get_last_modified_timestamp(path) or latest_timestamp)
-        if self.verbose:
-            print('latest_timestamp:', latest_timestamp)
-        return latest_timestamp
+            path = r.env.static_root + '/' + path
+            self.vprint('checking timestamp of path:', path)
+            if not os.path.isfile(path):
+                continue
+            #print('path:', path)
+            _latest_timestamp = max(_latest_timestamp, get_last_modified_timestamp(path) or _latest_timestamp)
+            if last_timestamp is not None and _latest_timestamp > last_timestamp:
+                break
+        self.vprint('latest_timestamp:', _latest_timestamp)
+        return _latest_timestamp
 
     @task
     def has_media_changed(self):
+        print('Checking to see if Django static media has changed...')
         lm = self.last_manifest
+        # Unless this is our first time running, this should always be non-None.
         last_timestamp = lm.latest_timestamp
-        current_timestamp = self.get_media_timestamp()
+        current_timestamp = self.get_media_timestamp(last_timestamp=last_timestamp)
         self.vprint('last_timestamp:', last_timestamp)
         self.vprint('current_timestamp:', current_timestamp)
-        return last_timestamp != current_timestamp
+        changed = current_timestamp != last_timestamp
+        if changed:
+            print('It has.')
+        else:
+            print('It has not.')
+        return changed
 
     def get_migration_fingerprint(self):
         data = {} # {app: latest_migration_name}
