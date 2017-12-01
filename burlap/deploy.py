@@ -401,8 +401,10 @@ class Plan(object):
 
         self.role = role or env.ROLE
 
+        self.vprint('Using plan storage type:', env.plan_storage)
         self.vprint('init plan dir')
         self.plan_dir = get_plan_dir(role, name)
+        self.vprint('Using plan_dir:', self.plan_dir)
         make_dir(self.plan_dir)
         assert is_dir(self.plan_dir)
 
@@ -483,7 +485,7 @@ class Plan(object):
 
     def load_hosts(self):
         self.hosts = []
-        if self.verbose: print('loading hosts, opening')
+        if self.verbose: print('Loading hosts, opening from %s' % self.plan_dir_hosts)
         fin = open_file(self.plan_dir_hosts, 'r')
         if self.verbose: print('loading hosts, readlines')
         lines = fin.readlines()
