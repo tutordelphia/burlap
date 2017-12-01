@@ -310,8 +310,9 @@ class DjangoSatchel(Satchel):
         if password:
             options.append('--password=%s' % password)
         r.env.options_str = ' '.join(options)
-        r.run_or_local('export SITE={SITE}; export ROLE={ROLE}; '
-            'cd {project_dir}; {manage_cmd} {createsuperuser_cmd} {options_str}')
+        if self.is_local:
+            r.env.project_dir = r.env.local_project_dir
+        r.run_or_local('export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; {manage_cmd} {createsuperuser_cmd} {options_str}')
 
     @task
     def loaddata(self, path, site=None):

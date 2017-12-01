@@ -52,6 +52,7 @@ class CronSatchel(ServiceSatchel):
                 FEDORA: 'systemctl enable crond.service',
                 UBUNTU: 'chkconfig cron on',
                 (UBUNTU, '14.04'): 'update-rc.d cron defaults',
+                (UBUNTU, '16.04'): 'systemctl enable cron',
             },
             RESTART:{
                 FEDORA: 'systemctl restart crond.service',
@@ -96,7 +97,10 @@ class CronSatchel(ServiceSatchel):
         cron_crontabs.append('\n')
         r.env.crontabs_rendered = '\n'.join(cron_crontabs)
         fn = self.write_to_file(content=r.env.crontabs_rendered)
+        print('fn:', fn)
         r.env.put_remote_path = r.put(local_path=fn)
+        if isinstance(r.env.put_remote_path, (tuple, list)):
+            r.env.put_remote_path = r.env.put_remote_path[0]
         r.sudo('crontab -u {cron_user} {put_remote_path}')
 
     @task(precursors=['packager', 'user', 'tarball'])

@@ -26,11 +26,20 @@ class DNSSatchel(Satchel):
     def update_dns_godaddy(self, domain, record_type, record):
         from godaddypy import Client, Account
         from godaddypy.client import BadResponse
+
+        def get_domains(client):
+            a = set()
+            for d in client.get_domains():
+                time.sleep(0.25)
+                a.add(d)
+            return a
+
         key = self.genv.godaddy_api_keys[domain]['key']
         secret = self.genv.godaddy_api_keys[domain]['secret']
         my_acct = Account(api_key=key, api_secret=secret)
         client = Client(my_acct)
-        allowed_domains = set(client.get_domains())
+        #allowed_domains = set(client.get_domains())
+        allowed_domains = get_domains(client)
 #         print('allowed_domains:', allowed_domains)
         assert domain in allowed_domains, \
             'Domain %s is invalid this account. Only domains %s are allowed.' % (domain, ', '.join(sorted(allowed_domains)))

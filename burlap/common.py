@@ -592,8 +592,10 @@ class Renderer(object):
             # For non-command functions, just pass-through.
 
             def _wrap(*args, **kwargs):
+                kwargs.setdefault('remote_path', kwargs.get('local_path'))
                 kwargs['local_path'] = self.format(kwargs['local_path'])
                 kwargs['remote_path'] = self.format(kwargs['remote_path'])
+                print('kwargs:', kwargs)
                 return func(*args, **kwargs)
 
             return _wrap

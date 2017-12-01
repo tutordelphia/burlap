@@ -393,16 +393,16 @@ class MySQLSatchel(DatabaseSatchel):
         else:
             r.env.remote_dump_fn = '/tmp/' + os.path.split(r.env.dump_fn)[-1]
 
-        if not prep_only:
-            if int(force_upload) or (not self.is_local and not r.file_exists(r.env.remote_dump_fn)):
-                if not self.dryrun:
-                    assert os.path.isfile(r.env.dump_fn), \
-                        missing_local_dump_error
-                if self.verbose:
-                    print('Uploading MySQL database snapshot...')
-                r.put(
-                    local_path=r.env.dump_fn,
-                    remote_path=r.env.remote_dump_fn)
+        if not prep_only and not self.is_local:
+            #if int(force_upload) or (not self.is_local and not r.file_exists(r.env.remote_dump_fn)):
+            if not self.dryrun:
+                assert os.path.isfile(r.env.dump_fn), missing_local_dump_error
+            #if self.verbose:
+                #print('Uploading MySQL database snapshot...')
+            #r.put(
+                #local_path=r.env.dump_fn,
+                #remote_path=r.env.remote_dump_fn)
+            self.upload_snapshot(name=name, site=site)
 
         if self.is_local and not prep_only and not self.dryrun:
             assert os.path.isfile(r.env.dump_fn), \

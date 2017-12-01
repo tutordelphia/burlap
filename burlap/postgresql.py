@@ -9,7 +9,7 @@ from __future__ import print_function
 
 import os
 
-from fabric.api import cd, hide, sudo, settings, runs_once
+from fabric.api import cd, hide, sudo, settings#, runs_once
 
 from burlap import Satchel
 from burlap.constants import *
@@ -368,7 +368,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
             r.run('createlang -U postgres plpgsql {db_name} || true')
 
     @task
-    @runs_once
+    #@runs_once Interferes with global methods that want to load multiple databases.
     def load(self, dump_fn='', prep_only=0, force_upload=0, from_local=0, name=None, site=None, dest_dir=None):
         """
         Restores a database snapshot onto the target database server.
@@ -398,15 +398,15 @@ class PostgreSQLSatchel(DatabaseSatchel):
 
         if not prep_only and not self.is_local:
             if not self.dryrun:
-                assert os.path.isfile(r.env.dump_fn), \
-                    missing_local_dump_error
-            r.pc('Uploading PostgreSQL database snapshot...')
+                assert os.path.isfile(r.env.dump_fn), missing_local_dump_error
+            #r.pc('Uploading PostgreSQL database snapshot...')
 #                 r.put(
 #                     local_path=r.env.dump_fn,
 #                     remote_path=r.env.remote_dump_fn)
-            r.local('rsync -rvz --progress --no-p --no-g '
-                '--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" '
-                '{dump_fn} {user}@{host_string}:{remote_dump_fn}')
+            #r.local('rsync -rvz --progress --no-p --no-g '
+                #'--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" '
+                #'{dump_fn} {user}@{host_string}:{remote_dump_fn}')
+            self.upload_snapshot(name=name, site=site)
 
         if self.is_local and not prep_only and not self.dryrun:
             assert os.path.isfile(r.env.dump_fn), \
