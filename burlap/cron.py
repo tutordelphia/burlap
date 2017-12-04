@@ -30,8 +30,10 @@ class CronSatchel(ServiceSatchel):
         self.env.user = 'www-data'
         self.env.python = None
         self.env.crontab_headers = ['PATH=/usr/sbin:/usr/bin:/sbin:/bin\nSHELL=/bin/bash']
-        self.env.stdout_log_template = r'/tmp/chroniker-%(SITE)s-stdout.$(date +\%%d).log'
-        self.env.stderr_log_template = r'/tmp/chroniker-%(SITE)s-stderr.$(date +\%%d).log'
+        #self.env.stdout_log_template = r'/tmp/chroniker-{SITE}-stdout.$(date +\%%d).log'
+        #self.env.stderr_log_template = r'/tmp/chroniker-{SITE}-stderr.$(date +\%%d).log'
+        self.env.stdout_log_template = r'/var/log/cron-{SITE}-stdout.log'
+        self.env.stderr_log_template = r'/var/log/cron-{SITE}-stderr.log'
         self.env.crontabs_selected = [] # [name]
 
         self.env.service_commands = {
@@ -81,6 +83,11 @@ class CronSatchel(ServiceSatchel):
         for _site, site_data in self.iter_sites(site=site):
             r.env.cron_stdout_log = r.format(r.env.stdout_log_template)
             r.env.cron_stderr_log = r.format(r.env.stderr_log_template)
+            r.sudo('touch {cron_stdout_log}')
+            r.sudo('touch {cron_stderr_log}')
+            r.sudo('sudo chown {user}:{user} {cron_stdout_log}')
+            r.sudo('sudo chown {user}:{user} {cron_stderr_log}')
+
             if self.verbose:
                 print('site:', site, file=sys.stderr)
                 print('env.crontabs_selected:', self.env.crontabs_selected, file=sys.stderr)
