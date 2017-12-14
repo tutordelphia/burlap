@@ -595,7 +595,6 @@ class Renderer(object):
                 kwargs.setdefault('remote_path', kwargs.get('local_path'))
                 kwargs['local_path'] = self.format(kwargs['local_path'])
                 kwargs['remote_path'] = self.format(kwargs['remote_path'])
-                print('kwargs:', kwargs)
                 return func(*args, **kwargs)
 
             return _wrap
@@ -1940,6 +1939,11 @@ def reboot_or_dryrun(*args, **kwargs):
 
     command = kwargs.get('command', 'reboot')
 
+    now = int(kwargs.get('now', 0))
+    print('now:', now)
+    if now:
+        command += ' now'
+
     # Shorter timeout for a more granular cycle than the default.
     timeout = int(kwargs.get('timeout', 30))
 
@@ -1949,7 +1953,7 @@ def reboot_or_dryrun(*args, **kwargs):
         del kwargs['dryrun']
 
     if dryrun:
-        print('%s sudo: reboot' % (render_command_prefix(),))
+        print('%s sudo: %s' % (render_command_prefix(), command))
     else:
         if is_local():
             if raw_input('reboot localhost now? ').strip()[0].lower() != 'y':

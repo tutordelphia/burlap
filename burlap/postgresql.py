@@ -502,6 +502,20 @@ class PostgreSQLSatchel(DatabaseSatchel):
         r.run('psql --user={dst_db_user} --host={dst_db_host} --command="DROP TABLE IF EXISTS {table_name} CASCADE;"')
         r.run('pg_dump -t {table_name} --user={dst_db_user} --host={dst_db_host} | psql --user={src_db_user} --host={src_db_host}')
 
+    @task
+    def write_pg_hba_conf(self):
+        r = self.local_renderer
+        if 'pg_version' not in r.env:
+            r.env.pg_version = self.version()# or r.env.default_version
+        r.pc('Writing pg_hba.conf...')
+        r.sudo('cp /etc/postgresql/{pg_version}/main/pg_hba.conf /etc/postgresql/{pg_version}/main/pg_hba.conf.$(date +%Y%m%d%H%M).bak')
+        fn = self.render_to_file('postgresql/pg_hba.template.conf')
+        r.put(
+            local_path=fn,
+            remote_path='/etc/postgresql/{pg_version}/main/pg_hba.conf',
+            use_sudo=True,
+        )
+
     @task(precursors=['packager', 'user', 'locales'])
     def configure(self, *args, **kwargs):
         #TODO:set postgres user password?
@@ -520,18 +534,10 @@ class PostgreSQLSatchel(DatabaseSatchel):
 
         r.env.pg_version = self.version()# or r.env.default_version
 
+        self.write_pg_hba_conf()
+
 #         r.pc('Backing up PostgreSQL configuration files...')
         r.sudo('cp /etc/postgresql/{pg_version}/main/postgresql.conf /etc/postgresql/{pg_version}/main/postgresql.conf.$(date +%Y%m%d%H%M).bak')
-        r.sudo('cp /etc/postgresql/{pg_version}/main/pg_hba.conf /etc/postgresql/{pg_version}/main/pg_hba.conf.$(date +%Y%m%d%H%M).bak')
-
-        r.pc('Allowing remote connections...')
-        fn = self.render_to_file('postgresql/pg_hba.template.conf')
-        r.put(
-            local_path=fn,
-            remote_path='/etc/postgresql/{pg_version}/main/pg_hba.conf',
-            use_sudo=True,
-        )
-
         r.pc('Enabling auto-vacuuming...')
         r.sed(
             filename='/etc/postgresql/{pg_version}/main/postgresql.conf',
