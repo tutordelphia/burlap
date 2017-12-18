@@ -55,7 +55,13 @@ class PIPSatchel(Satchel):
         r = self.local_renderer
         with self.settings(warn_only=True):
             ret = (r.run_or_local('which pip') or '').strip()
-            return bool(ret)
+            print('pip.ret:', ret)
+            ret = bool(ret)
+            if ret:
+                print('Pip is installed.')
+            else:
+                print('Pip is not installed.')
+            return ret
 
     @task
     def bootstrap(self, force=0):
@@ -97,7 +103,7 @@ class PIPSatchel(Satchel):
         Returns true if the virtualenv tool is installed.
         """
         with self.settings(warn_only=True):
-            ret = self.run('which virtualenv').strip()
+            ret = self.run_or_local('which virtualenv').strip()
             return bool(ret)
 
     @task
@@ -108,7 +114,7 @@ class PIPSatchel(Satchel):
         r = self.local_renderer
         ret = True
         with self.settings(warn_only=True):
-            ret = r.run('ls {virtualenv_dir}') or ''
+            ret = r.run_or_local('ls {virtualenv_dir}') or ''
             ret = 'cannot access' not in ret.strip().lower()
 
         if self.verbose:
@@ -143,7 +149,7 @@ class PIPSatchel(Satchel):
         with self.settings(warn_only=True):
             cmd = '[ ! -d {virtualenv_dir} ] && virtualenv --no-site-packages {virtualenv_dir} || true'
             if self.is_local:
-                r.run(cmd)
+                r.run_or_local(cmd)
             else:
                 r.sudo(cmd)
 
@@ -213,13 +219,13 @@ class PIPSatchel(Satchel):
 
         # Ensure we're always using the latest pip.
         if self.is_local:
-            r.run('{virtualenv_dir}/bin/pip install -U pip')
+            r.run_or_local('{virtualenv_dir}/bin/pip install -U pip')
         else:
             r.sudo('{virtualenv_dir}/bin/pip install -U pip')
 
         cmd = "{virtualenv_dir}/bin/pip install -r {pip_remote_requirements_fn}"
         if self.is_local:
-            r.run(cmd)
+            r.run_or_local(cmd)
         else:
             r.sudo(cmd)
 

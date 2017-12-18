@@ -1252,6 +1252,9 @@ class Satchel(object):
 
     def run_or_local(self, *args, **kwargs):
         if is_local():
+            # By default, Fabric's local() doesn't capture output, so to make it more interchangable with run(),
+            # we automatically set capture, even though this will temporarily hide output.
+            kwargs['capture'] = True
             return local_or_dryrun(*args, **kwargs)
         return run_or_dryrun(*args, **kwargs)
 
