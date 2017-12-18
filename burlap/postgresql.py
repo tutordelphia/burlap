@@ -594,7 +594,7 @@ class PostgreSQLClientSatchel(Satchel):
                 #'postgresql-server-dev-9.3',
             ],
             (UBUNTU, '16.04'): [
-                'postgresql-client-9.5',
+                'postgresql-client-9.6',
                 #'python-psycopg2',#install from pip instead
                 #'postgresql-server-dev-9.3',
             ],
