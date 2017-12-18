@@ -54,7 +54,7 @@ class PIPSatchel(Satchel):
     def has_pip(self):
         r = self.local_renderer
         with self.settings(warn_only=True):
-            ret = (r.run('which pip') or '').strip()
+            ret = (r.run_or_local('which pip') or '').strip()
             return bool(ret)
 
     @task

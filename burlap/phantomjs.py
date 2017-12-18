@@ -10,6 +10,11 @@ from burlap.decorators import task
 class PhantomJSSatchel(Satchel):
     """
     Installs PhantomJS from upstream, since the Ubuntu package is incorrectly built.
+
+    Extrapolated from this Gist:
+
+        https://gist.github.com/telbiyski/ec56a92d7114b8631c906c18064ce620
+
     """
 
     name = 'phantomjs'

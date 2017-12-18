@@ -381,12 +381,21 @@ class DatabaseSatchel(ServiceSatchel):
 
         return r.env.dump_fn
 
-    def upload_snapshot(self, name=None, site=None):
+    def upload_snapshot(self, name=None, site=None, local_dump_fn=None, remote_dump_fn=None):
         r = self.database_renderer(name=name, site=site)
         print('Uploading database snapshot...')
+
+        if local_dump_fn:
+            r.env.local_dump_fn = local_dump_fn
+        elif r.env.dump_fn:
+            r.env.local_dump_fn = r.env.dump_fn
+
+        if remote_dump_fn:
+            r.env.remote_dump_fn = remote_dump_fn
+
         r.local('rsync -rvz --progress --no-p --no-g '
             '--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" '
-            '{dump_fn} {user}@{host_string}:{remote_dump_fn}')
+            '{local_dump_fn} {user}@{host_string}:{remote_dump_fn}')
 
     @task
     @runs_once

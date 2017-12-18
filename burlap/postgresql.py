@@ -406,7 +406,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
             #r.local('rsync -rvz --progress --no-p --no-g '
                 #'--rsh "ssh -o StrictHostKeyChecking=no -i {key_filename}" '
                 #'{dump_fn} {user}@{host_string}:{remote_dump_fn}')
-            self.upload_snapshot(name=name, site=site)
+            self.upload_snapshot(name=name, site=site, local_dump_fn=r.env.dump_fn, remote_dump_fn=r.env.remote_dump_fn)
 
         if self.is_local and not prep_only and not self.dryrun:
             assert os.path.isfile(r.env.dump_fn), \
