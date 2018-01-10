@@ -1638,7 +1638,7 @@ def init_burlap_data_dir():
     else:
         if not d.startswith('/'):
             d = '/home/%s/%s' % (env.user, d)
-        sudo_or_dryrun('chown -R {user}:{user} {directory}'.format(user=env.user, directory=d))
+        sudo_or_dryrun('mkdir -p "{directory}"; chown -R {user}:{user} {directory}'.format(user=env.user, directory=d))
     return d
 
 def set_dryrun(dryrun):
