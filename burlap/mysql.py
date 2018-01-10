@@ -367,7 +367,7 @@ class MySQLSatchel(DatabaseSatchel):
 
     @task
     @runs_once
-    def load(self, dump_fn='', prep_only=0, force_upload=0, from_local=0, name=None, site=None, dest_dir=None):
+    def load(self, dump_fn='', prep_only=0, force_upload=0, from_local=0, name=None, site=None, dest_dir=None, force_host=None):
         """
         Restores a database snapshot onto the target database server.
 
@@ -405,8 +405,10 @@ class MySQLSatchel(DatabaseSatchel):
             self.upload_snapshot(name=name, site=site)
 
         if self.is_local and not prep_only and not self.dryrun:
-            assert os.path.isfile(r.env.dump_fn), \
-                missing_local_dump_error
+            assert os.path.isfile(r.env.dump_fn), missing_local_dump_error
+
+        if force_host:
+            r.env.db_host = force_host
 
         # Drop the database if it's there.
         r.run("mysql -v -h {db_host} -u {db_root_username} -p'{db_root_password}' --execute='DROP DATABASE IF EXISTS {db_name}'")

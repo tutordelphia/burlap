@@ -32,9 +32,9 @@ class BaseTracker(object):
 
     def is_changed(self, last_thumbprint):
         current_thumbprint = self.get_thumbprint()
-        print('tracker:', self)
-        print('last_thumbprint:', last_thumbprint)
-        print('current_thumbprint:', current_thumbprint)
+        #print('is_changed.tracker:', self)
+        #print('is_changed.last_thumbprint:', last_thumbprint)
+        #print('is_changed.current_thumbprint:', current_thumbprint)
         return current_thumbprint != last_thumbprint
 
     def act(self):

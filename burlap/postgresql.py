@@ -148,7 +148,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
         self.env.dump_fn_template = '{dump_dest_dir}/db_{db_type}_{SITE}_{ROLE}_{db_name}_$(date +%Y%m%d).sql.gz'
 
         #self.env.load_command = 'gunzip < {remote_dump_fn} | pg_restore --jobs=8 -U {db_root_username} --format=c --create --dbname={db_name}'
-        self.env.load_command = 'gunzip < {remote_dump_fn} | pg_restore -U {db_root_username} --format=c --create --dbname={db_name}'
+        self.env.load_command = 'gunzip < {remote_dump_fn} | pg_restore -U {db_root_username} --host={db_host} --format=c --create --dbname={db_name}'
 
         self.env.createlangs = ['plpgsql'] # plpythonu
         self.env.postgres_user = 'postgres'
@@ -369,7 +369,7 @@ class PostgreSQLSatchel(DatabaseSatchel):
 
     @task
     #@runs_once Interferes with global methods that want to load multiple databases.
-    def load(self, dump_fn='', prep_only=0, force_upload=0, from_local=0, name=None, site=None, dest_dir=None):
+    def load(self, dump_fn='', prep_only=0, force_upload=0, from_local=0, name=None, site=None, dest_dir=None, force_host=None):
         """
         Restores a database snapshot onto the target database server.
 
@@ -409,34 +409,36 @@ class PostgreSQLSatchel(DatabaseSatchel):
             self.upload_snapshot(name=name, site=site, local_dump_fn=r.env.dump_fn, remote_dump_fn=r.env.remote_dump_fn)
 
         if self.is_local and not prep_only and not self.dryrun:
-            assert os.path.isfile(r.env.dump_fn), \
-                missing_local_dump_error
+            assert os.path.isfile(r.env.dump_fn), missing_local_dump_error
+
+        if force_host:
+            r.env.db_host = force_host
 
         with settings(warn_only=True):
-            r.sudo('dropdb --if-exists --user={db_root_username} {db_name}', user=r.env.postgres_user)
+            r.sudo('dropdb --if-exists --user={db_root_username} --host={db_host} {db_name}', user=r.env.postgres_user)
 
-        r.sudo('psql --user={db_root_username} -c "CREATE DATABASE {db_name};"', user=r.env.postgres_user)
+        r.sudo('psql --user={db_root_username} --host={db_host} -c "CREATE DATABASE {db_name};"', user=r.env.postgres_user)
 
         with settings(warn_only=True):
 
             if r.env.engine == POSTGIS:
-                r.sudo('psql --user={db_root_username} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis;"',
+                r.sudo('psql --user={db_root_username} --no-password --dbname={db_name} --host={db_host} --command="CREATE EXTENSION postgis;"',
                     user=r.env.postgres_user)
-                r.sudo('psql --user={db_root_username} --no-password --dbname={db_name} --command="CREATE EXTENSION postgis_topology;"',
+                r.sudo('psql --user={db_root_username} --no-password --dbname={db_name} --host={db_host} --command="CREATE EXTENSION postgis_topology;"',
                     user=r.env.postgres_user)
 
         with settings(warn_only=True):
-            r.sudo('psql --user={db_root_username} -c "REASSIGN OWNED BY {db_user} TO {db_root_username};"', user=r.env.postgres_user)
+            r.sudo('psql --user={db_root_username} --host={db_host} -c "REASSIGN OWNED BY {db_user} TO {db_root_username};"', user=r.env.postgres_user)
 
         with settings(warn_only=True):
-            r.sudo('psql --user={db_root_username} -c "DROP OWNED BY {db_user} CASCADE;"', user=r.env.postgres_user)
+            r.sudo('psql --user={db_root_username} --host={db_host} -c "DROP OWNED BY {db_user} CASCADE;"', user=r.env.postgres_user)
 
-        r.sudo('psql --user={db_root_username} -c "DROP USER IF EXISTS {db_user}; '
+        r.sudo('psql --user={db_root_username} --host={db_host} -c "DROP USER IF EXISTS {db_user}; '
             'CREATE USER {db_user} WITH PASSWORD \'{db_password}\'; '
             'GRANT ALL PRIVILEGES ON DATABASE {db_name} to {db_user};"', user=r.env.postgres_user)
         for createlang in r.env.createlangs:
             r.env.createlang = createlang
-            r.sudo('createlang -U {db_root_username} {createlang} {db_name} || true', user=r.env.postgres_user)
+            r.sudo('createlang -U {db_root_username} --host={db_host} {createlang} {db_name} || true', user=r.env.postgres_user)
 
         if not prep_only:
             r.sudo(r.env.load_command, user=r.env.postgres_user)
@@ -599,6 +601,25 @@ class PostgreSQLClientSatchel(Satchel):
                 #'postgresql-server-dev-9.3',
             ],
         }
+
+    #https://askubuntu.com/questions/831292/how-to-install-postgresql-9-6-on-any-ubuntu-version
+    @property
+    def packager_repositories(self):
+        ver = self.os_version
+        if ver.type == LINUX:
+            if ver.distro == UBUNTU:
+                if ver.release == '16.04':
+                    d = {
+                        APT: ['deb http://apt.postgresql.org/pub/repos/apt/ xenial-pgdg main'],
+                        APT_KEY: ['https://www.postgresql.org/media/keys/ACCC4CF8.asc',],
+                    }
+                    return d
+                else:
+                    raise NotImplementedError
+            else:
+                raise NotImplementedError
+        else:
+            raise NotImplementedError
 
     @task(precursors=['packager'])
     def configure(self, *args, **kwargs):

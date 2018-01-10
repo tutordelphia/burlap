@@ -42,7 +42,7 @@ def init_env():
     env.plan = None
     env.plan_data_dir = '%(burlap_data_dir)s/plans'
     env.plan_digits = 3
-    env.plan_auto_truncate = False
+    env.plan_auto_truncate = True
 
 # Prevent globals from being reset by duplicate imports.
 if 'plan_init' not in env:
@@ -67,7 +67,7 @@ def clear_fs_cache():
 def make_dir(d):
     if d not in _fs_cache['make_dir']:
         if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
-            sudo_or_dryrun('mkdir -p "%s"' % d)
+            sudo_or_dryrun('mkdir -p "{directory}"; chown {user}:{user} "{directory}"'.format(directory=d, user=env.user))
         else:
             if not os.path.isdir(d):
                 os.makedirs(d)
@@ -378,13 +378,15 @@ class Step(object):
 
 HISTORY_HEADERS = ['step', 'start', 'end']
 
-def get_plan_dir(role, name=None):
+def get_plan_dir(role=None, name=None):
     role = role or env.ROLE
     assert role, 'No role defined.'
     if name:
         d = os.path.join(init_plan_data_dir(), role, name)
     else:
         d = os.path.join(init_plan_data_dir(), role)
+    if not d.startswith('/'):
+        d = '/home/%s/%s' % (env.user, d)
     make_dir(d)
     return d
 
@@ -603,8 +605,7 @@ class Plan(object):
             number = last_plan.number + 1
         else:
             number = 0
-        assert len(str(number)) <= env.plan_digits, \
-            'Too many deployments. Truncate existing or increase `plan_digits`.'
+        assert len(str(number)) <= env.plan_digits, 'Too many deployments. Truncate existing or increase `plan_digits`.'
         plan = Plan(role=role, name=('%0'+str(env.plan_digits)+'i') % number)
         return plan
 
@@ -718,23 +719,28 @@ def has_outstanding_plans():
     return last != last_completed
 
 @task_or_dryrun
-@runs_once
 def status(name=None):
     """
     Reports the status of any pending plans for the current role.
     """
-    print('plan,complete,percent')
-    for _name in iter_plan_names():
-        #print(_name)
-        plan = Plan.load(_name)
-        output = '%s,%s,%s' % (_name, int(plan.is_complete()), plan.percent_complete)
-        if plan.is_complete():
-            output = success(output)
-        elif plan.failed:
-            output = fail(output)
-        else:
-            output = ongoing(output)
-        print(output)
+    #plan_dir = get_plan_dir()
+    #plan_dir = get_plan_data_dir()
+    burlap_dir = common.init_burlap_data_dir()
+    print('burlap directory:', burlap_dir)
+    plan_count = len(list(iter_plan_names()))
+    print('total plans:', plan_count)
+    #print('plan,complete,percent')
+    #for _name in iter_plan_names():
+        ##print(_name)
+        #plan = Plan.load(_name)
+        #output = '%s,%s,%s' % (_name, int(plan.is_complete()), plan.percent_complete)
+        #if plan.is_complete():
+            #output = success(output)
+        #elif plan.failed:
+            #output = fail(output)
+        #else:
+            #output = ongoing(output)
+        #print(output)
 
 def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None):
     """
@@ -911,9 +917,10 @@ def truncate():
     """
     Compacts all deployment records into a single initial deployment.
     """
-    reset()
-    if not common.get_dryrun():
-        fabric.api.execute(thumbprint, hosts=env.hosts)
+    if env.host_string == env.hosts[0]:
+        reset()
+        if not common.get_dryrun():
+            fabric.api.execute(thumbprint, hosts=env.hosts)
 
 @task_or_dryrun
 def thumbprint(components=None, set_satchels=None):

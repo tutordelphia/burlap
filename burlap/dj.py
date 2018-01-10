@@ -233,18 +233,19 @@ class DjangoSatchel(Satchel):
                 if not path.lower().endswith('.sql'):
                     continue
                 content = open(path, 'r').read()
-                matches = re.findall(r'[\s\t]+VIEW[\s\t]+([a-zA-Z0-9_]+)', content, flags=re.IGNORECASE)
+                matches = re.findall(r'[\s\t]+VIEW[\s\t]+([a-zA-Z0-9_]{3,})', content, flags=re.IGNORECASE)
                 #assert matches, 'Unable to find view name: %s' % (p,)
                 view_name = ''
                 if matches:
                     view_name = matches[0]
+                    print('Found view %s.' % view_name)
                 data.append((path, view_name, content))
             for d in sorted(data, cmp=cmp_paths):
                 yield d[0]
 
         def run_paths(paths, cmd_template, max_retries=3):
             r = self.local_renderer
-            paths = list(sorted(paths))
+            paths = list(paths)
             error_counts = defaultdict(int) # {path:count}
             terminal = set()
             if self.verbose:
@@ -284,13 +285,15 @@ class DjangoSatchel(Satchel):
             print('install_sql.db_engine:', r.env.db_engine)
 
         if 'postgres' in r.env.db_engine or 'postgis' in r.env.db_engine:
+            paths = list(get_paths('postgresql'))
             run_paths(
-                paths=get_paths('postgresql'),
+                paths=paths,
                 cmd_template="psql --host={db_host} --user={db_user} -d {db_name} -f {sql_path}")
 
         elif 'mysql' in r.env.db_engine:
+            paths = list(get_paths('mysql'))
             run_paths(
-                paths=get_paths('mysql'),
+                paths=paths,
                 cmd_template="mysql -v -h {db_host} -u {db_user} -p'{db_password}' {db_name} < {sql_path}")
 
         else:

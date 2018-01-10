@@ -599,6 +599,18 @@ class Renderer(object):
 
             return _wrap
 
+        def install_config_wrap(func):
+            # For non-command functions, just pass-through.
+
+            def _wrap(*args, **kwargs):
+                kwargs.setdefault('remote_path', kwargs.get('local_path'))
+                kwargs['local_path'] = self.format(kwargs['local_path'])
+                kwargs['remote_path'] = self.format(kwargs['remote_path'])
+                kwargs['formatter'] = self.format
+                return func(*args, **kwargs)
+
+            return _wrap
+
         def sed_wrap2(func):
             # For non-command functions, just pass-through.
 
@@ -659,6 +671,8 @@ class Renderer(object):
         or attrname.startswith('install_script') \
         or attrname.startswith('install_config'):
             ret = put_wrap2(ret)
+        elif attrname.startswith('install_config'):
+            ret = install_config_wrap(ret)
         elif attrname.startswith('sed'):
             ret = sed_wrap2(ret)
         elif attrname.startswith('append'):
@@ -1382,11 +1396,11 @@ class Satchel(object):
         """
         lm = self.last_manifest
         for tracker in self.get_trackers():
-            print('Checking tracker:', tracker)
+            self.vprint('Checking tracker:', tracker)
             last_thumbprint = lm['_tracker_%s' % tracker.get_natural_key_hash()]
-            print('lt:', last_thumbprint)
+            self.vprint('last thumbprint:', last_thumbprint)
             has_changed = tracker.is_changed(last_thumbprint)
-            print('Tracker changed:', has_changed)
+            self.vprint('Tracker changed:', has_changed)
             if has_changed:
                 self.vprint('Change detected!')
                 tracker.act()
@@ -1621,6 +1635,11 @@ def init_burlap_data_dir():
     if env.plan_storage == 'local':
         if not os.path.isdir(env.burlap_data_dir):
             os.mkdir(d)
+    else:
+        if not d.startswith('/'):
+            d = '/home/%s/%s' % (env.user, d)
+        sudo_or_dryrun('chown -R {user}:{user} {directory}'.format(user=env.user, directory=d))
+    return d
 
 def set_dryrun(dryrun):
     global _dryrun
@@ -2536,7 +2555,7 @@ def render_to_string(template, extra=None):
 
 def render_to_file(template, fn=None, extra=None, **kwargs):
     """
-    Returns a template to a file.
+    Returns a template to a local file.
     If no filename given, a temporary filename will be generated and returned.
     """
     import tempfile
@@ -2584,11 +2603,15 @@ def render_to_file(template, fn=None, extra=None, **kwargs):
 
     return fn
 
-def install_config(local_path=None, remote_path=None, render=True, extra=None):
+def install_config(local_path=None, remote_path=None, render=True, extra=None, formatter=None):
+    """
+    Returns a template to a remove file.
+    If no filename given, a temporary filename will be generated and returned.
+    """
     local_path = find_template(local_path)
     if render:
         extra = extra or {}
-        local_path = render_to_file(template=local_path, extra=extra)
+        local_path = render_to_file(template=local_path, extra=extra, formatter=formatter)
     put_or_dryrun(local_path=local_path, remote_path=remote_path, use_sudo=True)
 
 def install_script(*args, **kwargs):
