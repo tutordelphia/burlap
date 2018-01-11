@@ -902,6 +902,7 @@ def reset():
     This will cause the planner to think everything needs to be re-deployed.
     """
     d = os.path.join(init_plan_data_dir(), env.ROLE)
+    env.plan_storage = env.plan_storage or STORAGE_REMOTE
     if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
         sudo_or_dryrun('rm -Rf "%s"' % d)
         sudo_or_dryrun('mkdir -p "%s"' % d)
@@ -909,7 +910,7 @@ def reset():
         local_or_dryrun('rm -Rf "%s"' % d)
         local_or_dryrun('mkdir -p "%s"' % d)
     else:
-        raise NotImplementedError
+        raise NotImplementedError("Unknown storage type: %s" % env.plan_storage)
 
 @task_or_dryrun
 @runs_once
