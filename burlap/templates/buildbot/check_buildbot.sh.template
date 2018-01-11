@@ -1,0 +1,10 @@
+#!/bin/bash
+if [ -f {{ buildbot_cron_check_worker_pid_path }} ]
+then
+    echo "Worker is running."
+else
+    echo "Worker has stopped. Restarting..."
+    {{ buildbot_restart_master_command }}
+    {{ buildbot_restart_worker_command }}
+    sudo service apache2 reload
+fi

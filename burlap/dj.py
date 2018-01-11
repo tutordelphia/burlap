@@ -21,25 +21,30 @@ from burlap.common import get_last_modified_timestamp
 
 class DjangoSatchel(Satchel):
 
-    # We don't use "django" as the name so as to not conflict with the official django package.    
+    # We don't use "django" as the name so as to not conflict with the official django package.
     name = 'dj'
-    
+
     def set_defaults(self):
-        
+
         # This is the name of the executable to call to access Django's management features.
         self.env.manage_cmd = 'manage.py'
-        
+
         # This is the name of your Django application.
         self.env.app_name = None
-        
+
         # This is the import path to your Django settings file.
         self.env.settings_module = '{app_name}.settings'
-        
-        # The folder containing manage.py.
+
+        # The folder containing manage.py on the remote host. Must be absolute.
         self.env.project_dir = None
-        
+
+        # The folder containing manage.py on the local filesystem. May be relative to the fabfile directory.
+        self.env.local_project_dir = None
+
         self.env.shell_template = 'cd {project_dir}; /bin/bash -i -c \"{manage_cmd} shell;\"'
-        
+
+        self.env.fixture_sets = {} # {name: [paths to Django fixtures]}
+
         # These apps will be migrated on a specific database, while faked
         # on all others.
         # This is necessary since South does not have proper support for
@@ -47,23 +52,36 @@ class DjangoSatchel(Satchel):
         #./manage migrate <app> --fake
         #./manage migrate --database=<database> <app>
         self.env.migrate_fakeouts = [] # [{database:<database>, app:<app>}]
-        
+
         self.env.install_sql_path_template = '{src_dir}/{app_name}/*/sql/*'
-        
+
         # The target version of Django to assume.
         self.env.version = (1, 6, 0)
-        
+
+        self.env.createsuperuser_cmd = 'createsuperuser'
+
+        self.env.manage_media = True
+
+        self.env.manage_migrations = True
+
         self.env.media_dirs = ['static']
-        
+
+        self.env.migrate_pre_command = ''
+
         # The path relative to fab where the code resides.
         self.env.src_dir = 'src'
-        
+
         self.env.manage_dir = 'src'
-        
-        self.env.ignore_errors = 0
-        
+
+        self.env.ignore_migration_errors = 0
+
+        # The relative or absolute path of the root static directory where collect_static places content.
+        self.env.static_root = 'static'
+
         # Modules whose name start with one of these values will be deleted before settings are imported.
         self.env.delete_module_with_prefixes = []
+
+        self.env.configure_media_command = 'cd {local_project_dir}; {manage_cmd} collectstatic --noinput'
 
     def has_database(self, name, site=None, role=None):
         settings = self.get_settings(site=site, role=role)
@@ -82,14 +100,14 @@ class DjangoSatchel(Satchel):
             sys.stderr = StringIO()
         try:
             sys.path.insert(0, r.env.src_dir)
-            
+
             # Temporarily override SITE.
             tmp_site = self.genv.SITE
             if site and site.endswith('_secure'):
                 site = site[:-7]
             site = site or self.genv.SITE or self.genv.default_site
             self.set_site(site)
-            
+
             # Temporarily override ROLE.
             tmp_role = self.genv.ROLE
             if role:
@@ -106,15 +124,26 @@ class DjangoSatchel(Satchel):
                                     print('Deleting module %s prior to re-import.' % name)
                                 del sys.modules[name]
                                 break
-                        
+
                 if r.env.settings_module in sys.modules:
                     del sys.modules[r.env.settings_module]
+
+                #TODO:fix r.env.settings_module not loading from settings?
+#                 print('r.genv.django_settings_module:', r.genv.django_settings_module, file=_stdout)
+#                 print('r.genv.dj_settings_module:', r.genv.dj_settings_module, file=_stdout)
+#                 print('r.env.settings_module:', r.env.settings_module, file=_stdout)
+                if 'django_settings_module' in r.genv:
+                    r.env.settings_module = r.genv.django_settings_module
+                else:
+                    r.env.settings_module = r.env.settings_module or r.genv.dj_settings_module
+                if self.verbose:
+                    print('r.env.settings_module:', r.env.settings_module, r.format(r.env.settings_module))
                 module = import_module(r.format(r.env.settings_module))
-        
+
                 # Works as long as settings.py doesn't also reload anything.
                 import imp
                 imp.reload(module)
-                
+
             except ImportError as e:
                 print('Warning: Could not import settings for site "%s": %s' % (site, e), file=_stdout)
                 traceback.print_exc(file=_stdout)
@@ -140,12 +169,15 @@ class DjangoSatchel(Satchel):
         assert settings, 'Unable to load Django settings for site %s.' % (site,)
         r.env.django_settings = settings
         default_db = settings.DATABASES[name]
+        if self.verbose:
+            print('default_db:')
+            pprint(default_db, indent=4)
         r.env.db_name = default_db['NAME']
-        r.env.db_user = default_db['USER']
-        r.env.db_host = default_db['HOST']
-        r.env.db_password = default_db['PASSWORD']
+        r.env.db_user = default_db.get('USER', r.genv.user) # sqlite doesn't have a user
+        r.env.db_host = default_db.get('HOST', 'localhost') # sqlite doesn't have a host
+        r.env.db_password = default_db.get('PASSWORD') # sqlite doesn't have a password
         r.env.db_engine = default_db['ENGINE']
-        
+
         if 'mysql' in r.env.db_engine.lower():
             r.env.db_type = 'mysql'
         elif 'postgres' in r.env.db_engine.lower() or 'postgis' in r.env.db_engine.lower():
@@ -154,12 +186,12 @@ class DjangoSatchel(Satchel):
             r.env.db_type = 'sqlite'
         else:
             r.env.db_type = r.env.db_engine
-        
+
         for k, v in r.genv.iteritems():
             if not k.startswith(self.name.lower()+'_db_'):
                 continue
             print('db.kv:', k, v)
-        
+
         return default_db
 
     @task
@@ -168,26 +200,26 @@ class DjangoSatchel(Satchel):
         Installs all custom SQL.
         """
         #from burlap.db import load_db_set
-        
+
         stop_on_error = int(stop_on_error)
-        
+
         name = database
         self.set_db(name=name, site=site)
 
         r = self.local_renderer
         paths = glob.glob(r.format(r.env.install_sql_path_template))
-        
+
         apps = [_ for _ in (apps or '').split(',') if _.strip()]
         if self.verbose:
             print('install_sql.apps:', apps)
-        
+
         def cmp_paths(d0, d1):
             if d0[1] and d0[1] in d1[2]:
                 return -1
             if d1[1] and d1[1] in d0[2]:
                 return +1
             return cmp(d0[0], d1[0])
-        
+
         def get_paths(t):
             """
             Returns SQL file paths in an execution order that respect dependencies.
@@ -201,18 +233,19 @@ class DjangoSatchel(Satchel):
                 if not path.lower().endswith('.sql'):
                     continue
                 content = open(path, 'r').read()
-                matches = re.findall(r'[\s\t]+VIEW[\s\t]+([a-zA-Z0-9_]+)', content, flags=re.IGNORECASE)
+                matches = re.findall(r'[\s\t]+VIEW[\s\t]+([a-zA-Z0-9_]{3,})', content, flags=re.IGNORECASE)
                 #assert matches, 'Unable to find view name: %s' % (p,)
                 view_name = ''
                 if matches:
                     view_name = matches[0]
+                    print('Found view %s.' % view_name)
                 data.append((path, view_name, content))
             for d in sorted(data, cmp=cmp_paths):
                 yield d[0]
-        
+
         def run_paths(paths, cmd_template, max_retries=3):
             r = self.local_renderer
-            paths = list(sorted(paths))
+            paths = list(paths)
             error_counts = defaultdict(int) # {path:count}
             terminal = set()
             if self.verbose:
@@ -226,17 +259,17 @@ class DjangoSatchel(Satchel):
                     self.vprint('skipping because app_name %s not in apps' % app_name)
                     continue
                 with self.settings(warn_only=True):
-                    if r.genv.is_local:
+                    if self.is_local:
                         r.env.sql_path = path
                     else:
                         r.env.sql_path = '/tmp/%s' % os.path.split(path)[-1]
                         r.put(local_path=path, remote_path=r.env.sql_path)
                     ret = r.run_or_local(cmd_template)
                     if ret and ret.return_code:
-                        
+
                         if stop_on_error:
                             raise Exception('Unable to execute file %s' % path)
-                            
+
                         error_counts[path] += 1
                         if error_counts[path] < max_retries:
                             paths.append(path)
@@ -247,20 +280,22 @@ class DjangoSatchel(Satchel):
                 for path in sorted(list(terminal)):
                     print(path, file=sys.stderr)
                 print(file=sys.stderr)
-        
+
         if self.verbose:
             print('install_sql.db_engine:', r.env.db_engine)
-        
+
         if 'postgres' in r.env.db_engine or 'postgis' in r.env.db_engine:
+            paths = list(get_paths('postgresql'))
             run_paths(
-                paths=get_paths('postgresql'),
+                paths=paths,
                 cmd_template="psql --host={db_host} --user={db_user} -d {db_name} -f {sql_path}")
-                        
+
         elif 'mysql' in r.env.db_engine:
+            paths = list(get_paths('mysql'))
             run_paths(
-                paths=get_paths('mysql'),
+                paths=paths,
                 cmd_template="mysql -v -h {db_host} -u {db_user} -p'{db_password}' {db_name} < {sql_path}")
-                
+
         else:
             raise NotImplementedError
 
@@ -270,29 +305,34 @@ class DjangoSatchel(Satchel):
         Runs the Django createsuperuser management command.
         """
         r = self.local_renderer
+        site = site or self.genv.SITE
         self.set_site_specifics(site)
-        r.env.db_createsuperuser_username = username
-        r.env.db_createsuperuser_email = email or username
-        r.run('export SITE={SITE}; export ROLE={ROLE}; '
-            'cd {project_dir}; {manage_cmd} createsuperuser '
-            '--username={db_createsuperuser_username} --email={db_createsuperuser_email}')
+        options = ['--username=%s' % username]
+        if email:
+            options.append('--email=%s' % email)
+        if password:
+            options.append('--password=%s' % password)
+        r.env.options_str = ' '.join(options)
+        if self.is_local:
+            r.env.project_dir = r.env.local_project_dir
+        r.run_or_local('export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; {manage_cmd} {createsuperuser_cmd} {options_str}')
 
     @task
     def loaddata(self, path, site=None):
         """
         Runs the Dango loaddata management command.
-        
+
         By default, runs on only the current site.
-        
+
         Pass site=all to run on all sites.
         """
-        site = site or self.env.SITE
+        site = site or self.genv.SITE
         r = self.local_renderer
         r.env._loaddata_path = path
-        for site, site_data in self.iter_sites(site=site, no_secure=True):
+        for _site, site_data in self.iter_sites(site=site, no_secure=True):
             try:
-                self.set_db(site=site)
-                r.env.SITE = site
+                self.set_db(site=_site)
+                r.env.SITE = _site
                 r.sudo('export SITE={SITE}; export ROLE={ROLE}; '
                     'cd {project_dir}; '
                     '{manage_cmd} loaddata {_loaddata_path}')
@@ -316,6 +356,8 @@ class DjangoSatchel(Satchel):
             ('--%s' % _k if _v in (True, 'True') else '--%s=%s' % (_k, _v))
             for _k, _v in kwargs.iteritems())
         r.env.environs = environs
+        if self.is_local:
+            r.env.project_dir = r.env.local_project_dir
         r.run_or_local('export SITE={SITE}; export ROLE={ROLE};{environs} cd {project_dir}; {manage_cmd} {cmd} {args} {kwargs}')
 
     @task
@@ -339,60 +381,108 @@ class DjangoSatchel(Satchel):
         """
         Loads Django settings for the current site and sets them so Django internals can be run.
         """
-    
-        #TODO:remove this once bug in django-celery has been fixed
-        os.environ['ALLOW_CELERY'] = '0'
-    
-        #os.environ.setdefault("DJANGO_SETTINGS_MODULE", "dryden_site.settings")
-    
-        # In Django >= 1.7, fixes the error AppRegistryNotReady: Apps aren't loaded yet
+        r = self.local_renderer
+
+        # Save environment variables so we can restore them later.
+        _env = {}
+        save_vars = ['ALLOW_CELERY', 'DJANGO_SETTINGS_MODULE']
+        for var_name in save_vars:
+            _env[var_name] = os.environ.get(var_name)
+
         try:
-            from django.core.wsgi import get_wsgi_application
-            application = get_wsgi_application()
-        except (ImportError, RuntimeError):
-            traceback.print_exc()
-    
-        # Load Django settings.
-        settings = self.get_settings()
-        try:
-            from django.contrib import staticfiles
-            from django.conf import settings as _settings
-            for k, v in settings.__dict__.iteritems():
-                setattr(_settings, k, v)
-        except (ImportError, RuntimeError):
-            traceback.print_exc()
-            
+
+            # Allow us to import local app modules.
+            if r.env.local_project_dir:
+                sys.path.insert(0, r.env.local_project_dir)
+
+            #TODO:remove this once bug in django-celery has been fixed
+            os.environ['ALLOW_CELERY'] = '0'
+
+#             print('settings_module:', r.format(r.env.settings_module))
+            os.environ['DJANGO_SETTINGS_MODULE'] = r.format(r.env.settings_module)
+#             os.environ['CELERY_LOADER'] = 'django'
+#             os.environ['SITE'] = r.genv.SITE or r.genv.default_site
+#             os.environ['ROLE'] = r.genv.ROLE or r.genv.default_role
+
+            # In Django >= 1.7, fixes the error AppRegistryNotReady: Apps aren't loaded yet
+            # Disabling, in Django >= 1.10, throws exception:
+            # RuntimeError: Model class django.contrib.contenttypes.models.ContentType
+            # doesn't declare an explicit app_label and isn't in an application in INSTALLED_APPS.
+#             try:
+#                 from django.core.wsgi import get_wsgi_application
+#                 application = get_wsgi_application()
+#             except (ImportError, RuntimeError):
+#                 raise
+#                 print('Unable to get wsgi application.')
+#                 traceback.print_exc()
+
+            # In Django >= 1.7, fixes the error AppRegistryNotReady: Apps aren't loaded yet
+            try:
+                import django
+                django.setup()
+            except AttributeError:
+                # This doesn't exist in Django < 1.7, so ignore it.
+                pass
+
+            # Load Django settings.
+            settings = self.get_settings()
+            try:
+                from django.contrib import staticfiles
+                from django.conf import settings as _settings
+                for k, v in settings.__dict__.iteritems():
+                    setattr(_settings, k, v)
+            except (ImportError, RuntimeError):
+                print('Unable to load settings.')
+                traceback.print_exc()
+
+        finally:
+            # Restore environment variables.
+            for var_name, var_value in _env.items():
+                if var_value is None:
+                    del os.environ[var_name]
+                else:
+                    os.environ[var_name] = var_value
+
         return settings
-    
+
     def iter_static_paths(self, ignore_import_error=False):
         self.load_django_settings()
         from django.contrib.staticfiles import finders, storage
         for finder in finders.get_finders():
-            for _n, _s in finder.storages.iteritems():
-                yield _s.location
-    
+            #print('finder:', finder)
+            #print('finder.storage:', finder.storage)
+            #for _n, _s in finder.storages.iteritems():
+                #yield _s.location
+            for path, _storage in finder.list(ignore_patterns=[]):
+                yield path
+
     def iter_app_directories(self, ignore_import_error=False):
         settings = self.load_django_settings()
         if not settings:
             return
-        
-        for app in settings.INSTALLED_APPS:
-            try:
-                mod = import_module(app)
-            except ImportError:
-                if ignore_import_error:
-                    continue
-                else:
-                    raise
-            yield app, os.path.dirname(mod.__file__)
-    
+        _cwd = os.getcwd()
+        if self.env.local_project_dir:
+            os.chdir(self.env.local_project_dir)
+        try:
+            for app in settings.INSTALLED_APPS:
+                try:
+                    mod = import_module(app)
+                except ImportError:
+                    if ignore_import_error:
+                        continue
+                    else:
+                        raise
+                yield app, os.path.dirname(mod.__file__)
+        finally:
+            os.chdir(_cwd)
+
     def iter_south_directories(self, *args, **kwargs):
         for app_name, base_app_dir in self.iter_app_directories(*args, **kwargs):
             migrations_dir = os.path.join(base_app_dir, 'migrations')
             if not os.path.isdir(migrations_dir):
                 continue
             yield app_name, migrations_dir
-    
+
     def iter_migrations(self, d, *args, **kwargs):
         for fn in sorted(os.listdir(d)):
             if fn.startswith('_') or not fn.endswith('.py'):
@@ -401,19 +491,23 @@ class DjangoSatchel(Satchel):
             if not os.path.isfile(fqfn):
                 continue
             yield fn
-    
+
     def iter_unique_databases(self, site=None):
+        site = site or ALL
         r = self.local_renderer
         prior_database_names = set()
-        for site, site_data in self.iter_sites(site=site, no_secure=True):
-            self.set_db(site=site)
+        #print('iter_unique_databases.begin.site_default:', site)
+        for _site, site_data in self.iter_sites(site=site, no_secure=True):
+            #print('iter_unique_databases.site:', site)
+            self.set_db(site=_site)
             key = (r.env.db_name, r.env.db_user, r.env.db_host, r.env.db_engine)
+            #print('iter_unique_databases.site:', site, key)
             if key in prior_database_names:
                 continue
             prior_database_names.add(key)
-            r.env.SITE = site
-            yield site, site_data
-    
+            r.env.SITE = _site
+            yield _site, site_data
+
     @task
     def shell(self):
         """
@@ -428,28 +522,53 @@ class DjangoSatchel(Satchel):
         r.env.shell_default_dir = self.genv.shell_default_dir_template
         r.env.shell_interactive_djshell_str = self.genv.interactive_shell_template
         r.run_or_local('ssh -t -i {key_filename} {shell_host_string} "{shell_interactive_djshell_str}"')
-        
+
     @task
     def syncdb(self, site=None, all=0, database=None, ignore_errors=1): # pylint: disable=redefined-builtin
         """
         Runs the standard Django syncdb command for one or more sites.
         """
         r = self.local_renderer
-        
+
         ignore_errors = int(ignore_errors)
-        
+
+        post_south = self.version_tuple >= (1, 7, 0)
+
+        use_run_syncdb = self.version_tuple >= (1, 9, 0)
+
+        # DEPRECATED: removed in Django>=1.7
         r.env.db_syncdb_all_flag = '--all' if int(all) else ''
-        
+
         r.env.db_syncdb_database = ''
         if database:
             r.env.db_syncdb_database = ' --database=%s' % database
 
-        for site, site_data in r.iter_unique_databases(site=site):
-            r.env.SITE = site
+        if self.is_local:
+            r.env.project_dir = r.env.local_project_dir
+
+        site = site or self.genv.SITE
+        for _site, site_data in r.iter_unique_databases(site=site):
+            r.env.SITE = _site
             with self.settings(warn_only=ignore_errors):
-                r.run_or_local(
-                    'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
-                    '{manage_cmd} syncdb --noinput {db_syncdb_all_flag} {db_syncdb_database}')
+                if post_south:
+                    if use_run_syncdb:
+                        r.run_or_local(
+                            'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
+                            '{manage_cmd} migrate --run-syncdb --noinput {db_syncdb_database}')
+                    else:
+                        # Between Django>=1.7,<1.9 we can only do a regular migrate, no true syncdb.
+                        r.run_or_local(
+                            'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
+                            '{manage_cmd} migrate --noinput {db_syncdb_database}')
+                else:
+                    r.run_or_local(
+                        'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
+                        '{manage_cmd} syncdb --noinput {db_syncdb_all_flag} {db_syncdb_database}')
+
+    @property
+    def version_tuple(self):
+        r = self.local_renderer
+        return tuple(r.env.version)
 
     @task
     def migrate(self, app='', migration='', site=None, fake=0, ignore_errors=0, skip_databases=None, database=None, migrate_apps='', delete_ghosts=1):
@@ -457,27 +576,27 @@ class DjangoSatchel(Satchel):
         Runs the standard South migrate command for one or more sites.
         """
     #     Note, to pass a comma-delimted list in a fab command, escape the comma with a back slash.
-    #         
+    #
     #         e.g.
-    #         
+    #
     #             fab staging dj.migrate:migrate_apps=oneapp\,twoapp\,threeapp
-        
+
         r = self.local_renderer
-        
+
         ignore_errors = int(ignore_errors)
-        
+
         delete_ghosts = int(delete_ghosts)
-        
-        post_south = tuple(r.env.version) >= (1, 7, 0)
-        
-        if tuple(r.env.version) >= (1, 9, 0):
+
+        post_south = self.version_tuple >= (1, 7, 0)
+
+        if self.version_tuple >= (1, 9, 0):
             delete_ghosts = 0
-        
+
         skip_databases = (skip_databases or '')
         if isinstance(skip_databases, basestring):
             skip_databases = [_.strip() for _ in skip_databases.split(',') if _.strip()]
-        
-        migrate_apps = migrate_apps or ''    
+
+        migrate_apps = migrate_apps or ''
         migrate_apps = [
             _.strip().split('.')[-1]
             for _ in migrate_apps.strip().split(',')
@@ -485,38 +604,55 @@ class DjangoSatchel(Satchel):
         ]
         if app:
             migrate_apps.append(app)
-    
+
         #print('ignore_errors:', ignore_errors)
-        
+
         r.env.migrate_migration = migration or ''
     #     print('r.env.migrate_migration:', r.env.migrate_migration)
         r.env.migrate_fake_str = '--fake' if int(fake) else ''
         r.env.migrate_database = '--database=%s' % database if database else ''
         r.env.migrate_merge = '--merge' if not post_south else ''
         r.env.delete_ghosts = '--delete-ghost-migrations' if delete_ghosts and not post_south else ''
-        for site, site_data in self.iter_unique_databases(site=site):
-    #         print('-'*80, file=sys.stderr)
-    #         print('site:', site, file=sys.stderr)
-            
+        self.vprint('project_dir0:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
+        self.vprint('migrate_apps:', migrate_apps)
+
+        if self.is_local:
+            r.env.project_dir = r.env.local_project_dir
+
+        # CS 2017-3-29 Don't bypass the iterator. That causes reversion to the global env that could corrupt the generated commands.
+        #databases = list(self.iter_unique_databases(site=site))#TODO:remove
+        # CS 2017-4-24 Don't specify a single site as the default when none is supplied. Otherwise all other sites will be ignored.
+        #site = site or self.genv.SITE
+        site = site or ALL
+        databases = self.iter_unique_databases(site=site)
+#         print('databases:', databases)
+        for _site, site_data in databases:
+            self.vprint('-'*80, file=sys.stderr)
+            self.vprint('site:', _site, file=sys.stderr)
+
             if self.env.available_sites_by_host:
                 hostname = self.current_hostname
                 sites_on_host = self.env.available_sites_by_host.get(hostname, [])
-                if sites_on_host and site not in sites_on_host:
-    #                 print('skipping site:', site, sites_on_host, file=sys.stderr)
+                if sites_on_host and _site not in sites_on_host:
+                    self.vprint('skipping site:', _site, sites_on_host, file=sys.stderr)
                     continue
-            
+
     #         print('migrate_apps:', migrate_apps, file=sys.stderr)
             if not migrate_apps:
                 migrate_apps.append(' ')
-                
-            for app in migrate_apps:
-    #             print('app:', app)
-                r.env.migrate_app = app
+
+            for _app in migrate_apps:
+    #             print('app:', _app)
+                # In cases where we're migrating built-in apps or apps with dotted names
+                # e.g. django.contrib.auth, extract the name used for the migrate command.
+                r.env.migrate_app = _app.split('.')[-1]
     #             print('r.env.migrate_app:', r.env.migrate_app)
-                r.env.SITE = site
+                self.vprint('project_dir1:', r.env.project_dir, r.genv.get('dj_project_dir'), r.genv.get('project_dir'))
+                #print('dj.SITE:', _site)
+                r.env.SITE = _site
                 with self.settings(warn_only=ignore_errors):
                     r.run_or_local(
-                        'export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; '
+                        'export SITE={SITE}; export ROLE={ROLE}; {migrate_pre_command} cd {project_dir}; '
                         '{manage_cmd} migrate --noinput {migrate_merge} --traceback '
                         '{migrate_database} {delete_ghosts} {migrate_app} {migrate_migration} '
                         '{migrate_fake_str}')
@@ -541,30 +677,30 @@ class DjangoSatchel(Satchel):
     def manage_async(self, command='', name='process', site=ALL, exclude_sites='', end_message='', recipients=''):
         """
         Starts a Django management command in a screen.
-        
+
         Parameters:
-            
+
             command :- all arguments passed to `./manage` as a single string
-            
+
             site :- the site to run the command for (default is all)
-            
+
         Designed to be ran like:
-        
+
             fab <role> dj.manage_async:"some_management_command --force"
 
         """
         exclude_sites = exclude_sites.split(':')
         r = self.local_renderer
-        for site, site_data in self.iter_sites(site=site, no_secure=True):
-            if site in exclude_sites:
+        for _site, site_data in self.iter_sites(site=site, no_secure=True):
+            if _site in exclude_sites:
                 continue
-            r.env.SITE = site
+            r.env.SITE = _site
             r.env.command = command
             r.env.end_email_command = ''
             r.env.recipients = recipients or ''
             r.env.end_email_command = ''
             if end_message:
-                end_message = end_message + ' for ' + site
+                end_message = end_message + ' for ' + _site
                 end_message = end_message.replace(' ', '_')
                 r.env.end_message = end_message
                 r.env.end_email_command = r.format('{manage_cmd} send_mail --subject={end_message} --recipients={recipients}')
@@ -574,22 +710,47 @@ class DjangoSatchel(Satchel):
                 'export ROLE={ROLE}; cd {project_dir}; '\
                 '{manage_cmd} {command} --traceback; {end_email_command}"; sleep 3;')
 
-    def record_manifest(self):
-        manifest = super(DjangoSatchel, self).record_manifest()
-        
-        latest_timestamp = -1e9999999999999999
-        for path in self.iter_static_paths():
-            if self.verbose:
-                print('checking timestamp of path:', path)
-            latest_timestamp = max(
-                latest_timestamp,
-                get_last_modified_timestamp(path) or latest_timestamp)
-        if self.verbose:
-            print('latest_timestamp:', latest_timestamp)
-        manifest['latest_timestamp'] = latest_timestamp
+    @task
+    def get_media_timestamp(self, last_timestamp=None):
+        """
+        Retrieves the most recent timestamp of the media in the static root.
 
+        If last_timestamp is given, retrieves the first timestamp more recent than this value.
+        """
+        r = self.local_renderer
+        _latest_timestamp = -1e9999999999999999
+        for path in self.iter_static_paths():
+            path = r.env.static_root + '/' + path
+            self.vprint('checking timestamp of path:', path)
+            if not os.path.isfile(path):
+                continue
+            #print('path:', path)
+            _latest_timestamp = max(_latest_timestamp, get_last_modified_timestamp(path) or _latest_timestamp)
+            if last_timestamp is not None and _latest_timestamp > last_timestamp:
+                break
+        self.vprint('latest_timestamp:', _latest_timestamp)
+        return _latest_timestamp
+
+    @task
+    def has_media_changed(self):
+        print('Checking to see if Django static media has changed...')
+        lm = self.last_manifest
+        # Unless this is our first time running, this should always be non-None.
+        last_timestamp = lm.latest_timestamp
+        current_timestamp = self.get_media_timestamp(last_timestamp=last_timestamp)
+        self.vprint('last_timestamp:', last_timestamp)
+        self.vprint('current_timestamp:', current_timestamp)
+        changed = current_timestamp != last_timestamp
+        if changed:
+            print('It has.')
+        else:
+            print('It has not.')
+        return changed
+
+    def get_migration_fingerprint(self):
         data = {} # {app: latest_migration_name}
-        for app_name, _dir in self.iter_app_directories():
+        for app_name, _dir in self.iter_app_directories(ignore_import_error=True):
+            #print('app_name, _dir:', app_name, _dir)
             migration_dir = os.path.join(_dir, 'migrations')
             if not os.path.isdir(migration_dir):
                 continue
@@ -598,36 +759,55 @@ class DjangoSatchel(Satchel):
         if self.verbose:
             print('%s.migrations:' % self.name)
             pprint(data, indent=4)
-        manifest['migrations'] = data
+        return data
 
-        return latest_timestamp
-    
-    @task(precursors=['packager''pip'])
+    def record_manifest(self):
+        manifest = super(DjangoSatchel, self).record_manifest()
+        manifest['latest_timestamp'] = self.get_media_timestamp()
+        manifest['migrations'] = self.get_migration_fingerprint()
+        return manifest
+
+    @task(precursors=['packager', 'pip'])
     def configure_media(self, *args, **kwargs):
-        r = self.local_renderer
-        r.local('cd {project_dir}; {manage_cmd} collectstatic --noinput')
-        
+        if self.has_media_changed():
+            r = self.local_renderer
+            assert r.env.local_project_dir
+            r.local(r.env.configure_media_command)
+
     @task(precursors=['packager', 'apache', 'pip', 'tarball', 'postgresql', 'mysql'])
     def configure_migrations(self):
-        last = self.last_manifest or {}
-        current = self.current_manifest or {}
+        r = self.local_renderer
+        assert r.env.local_project_dir
+        last = self.last_manifest.migrations or {}
+        current = self.current_manifest.get('migrations') or {}
         migrate_apps = []
-        if last and current:
-            if self.verbose:
-                print('djangomigrations.last:', last)
-                print('djangomigrations.current:', current)
-            for app_name in current:
-                if current[app_name] != last.get(app_name):
-                    migrate_apps.append(app_name)
+
+        if self.verbose:
+            print('djangomigrations.last:')
+            pprint(last, indent=4)
+            print('djangomigrations.current:')
+            pprint(current, indent=4)
+
+        for app_name in current:
+            if current[app_name] != last.get(app_name):
+                migrate_apps.append(app_name)
+
         if migrate_apps:
+            self.vprint('%i apps with new migrations found!' % len(migrate_apps))
+            self.vprint('migrate_apps:', migrate_apps)
+            self.vprint('ignore_migration_errors:', self.env.ignore_migration_errors)
             # Note, Django's migrate command doesn't support multiple app name arguments
             # with all options, so we run it separately for each app.
             for app in migrate_apps:
-                self.update_all(apps=app, ignore_errors=self.env.ignore_errors)
+                self.migrate(app=app, ignore_errors=self.env.ignore_migration_errors)
+        else:
+            self.vprint('No new migrations.')
 
-    @task(precursors=['packager'])
+    @task(precursors=['packager', 'tarball'])
     def configure(self, *args, **kwargs):
-        self.configure_media()
-        self.configure_migrations()
+        if self.env.manage_media:
+            self.configure_media()
+        if self.env.manage_migrations:
+            self.configure_migrations()
 
 dj = DjangoSatchel()

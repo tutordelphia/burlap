@@ -8,12 +8,15 @@ import tempfile
 import json
 import functools
 import traceback
+import shutil
 from collections import defaultdict
 from pprint import pprint
 
 import yaml
 
-from fabric.api import sudo as _sudo, get as _get, env, execute
+from fabric.api import env, sudo as _sudo, get as _get
+import fabric.contrib.files
+import fabric.api
 
 from burlap import ContainerSatchel
 from burlap.constants import *

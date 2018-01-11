@@ -5,7 +5,7 @@ from burlap.constants import *
 from burlap.decorators import task
 
 class MemcachedSatchel(ServiceSatchel):
-    
+
     name = 'memcached'
 
     @property
@@ -13,7 +13,7 @@ class MemcachedSatchel(ServiceSatchel):
         return {
             UBUNTU: ['memcached'],
         }
-    
+
     def set_defaults(self):
         super(MemcachedSatchel, self).set_defaults()
         self.env.service_commands = {
@@ -50,7 +50,7 @@ class MemcachedSatchel(ServiceSatchel):
                 UBUNTU: 'service memcached restart; sleep 3',
             },
         }
-        
+
     @task(precursors=['packager'])
     def configure(self):
         pass

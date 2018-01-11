@@ -65,3 +65,5 @@ docs/_build/
 /.tox/
 /.cache/
 /site/
+/*.geany
+/*.out

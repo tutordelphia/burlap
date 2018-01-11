@@ -36,8 +36,7 @@ def get_cwd(local=False):
     with hide('running', 'stdout'):
         if local:
             return local_run('pwd', capture=True)
-        else:
-            return run('pwd')
+        return run('pwd')
 
 
 def abspath(path, local=False):

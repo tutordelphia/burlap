@@ -43,20 +43,38 @@ def task_or_dryrun(*args, **kwargs):
 
     return wrapper if invoked else wrapper(func)
 
+_METHOD_ATTRIBUTES = ['deploy_before', 'is_post_callback']
+
 def _task(meth):
     meth.is_task = True
+
+    def wrapper(self, *args, **kwargs):
+        ret = meth(self, *args, **kwargs)
+
+        # Ensure each satchels local variable scope is cleared after every server execution.
+        self.clear_local_renderer()
+
+        return ret
+
+    if hasattr(meth, 'is_deployer') or meth.__name__ == 'configure':
+        # Copy the wrapped method's attributes to the wrapper.
+        wrapper.__name__ = meth.__name__
+        for attr in _METHOD_ATTRIBUTES:
+            if hasattr(meth, attr):
+                setattr(wrapper, attr, getattr(meth, attr))
+        return wrapper
     return meth
 
 def task(*args, **kwargs):
     """
     Decorator for registering a satchel method as a Fabric task.
-    
+
     Can be used like:
-    
+
         @task
         def my_method(self):
             ...
-            
+
         @task(precursors=['other_satchel'])
         def my_method(self):
             ...
@@ -67,25 +85,26 @@ def task(*args, **kwargs):
     if args and callable(args[0]):
         # direct decoration, @task
         return _task(*args)
-    else:
-        # callable decoration, @task(precursors=['satchel'])
-        def wrapper(meth):
-            if precursors:
-                meth.deploy_before = list(precursors)
-            if post_callback:
-                #from burlap.common import post_callbacks
-                #post_callbacks.append(meth)
-                meth.is_post_callback = True
-            return _task(meth)
-        return wrapper
+
+    # callable decoration, @task(precursors=['satchel'])
+    def wrapper(meth):
+        if precursors:
+            meth.deploy_before = list(precursors)
+        if post_callback:
+            #from burlap.common import post_callbacks
+            #post_callbacks.append(meth)
+            meth.is_post_callback = True
+        return _task(meth)
+    return wrapper
 
 def runs_once(meth):
     """
     A wrapper around Fabric's runs_once() to support our dryrun feature.
     """
-    from burlap.common import get_dryrun
+    from burlap.common import get_dryrun, runs_once_methods
     if get_dryrun():
         pass
     else:
+        runs_once_methods.append(meth)
         _runs_once(meth)
     return meth

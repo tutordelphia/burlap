@@ -4,7 +4,31 @@ APT_KEY = 'apt-key'
 APT_SOURCE = 'apt-source'
 
 OS_TYPES = LINUX, WINDOWS = ('linux', 'windows')
-OS_DISTRO = FEDORA, UBUNTU, DEBIAN, RASPBIAN, CENTOS = ('fedora', 'ubuntu', 'debian', 'raspbian', 'centos')
+OS_DISTRO = (
+    FEDORA,
+    UBUNTU,
+    DEBIAN,
+    RASPBIAN,
+    CENTOS,
+    SUNOS,
+    ARCH,
+    REDHAT,
+    SLES,
+    GENTOO,
+) = (
+    'fedora',
+    'ubuntu',
+    'debian',
+    'raspbian',
+    'centos',
+    'sunos',
+    'arch',
+    'redhat',
+    'sles',
+    'gentoo',
+)
+
+SUN = 'sun'
 
 WHEEZY = 'wheezy'
 JESSIE = 'jessie'
@@ -46,3 +70,12 @@ ROLE = 'ROLE'
 LOCALHOSTS = ('localhost', '127.0.0.1')
 
 UTF8 = 'UTF8'
+
+STORAGE_LOCAL = 'local'
+STORAGE_REMOTE = 'remote'
+STORAGES = (
+    STORAGE_LOCAL,
+    STORAGE_REMOTE,
+)
+
+LOCALHOSTS = ('localhost', '127.0.0.1')

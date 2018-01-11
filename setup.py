@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import os
 import sys
- 
+
 from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
 
@@ -11,6 +11,9 @@ os.environ['BURLAP_NO_LOAD'] = '1'
 import burlap # pylint: disable=wrong-import-position
 
 try:
+    # Requires both pip and apt packages:
+    #   pip install pypandoc
+    #   sudo apt-get install pandoc
     from pypandoc import convert
     read_md = lambda f: convert(f, 'rst')
 except ImportError:
@@ -25,7 +28,7 @@ def read(filename):
         text = fin.read().decode('utf-8')
     #data.decode("utf8", "ignore")
     return text
-    
+
 def get_reqs(fn):
     return [
         _.strip()
@@ -44,7 +47,7 @@ class Tox(TestCommand):
         import tox
         tox.cmdline(self.test_args)
         sys.exit(0)
-        
+
 setup(
     name="burlap",
     version=burlap.__version__,
@@ -53,6 +56,7 @@ setup(
     package_data={
         'burlap': [
             'templates/*.*',
+            'fixtures/*.*',
         ],
     },
     author="Chris Spencer",
@@ -87,8 +91,8 @@ setup(
     ],
     zip_safe=False,
     include_package_data=True,
-    install_requires=get_reqs('requirements.txt'),
-    setup_requires=[],
+    install_requires=get_reqs('burlap/fixtures/requirements.txt'),
+    #setup_requires=[],
     tests_require=get_reqs('requirements-test.txt'),
     cmdclass={
         'test': Tox,

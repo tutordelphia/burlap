@@ -31,8 +31,7 @@ def package_version(name, python_cmd='python'):
     res = run(cmd, quiet=True)
     if res.succeeded:
         return res
-    else:
-        return None
+    return
 
 
 def is_setuptools_installed(python_cmd='python'):

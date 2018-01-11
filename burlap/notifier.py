@@ -8,11 +8,11 @@ from burlap.constants import *
 from burlap.decorators import task
 
 class DeploymentNotifierSatchel(Satchel):
-    
+
     name = 'deploymentnotifier'
-    
+
     def set_defaults(self):
-    
+
         self.env.email_enabled = False
         self.env.email_host = None
         self.env.email_port = 587
@@ -24,21 +24,21 @@ class DeploymentNotifierSatchel(Satchel):
     def send_email(self, subject, message, from_email=None, recipient_list=None):
         import smtplib
         from email.mime.text import MIMEText
-        
+
         recipient_list = recipient_list or []
         if not recipient_list:
             return
-        
+
         from_email = from_email or self.env.email_host_user
-        
+
         msg = MIMEText(message)
-        
+
         # me == the sender's email address
         # you == the recipient's email address
         msg['Subject'] = subject
         msg['From'] = from_email
         msg['To'] = '; '.join(recipient_list)
-        
+
         # Send the message via our own SMTP server, but don't include the
         # envelope header.
         #if self.verbose:
@@ -51,6 +51,13 @@ class DeploymentNotifierSatchel(Satchel):
         s.login(self.env.email_host_user, self.env.email_host_password)
         s.sendmail(from_email, recipient_list, msg.as_string())
         s.quit()
+
+    @task
+    def test(self):
+        self.send_email(
+            subject='Test',
+            message='Test',
+            recipient_list=self.env.email_recipient_list)
 
     @task
     def notify_post_deployment(self, subject=None, message=None, force=0):
@@ -75,9 +82,9 @@ class DeploymentNotifierSatchel(Satchel):
         pass
 
 class LoginNotifierSatchel(Satchel):
-    
+
     name = 'loginnotifier'
-    
+
     def set_defaults(self):
         self.env.sysadmin_email = 'root@localhost'
         self.env.script_template = 'notifier/loginnotifier.template.sh'
@@ -85,7 +92,7 @@ class LoginNotifierSatchel(Satchel):
         self.env.script_user = 'root'
         self.env.script_group = 'root'
         self.env.script_chmod = 'u+rx,g+rx'
-    
+
     @task(precursors=['packager', 'user'])
     def configure(self):
         r = self.local_renderer

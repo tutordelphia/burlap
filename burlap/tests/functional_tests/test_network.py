@@ -1,5 +1,6 @@
 import socket
 
+from burlap.tests.functional_tests.base import TestCase
 
 def is_valid_ipv4_address(address):
     try:
@@ -26,28 +27,29 @@ def is_valid_ipv6_address(address):
 def is_valid_address(address):
     return is_valid_ipv4_address(address) or is_valid_ipv6_address()
 
+class NetworkTests(TestCase):
 
-def test_interfaces_ipv4_addresses():
+    def test_interfaces_ipv4_addresses(self):
 
-    from burlap.network import interfaces
-    from burlap.network import address
+        from burlap.network import interfaces
+        from burlap.network import address
 
-    for interface in interfaces():
-        ipv4_address = address(interface)
-        assert is_valid_ipv4_address(ipv4_address)
-
-
-def test_loopback_interface_exists():
-    from burlap.network import interfaces
-    assert 'lo' in interfaces()
+        for interface in interfaces():
+            ipv4_address = address(interface)
+            assert is_valid_ipv4_address(ipv4_address)
 
 
-def test_loopback_interface_address():
-    from burlap.network import address
-    assert address('lo') == '127.0.0.1'
+    def test_loopback_interface_exists(self):
+        from burlap.network import interfaces
+        assert 'lo' in interfaces()
 
 
-def test_name_servers():
-    from burlap.network import nameservers
-    for address in nameservers():
-        assert is_valid_address(address)
+    def test_loopback_interface_address(self):
+        from burlap.network import address
+        assert address('lo') == '127.0.0.1'
+
+
+    def test_name_servers(self):
+        from burlap.network import nameservers
+        for address in nameservers():
+            assert is_valid_address(address)

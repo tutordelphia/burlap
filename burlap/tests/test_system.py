@@ -2,17 +2,20 @@ from mock import patch
 
 import pytest
 
+from burlap.tests.base import TestCase
 
-def test_unsupported_system():
+class SystemTests(TestCase):
 
-    from burlap.system import UnsupportedFamily
+    def test_unsupported_system(self):
 
-    with pytest.raises(UnsupportedFamily) as excinfo:
+        from burlap.system import UnsupportedFamily
 
-        with patch('burlap.system.distrib_id') as mock_distrib_id:
-            mock_distrib_id.return_value = 'foo'
+        with pytest.raises(UnsupportedFamily) as excinfo:
 
-            raise UnsupportedFamily(supported=['debian', 'redhat'])
+            with patch('burlap.system.distrib_id') as mock_distrib_id:
+                mock_distrib_id.return_value = 'foo'
 
-    exception_msg = str(excinfo.value)
-    assert exception_msg == "Unsupported family other (foo). Supported families: debian, redhat"
+                raise UnsupportedFamily(supported=['debian', 'redhat'])
+
+        exception_msg = str(excinfo.value)
+        assert exception_msg == "Unsupported family other (foo). Supported families: debian, redhat"

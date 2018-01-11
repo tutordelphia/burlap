@@ -39,8 +39,7 @@ def address(interface):
         res = sudo("/sbin/ifconfig %(interface)s | grep 'inet '" % locals())
     if 'addr' in res:
         return res.split()[1].split(':')[1]
-    else:
-        return res.split()[1]
+    return res.split()[1]
 
 
 def nameservers():

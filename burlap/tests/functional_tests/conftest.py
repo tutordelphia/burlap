@@ -32,7 +32,7 @@ MIN_VAGRANT_VERSION = (1, 3)
 
 @pytest.yield_fixture(scope='session', autouse=True)
 def setup_package():
-    
+
     # Setup.
     vagrant_box = (os.environ.get('BURLAP_TEST_BOX') or '').strip()
     print('vagrant_box:', vagrant_box)
@@ -65,7 +65,7 @@ def setup_package():
         _set_optional_http_proxy()
         #_update_package_index()
         yield
-        
+
         # Teardown.
         if not reuse_vm:
             _stop_vagrant_machine()
@@ -104,7 +104,7 @@ Vagrant.configure(2) do |config|
   if Vagrant.has_plugin?("vagrant-cachier")
     config.cache.scope = :box
   end
-  
+
   config.vm.boot_timeout = 3000
 
   config.vm.provider "virtualbox" do |vb|
@@ -126,7 +126,7 @@ def _start_vagrant_machine(provider):
     with lcd(HERE):
         with settings(warn_only=True):
             ret = local('vagrant up' + options)
-            print('ret.return_code:', ret.return_code)
+            #print('ret.return_code:', ret.return_code)
             if ret.return_code:
                 # Vagrant is in an inconsistent state, probably because the VM was deleted outside of Vagrant
                 # but Vagrant still has the VM's config laying around.
@@ -184,10 +184,13 @@ def _set_fabric_env(host, port, user, key_filename):
         env.host_string = env.host = "%s:%s" % (host, port)
     else:
         env.host_string = env.host = host
+    env.hosts = [env.host_string]
     env.user = user
     env.key_filename = key_filename
     env.disable_known_hosts = True
     env.abort_on_prompts = True
+    #http://docs.fabfile.org/en/1.6/faq.html#init-scripts-don-t-work
+    env.always_use_pty = False
 
 
 def _set_optional_http_proxy():

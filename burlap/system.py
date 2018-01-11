@@ -8,6 +8,7 @@ from fabric.api import hide, run, settings
 
 from burlap.files import file # pylint: disable=redefined-builtin
 from burlap.utils import read_lines, run_as_root
+from burlap.constants import *
 
 is_file = file.is_file
 
@@ -41,10 +42,6 @@ def distrib_id():
     """
     Get the OS distribution ID.
 
-    Returns a string such as ``"Debian"``, ``"Ubuntu"``, ``"RHEL"``,
-    ``"CentOS"``, ``"SLES"``, ``"Fedora"``, ``"Arch"``, ``"Gentoo"``,
-    ``"SunOS"``...
-
     Example::
 
         from burlap.system import distrib_id
@@ -55,35 +52,34 @@ def distrib_id():
     """
 
     with settings(hide('running', 'stdout')):
-        kernel = run('uname -s')
-
-        if kernel == 'Linux':
+        kernel = (run('uname -s') or '').strip().lower()
+        if kernel == LINUX:
             # lsb_release works on Ubuntu and Debian >= 6.0
             # but is not always included in other distros
             if is_file('/usr/bin/lsb_release'):
-                id_ = run('lsb_release --id --short')
-                if id in ['arch', 'Archlinux']:  # old IDs used before lsb-release 1.4-14
-                    id_ = 'Arch'
+                id_ = run('lsb_release --id --short').strip().lower()
+                if id in ['arch', 'archlinux']:  # old IDs used before lsb-release 1.4-14
+                    id_ = ARCH
                 return id_
             else:
                 if is_file('/etc/debian_version'):
-                    return "Debian"
+                    return DEBIAN
                 elif is_file('/etc/fedora-release'):
-                    return "Fedora"
+                    return FEDORA
                 elif is_file('/etc/arch-release'):
-                    return "Arch"
+                    return ARCH
                 elif is_file('/etc/redhat-release'):
                     release = run('cat /etc/redhat-release')
                     if release.startswith('Red Hat Enterprise Linux'):
-                        return "RHEL"
+                        return REDHAT
                     elif release.startswith('CentOS'):
-                        return "CentOS"
+                        return CENTOS
                     elif release.startswith('Scientific Linux'):
-                        return "SLES"
+                        return SLES
                 elif is_file('/etc/gentoo-release'):
-                    return "Gentoo"
-        elif kernel == "SunOS":
-            return "SunOS"
+                    return GENTOO
+        elif kernel == SUNOS:
+            return SUNOS
 
 
 def distrib_release():
@@ -98,15 +94,12 @@ def distrib_release():
             print(u"CentOS 6.2 has been released. Please upgrade.")
 
     """
-
     with settings(hide('running', 'stdout')):
-
-        kernel = run('uname -s')
-
-        if kernel == 'Linux':
+        kernel = (run('uname -s') or '').strip().lower()
+        if kernel == LINUX:
             return run('lsb_release -r --short')
 
-        elif kernel == 'SunOS':
+        elif kernel == SUNOS:
             return run('uname -v')
 
 
@@ -145,19 +138,18 @@ def distrib_family():
     Returns one of ``debian``, ``redhat``, ``arch``, ``gentoo``,
     ``sun``, ``other``.
     """
-    distrib = distrib_id()
-    if distrib in ['Debian', 'Ubuntu', 'LinuxMint', 'elementary OS']:
-        return 'debian'
-    elif distrib in ['RHEL', 'CentOS', 'SLES', 'Fedora']:
-        return 'redhat'
-    elif distrib in ['SunOS']:
-        return 'sun'
-    elif distrib in ['Gentoo']:
-        return 'gentoo'
-    elif distrib in ['Arch', 'ManjaroLinux']:
-        return 'arch'
-    else:
-        return 'other'
+    distrib = (distrib_id() or '').lower()
+    if distrib in ['debian', 'ubuntu', 'linuxmint', 'elementary os']:
+        return DEBIAN
+    elif distrib in ['redhat', 'rhel', 'centos', 'sles', 'fedora']:
+        return REDHAT
+    elif distrib in ['sunos']:
+        return SUN
+    elif distrib in ['gentoo']:
+        return GENTOO
+    elif distrib in ['arch', 'manjarolinux']:
+        return ARCH
+    return 'other'
 
 
 def get_hostname():
