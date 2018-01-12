@@ -351,7 +351,6 @@ def add_deployer(event, func, before=None, after=None, takes_diff=False):
     manifest_deployers_takes_diff[func] = takes_diff
 
 def resolve_deployer(func_name):
-    print('resolve deployer:', func_name)
 
     if '.' in func_name:
         mod_name, func_name = func_name.split('.')
@@ -1101,6 +1100,9 @@ class Satchel(object):
 
     def write_to_file(self, *args, **kwargs):
         return write_to_file(*args, **kwargs)
+
+    def upload_content(self, *args, **kwargs):
+        return upload_content(*args, **kwargs)
 
     def find_template(self, template):
         return find_template(template)
@@ -2619,7 +2621,7 @@ def install_script(*args, **kwargs):
     sudo_or_dryrun('chmod +x %s' % env.put_remote_path)
 
 def write_to_file(content, fn=None, **kwargs):
-    import tempfile
+
     dryrun = get_dryrun(kwargs.get('dryrun'))
 
     if not fn:
@@ -2639,6 +2641,10 @@ def write_to_file(content, fn=None, **kwargs):
         fout.write(content)
         fout.close()
     return fn
+
+def upload_content(content, fn, **kwargs):
+    tmp_fn = write_to_file(content=content, **kwargs)
+    put_or_dryrun(local_path=tmp_fn, remote_path=fn, use_sudo=True)
 
 def set_site(site):
     if site is None:
