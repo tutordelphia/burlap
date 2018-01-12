@@ -903,12 +903,12 @@ def reset():
     """
     d = os.path.join(init_plan_data_dir(), env.ROLE)
     env.plan_storage = env.plan_storage or STORAGE_REMOTE
-    if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
-        sudo_or_dryrun('rm -Rf "%s"' % d)
-        sudo_or_dryrun('mkdir -p "%s"' % d)
-    elif env.plan_storage == STORAGE_LOCAL:
+    if env.plan_storage == STORAGE_LOCAL or env.host_string in LOCALHOSTS:
         local_or_dryrun('rm -Rf "%s"' % d)
         local_or_dryrun('mkdir -p "%s"' % d)
+    elif env.plan_storage == STORAGE_REMOTE:
+        sudo_or_dryrun('rm -Rf "%s"' % d)
+        sudo_or_dryrun('mkdir -p "%s"' % d)
     else:
         raise NotImplementedError("Unknown storage type: %s" % env.plan_storage)
 
