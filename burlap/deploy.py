@@ -244,9 +244,12 @@ class DeploySatchel(ContainerSatchel):
         if component_order:
             print()
 
-        if component_order and ask and self.genv.host_string == self.genv.hosts[-1] \
-        and not raw_input('Begin deployment? [yn] ').strip().lower().startswith('y'):
-            sys.exit(1)
+        if ask and self.genv.host_string == self.genv.hosts[-1]:
+            if component_order:
+                if not raw_input('Begin deployment? [yn] ').strip().lower().startswith('y'):
+                    sys.exit(0)
+            else:
+                sys.exit(0)
 
     @task
     def run(self, components=None, yes=0):
@@ -259,9 +262,11 @@ class DeploySatchel(ContainerSatchel):
         try:
 
             yes = int(yes)
-
             if not yes:
-                execute(partial(self.preview, components=components, ask=1))
+                # If we want to confirm the deployment with the user, and we're at the first server,
+                # then run the preview.
+                if self.genv.host_string == self.genv.hosts[0]:
+                    execute(partial(self.preview, components=components, ask=1))
 
             component_order, plan_funcs = self.get_component_funcs(components=components)
 
