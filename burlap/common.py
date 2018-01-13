@@ -1634,6 +1634,7 @@ def shellquote(s, singleline=True):
 
 def init_burlap_data_dir():
     d = env.burlap_data_dir
+    print('env.plan_storage:', env.plan_storage)
     if env.plan_storage == 'local':
         if not os.path.isdir(env.burlap_data_dir):
             os.mkdir(d)

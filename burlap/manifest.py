@@ -38,9 +38,9 @@ class ManifestSatchel(Satchel):
     @task
     @runs_once
     def get_last(self, name):
-        from burlap.deploy import get_last_thumbprint
+        from burlap.deploy import deploy
         name = common.assert_valid_satchel(name)
-        last_thumbprint = get_last_thumbprint()
+        last_thumbprint = deploy.get_previous_thumbprint()
         if last_thumbprint:
             if name in last_thumbprint:
                 return last_thumbprint.get(name, type(self.genv)())
@@ -49,12 +49,12 @@ class ManifestSatchel(Satchel):
     @task
     @runs_once
     def changed(self, name):
-        from burlap.deploy import get_last_thumbprint
+        from burlap.deploy import deploy
         name = name.strip().lower()
         if name not in common.manifest_recorder:
             print('No manifest recorder has been registered for component "%s"' % name)
         else:
-            last_thumbprint = get_last_thumbprint()
+            last_thumbprint = deploy.get_previous_thumbprint()
             if last_thumbprint:
                 if name in last_thumbprint:
                     last_manifest = last_thumbprint[name]
