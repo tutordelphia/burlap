@@ -88,6 +88,7 @@ class SupervisorSatchel(ServiceSatchel):
 
     def set_defaults(self):
 
+        self.env.manage_configs = True
         self.env.config_template = 'supervisor/supervisor_daemon.template2.config'
         self.env.config_path = '/etc/supervisor/supervisord.conf'
         #/etc/supervisor/conf.d/celery_
@@ -173,6 +174,7 @@ class SupervisorSatchel(ServiceSatchel):
 
     def reload(self):
         r = self.local_renderer
+        r.sudo('supervisorctl reread')
         r.sudo('supervisorctl reload all')
 
     def record_manifest(self):
@@ -244,6 +246,8 @@ class SupervisorSatchel(ServiceSatchel):
         verbose = self.verbose
 
         r = self.local_renderer
+        if not r.env.manage_configs:
+            return
 #
 #         target_sites = self.genv.available_sites_by_host.get(hostname, None)
 
@@ -300,11 +304,6 @@ class SupervisorSatchel(ServiceSatchel):
         for pg in process_groups:
             r.env.pg = pg
             r.sudo('supervisorctl add {pg}')
-
-        #TODO:are all these really necessary?
-        r.sudo('supervisorctl reread')
-        #r.sudo('supervisorctl update')
-        r.sudo('supervisorctl restart all')
 
     @task(precursors=['packager', 'user', 'rabbitmq'])
     def configure(self, **kwargs):

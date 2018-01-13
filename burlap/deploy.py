@@ -37,7 +37,7 @@ def init_env():
     env.plan_init = True
     env.plan_root = None
     env.plan_originals = {}
-    env.plan_storage = STORAGE_REMOTE
+    env.plan_storage = STORAGE_LOCAL
     env.plan_lockfile_path = '/var/lock/burlap_deploy.lock'
     env.plan = None
     env.plan_data_dir = '%(burlap_data_dir)s/plans'
@@ -257,7 +257,8 @@ def delete_plan_data_dir():
     if env.plan_storage == STORAGE_REMOTE and env.host_string:
         _sudo('rm -Rf %s' % d)
     elif env.plan_storage == STORAGE_LOCAL:
-        shutil.rmtree(d)
+        if os.path.isdir(d):
+            shutil.rmtree(d)
 
 class Colors:
     HEADER = '\033[95m'
@@ -385,8 +386,10 @@ def get_plan_dir(role=None, name=None):
         d = os.path.join(init_plan_data_dir(), role, name)
     else:
         d = os.path.join(init_plan_data_dir(), role)
-    if not d.startswith('/'):
+
+    if env.plan_storage == STORAGE_REMOTE and not d.startswith('/'):
         d = '/home/%s/%s' % (env.user, d)
+
     make_dir(d)
     return d
 
