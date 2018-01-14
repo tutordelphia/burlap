@@ -6,7 +6,8 @@ import unittest
 from commands import getstatusoutput
 # from pprint import pprint
 
-from burlap.common import set_state, get_state, clear_state, init_env, default_env, env, all_satchels, get_dryrun, set_dryrun, get_verbose, set_verbose
+from burlap.common import set_state, get_state, clear_state, init_env, default_env, env, all_satchels, get_dryrun, set_dryrun, get_verbose, set_verbose, \
+    is_callable
 #from burlap.deploy import init_env as deploy_init_env, delete_plan_data_dir, clear_fs_cache
 
 def clear_runs_once(func):
@@ -106,9 +107,11 @@ class TestCase(unittest.TestCase):
             print('setUp: Checking module:', module)
             for name in dir(module):
                 print('setUp: Checking name:', name)
-                func = getattr(module, name)
-                if not callable(func):
+                #func = getattr(module, name)
+                #if not callable(func):
+                if not is_callable(module, name):
                     continue
+                func = getattr(module, name)
                 print('clearing:', func)
                 clear_runs_once(func)
 

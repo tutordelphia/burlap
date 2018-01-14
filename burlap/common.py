@@ -714,6 +714,12 @@ def reset_all_satchels():
     for name, satchel in all_satchels.items():
         satchel.clear_caches()
 
+def is_callable(obj, name):
+    """
+    A version of callable() that doesn't execute properties when doing the test for callability.
+    """
+    return callable(getattr(obj.__class__, name, None))
+
 class Satchel(object):
     """
     Represents a base unit of functionality that is deployed and maintained on one
@@ -827,6 +833,10 @@ class Satchel(object):
     @staticmethod
     def reset_all_satchels():
         reset_all_satchels()
+
+    @staticmethod
+    def is_callable(*args, **kwargs):
+        return is_callable(*args, **kwargs)
 
     def clear_caches(self):
         self._local_renderer = None

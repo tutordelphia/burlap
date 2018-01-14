@@ -9,7 +9,10 @@ from burlap.deploy import deploy as deploy_satchel
 
 class JSTests(TestCase):
 
-    def test_jshint(self):
+    def test_jshint0(self):
+        pass
+
+    def test_jshint1(self):
 
         set_verbose(True)
         jshint.genv.ROLE = 'local'
@@ -45,3 +48,6 @@ class JSTests(TestCase):
 
         # Confirm jshint was uninstalled.
         #assert not exists('/usr/local/bin/jshint')
+
+    def test_jshint2(self):
+        pass
