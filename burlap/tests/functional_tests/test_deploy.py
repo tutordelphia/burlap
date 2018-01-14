@@ -8,7 +8,7 @@ from fabric.api import env
 from burlap.shelf import Shelf
 from burlap.context import set_cwd
 from burlap.common import set_verbose, get_verbose
-from burlap.deploy import preview as deploy_preview
+from burlap.deploy import deploy as deploy_satchel
 from burlap import load_role_handler
 from burlap.common import all_satchels
 from burlap.tests.functional_tests.base import TestCase
@@ -154,9 +154,7 @@ class DeployTests(TestCase):
                 set_verbose(1)
                 assert 'apache_specifics' in env
                 print('Getting changed_components.verbose:', get_verbose())
-                import inspect
-                print('preview_source:', inspect.getsourcefile(deploy_preview.wrapped))
-                changed_components, deploy_funcs = deploy_preview()
+                changed_components, deploy_funcs = deploy_satchel.get_component_funcs()
                 changed_components = sorted(changed_components)
                 expected_components = [
                     'APACHE',

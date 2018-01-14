@@ -7,7 +7,8 @@ from fabric.api import run
 from burlap.common import set_verbose
 from burlap.git import git
 from burlap.tests.functional_tests.base import TestCase
-from burlap.deploy import thumbprint, clear_fs_cache, delete_plan_data_dir
+from burlap.deploy import deploy as deploy_satchel
+#from burlap.deploy import thumbprint, clear_fs_cache, delete_plan_data_dir
 #from burlap.packager import packager
 
 class GitTests(TestCase):
@@ -32,8 +33,7 @@ class GitTests(TestCase):
         git.env.enabled = True
         git.env.hooks = {'/tmp/mygithookrepo': ['git/post-checkout']}
         git.clear_local_renderer()
-        clear_fs_cache()
-        delete_plan_data_dir()
+        deploy_satchel.purge()
         cm = git.current_manifest
         print('cm1:', cm)
         assert 'hooks' in cm
@@ -47,12 +47,11 @@ class GitTests(TestCase):
         print('Installing git hooks...')
         git.clear_local_renderer()
         git.configure()
-        clear_fs_cache()
-        delete_plan_data_dir()
+        deploy_satchel.purge()
         print('-'*80)
         print('Thumbprinting...')
-        thumbprint(components=git.name)
-        clear_fs_cache()
+        #thumbprint(components=git.name)
+        deploy_satchel.fake(components=git.name)
         print('-'*80)
 
         assert exists('/tmp/mygithookrepo/.git/hooks/post-checkout')

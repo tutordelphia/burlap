@@ -4,7 +4,7 @@ from fabric.contrib.files import exists
 from burlap.common import set_verbose
 from burlap.selenium import selenium
 from burlap.tests.functional_tests.base import TestCase
-from burlap.deploy import thumbprint, clear_fs_cache, delete_plan_data_dir
+from burlap.deploy import deploy as deploy_satchel
 
 class SeleniumTests(TestCase):
 
@@ -22,9 +22,7 @@ class SeleniumTests(TestCase):
             selenium.clear_local_renderer()
             assert selenium.get_target_geckodriver_version_number() == '0.13.0'
             selenium.configure()
-            clear_fs_cache()
-            thumbprint(components=selenium.name)
-            clear_fs_cache()
+            deploy_satchel.fake(components=selenium.name)
 
             # Confirm install succeeded.
             assert exists(selenium.geckodriver_path)
@@ -45,12 +43,10 @@ class SeleniumTests(TestCase):
             print('-'*80)
             print('Applying change...')
             selenium.configure()
-            clear_fs_cache()
-            delete_plan_data_dir()
+            deploy_satchel.purge()
             print('-'*80)
             print('Thumbprinting...')
-            thumbprint(components=selenium.name)
-            clear_fs_cache()
+            deploy_satchel.fake(components=selenium.name)
             print('-'*80)
 
             # Confirm the most recent version was installed.

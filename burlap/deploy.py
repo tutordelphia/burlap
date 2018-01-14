@@ -13,7 +13,7 @@ from burlap import ContainerSatchel
 from burlap.constants import *
 from burlap.decorators import task
 from burlap.common import manifest_recorder, success_str, manifest_deployers_befores, topological_sort, resolve_deployer, \
-    manifest_deployers_takes_diff, manifest_deployers
+    manifest_deployers_takes_diff, manifest_deployers, str_to_component_list
 from burlap import exceptions
 
 def iter_dict_differences(a, b):
@@ -26,12 +26,6 @@ def iter_dict_differences(a, b):
         b_value = b.get(k)
         if a_value != b_value:
             yield k, (a_value, b_value)
-
-def str_to_list(s):
-    """
-    Converts a string of comma delimited values and returns a list.
-    """
-    return [_.strip().lower() for _ in (s or '').split(',') if _.strip()]
 
 def get_component_order(component_names):
     """
@@ -78,8 +72,10 @@ class DeploySatchel(ContainerSatchel):
     name = 'deploy'
 
     def set_defaults(self):
-        self.env.lockfile_path = '/var/lock/burlap_deploy.lock'
-        self.env.data_dir = '/var/local/burlap/deploy'
+        #self.env.lockfile_path = '/var/lock/burlap_deploy.lock'
+        #self.env.data_dir = '/var/local/burlap/deploy'
+        self.env.lockfile_path = '~/burlap/deploy.lock'
+        self.env.data_dir = '~/burlap'
         self._plan_funcs = None
 
     @task
@@ -88,7 +84,8 @@ class DeploySatchel(ContainerSatchel):
         Initializes the configuration files on the remote server.
         """
         r = self.local_renderer
-        r.sudo('mkdir -p {data_dir}; chown {user}:{user} {data_dir}')
+        #r.sudo('mkdir -p {data_dir}; chown {user}:{user} {data_dir}')
+        r.run_or_local('mkdir -p {data_dir}')
 
     @task
     def purge(self):
@@ -96,7 +93,7 @@ class DeploySatchel(ContainerSatchel):
         The opposite of init(). Completely removes any manifest records from the remote host.
         """
         r = self.local_renderer
-        r.sudo('[ -d {data_dir} ] && rm -Rf {data_dir} || true')
+        r.run_or_local('[ -d {data_dir} ] && rm -Rf {data_dir} || true')
 
     @property
     def manifest_filename(self):
@@ -120,15 +117,19 @@ class DeploySatchel(ContainerSatchel):
             }
 
         """
-        components = str_to_list(components)
+        components = str_to_component_list(components)
+        if self.verbose:
+            print('deploy.get_current_thumbprint.components:', components)
         manifest_data = {} # {component:data}
         for component_name, func in sorted(manifest_recorder.iteritems()):
+            self.vprint('Checking thumbprint for component %s...' % component_name)
             component_name = component_name.upper()
             component_name_lower = component_name.lower()
             if component_name_lower not in self.genv.services:
                 self.vprint('Skipping unused component:', component_name)
                 continue
             elif components and component_name_lower not in components:
+                self.vprint('Skipping non-matching component:', component_name)
                 continue
             try:
                 self.vprint('Retrieving manifest for %s...' % component_name)
@@ -153,7 +154,7 @@ class DeploySatchel(ContainerSatchel):
             }
 
         """
-        components = str_to_list(components)
+        components = str_to_component_list(components)
         tp_fn = self.manifest_filename
         tp_text = None
         if self.file_exists(tp_fn):
@@ -177,7 +178,7 @@ class DeploySatchel(ContainerSatchel):
         if self.file_exists(r.env.lockfile_path):
             raise exceptions.AbortDeployment('Lock file %s exists. Perhaps another deployment is currently underway?' % r.env.lockfile_path)
         else:
-            r.sudo('touch {lockfile_path}')
+            r.run_or_local('touch {lockfile_path}')
 
     @task
     def unlock(self):
@@ -186,19 +187,40 @@ class DeploySatchel(ContainerSatchel):
         """
         r = self.local_renderer
         if self.file_exists(r.env.lockfile_path):
-            r.sudo('rm -f {lockfile_path}')
+            r.run_or_local('rm -f {lockfile_path}')
 
     @task
-    def fake(self):
+    def fake(self, components=None):#, set_satchels=None):
         """
         Update the thumbprint on the remote server but execute no satchel configurators.
+
+        components = A comma-delimited list of satchel names to limit the fake deployment to.
+        set_satchels = A semi-colon delimited list of key-value pairs to set in satchels before recording a fake deployment.
         """
+
+        #if set_satchels:
+            #from burlap.debug import debug
+            #parts = set_satchels.split(';')
+            #for part in parts:
+                #print('part:', part)
+                #satchel_name, _key, _value = part.split('-')
+                #print('satchel_name, _key, _value:', satchel_name, _key, _value)
+                #debug.set_satchel_value(satchel_name, _key, _value)
+
         self.init()
-        tp = self.get_current_thumbprint()
-        tp_text = yaml.dump(tp)
+
+        # In cases where we only want to fake deployment of a specific satchel, then simply copy the last thumbprint and overwrite with a subset
+        # of the current thumbprint filtered by our target components.
+        if components:
+            current_tp = self.get_previous_thumbprint() or {}
+            current_tp.update(self.get_current_thumbprint(components=components) or {})
+        else:
+            current_tp = self.get_current_thumbprint(components=components) or {}
+
+        tp_text = yaml.dump(current_tp)
         r = self.local_renderer
         r.upload_content(content=tp_text, fn=self.manifest_filename)
-        r.sudo('chown {user}:{user} "%s"' % self.manifest_filename)
+        #r.sudo('chown {user}:{user} "%s"' % self.manifest_filename)
 
     def get_component_funcs(self, components=None):
         """
@@ -215,7 +237,13 @@ class DeploySatchel(ContainerSatchel):
             pprint(previous_tp, indent=4)
 
         differences = list(iter_dict_differences(current_tp, previous_tp))
+        if self.verbose:
+            print('Differences:')
+            pprint(differences, indent=4)
         component_order = get_component_order([k for k, (_, _) in differences])
+        if self.verbose:
+            print('component_order:')
+            pprint(component_order, indent=4)
         plan_funcs = list(get_deploy_funcs(component_order, current_tp, previous_tp))
 
         return component_order, plan_funcs
@@ -274,7 +302,7 @@ class DeploySatchel(ContainerSatchel):
             for func_name, plan_func in plan_funcs:
                 print('Executing %s...' % func_name)
                 plan_func()
-            self.fake()
+            self.fake(components=components)
             service.post_deploy()
             notifier.notify_post_deployment()
 

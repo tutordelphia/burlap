@@ -328,6 +328,26 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
 
         return func
 
+def str_to_list(s):
+    """
+    Converts a string of comma delimited values and returns a list.
+    """
+    if s is None:
+        return []
+    elif isinstance(s, (tuple, list)):
+        return s
+    elif not isinstance(s, basestring):
+        raise NotImplementedError('Unknown type: %s' % type(s))
+    return [_.strip().lower() for _ in (s or '').split(',') if _.strip()]
+
+def clean_service_name(name):
+    name = (name or '').strip().lower()
+    return name
+
+def str_to_component_list(s):
+    lst = [clean_service_name(name) for name in str_to_list(s)]
+    return lst
+
 def add_deployer(event, func, before=None, after=None, takes_diff=False):
 
     before = before or []
@@ -960,17 +980,10 @@ class Satchel(object):
 
     @property
     def is_selected(self):
-#         print('self.genv.services:', self.genv.services)
-#         print('self.name.lower():', self.name.lower())
         return self.name.lower() in self.genv.services
 
     def get_satchel(self, name):
-#         try:
         return get_satchel(name)
-#         except KeyError:
-#             module = importlib.import_module("burlap.%s" % name)
-#             if hasattr(module, name):
-#                 return getattr(module, name)
 
     def define_cron_job(self, template, script_path, command=None, name='default', perms='600'):
         if 'cron' not in self.env:
@@ -1847,6 +1860,8 @@ def files_exists_or_dryrun(path, *args, **kwargs):
 #         return False
 #     else:
     from fabric.contrib.files import exists
+    if env.host_string in LOCALHOSTS:
+        return os.path.exists(path)
     return exists(path, *args, **kwargs)
 
 def write_temp_file_or_dryrun(content, *args, **kwargs):
@@ -2463,6 +2478,13 @@ def get_packager():
     set_rc('common_packager', common_packager)
     return common_packager
 
+def _run_or_local(cmd):
+    if env.host_string in LOCALHOSTS:
+        ret = _local(cmd, capture=True)
+    else:
+        ret = _run(cmd)
+    return ret
+
 def get_os_version():
     """
     Returns a named tuple describing the operating system on the remote host.
@@ -2479,21 +2501,21 @@ def get_os_version():
     with settings(warn_only=True):
         with hide('running', 'stdout', 'stderr', 'warnings'):
 
-            ret = _run('cat /etc/lsb-release')
+            ret = _run_or_local('cat /etc/lsb-release')
             if ret.succeeded:
                 return OS(
                     type=LINUX,
                     distro=UBUNTU,
                     release=re.findall(r'DISTRIB_RELEASE=([0-9\.]+)', ret)[0])
 
-            ret = _run('cat /etc/debian_version')
+            ret = _run_or_local('cat /etc/debian_version')
             if ret.succeeded:
                 return OS(
                     type=LINUX,
                     distro=DEBIAN,
                     release=re.findall(r'([0-9\.]+)', ret)[0])
 
-            ret = _run('cat /etc/fedora-release')
+            ret = _run_or_local('cat /etc/fedora-release')
             if ret.succeeded:
                 return OS(
                     type=LINUX,
@@ -2741,9 +2763,16 @@ def get_current_hostname():
 #        translator = getattr(importlib.import_module(module_name), func_name)
     #ret = run_or_dryrun('hostname')#)
 
+    if not env.host_string:
+        env.host_string = LOCALHOST_NAME
+
     if env.host_string not in env[key]:
         with hide('running', 'stdout', 'stderr', 'warnings'):
-            ret = _run('hostname')
+            print('Retrieving hostname...')
+            if env.host_string in LOCALHOSTS:
+                ret = _local('hostname', capture=True)
+            else:
+                ret = _run('hostname')
         env[key][env.host_string] = str(ret).strip()
 
     return env[key][env.host_string]
