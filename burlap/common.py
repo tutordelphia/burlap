@@ -2667,7 +2667,9 @@ def write_to_file(content, fn=None, **kwargs):
 
 def upload_content(content, fn, **kwargs):
     tmp_fn = write_to_file(content=content, **kwargs)
-    put_or_dryrun(local_path=tmp_fn, remote_path=fn, use_sudo=True)
+    print('upload_content.host_string:', env.host_string)
+    use_sudo = kwargs.pop('use_sudo', env.host_string not in LOCALHOSTS)
+    put_or_dryrun(local_path=tmp_fn, remote_path=fn, use_sudo=use_sudo)
 
 def set_site(site):
     if site is None:
