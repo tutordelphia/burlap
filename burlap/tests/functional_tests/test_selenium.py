@@ -22,16 +22,19 @@ class SeleniumTests(TestCase):
             selenium.clear_caches()
 
             print('Enabling selenium/gecko to install and track old version.')
+            print('selenium._last_manifest.1:', selenium._last_manifest)
             selenium.env.enabled = True
             selenium.env.geckodriver_version = '0.13.0'
             selenium.clear_local_renderer()
             assert selenium.get_target_geckodriver_version_number() == '0.13.0'
             print('Configuring selenium...')
             selenium.configure()
+            print('selenium._last_manifest.2:', selenium._last_manifest)
             print('Writing manifest...')
             deploy_satchel.fake(components=selenium.name)
+            print('selenium._last_manifest.3:', selenium._last_manifest)
 
-            # Confirm install succeeded.
+            print('Confirming install succeeded...')
             assert exists(selenium.geckodriver_path)
             assert not selenium.check_for_change()
             output = selenium.run('geckodriver --version')
@@ -39,7 +42,7 @@ class SeleniumTests(TestCase):
             expected_version = selenium.env.geckodriver_version
             assert expected_version in output
 
-            # Update configuration to track the most recent version.
+            print('Updating configuration to track the most recent version...')
             selenium.env.geckodriver_version = None
             selenium.clear_local_renderer()
             assert selenium.get_target_geckodriver_version_number() != '0.13.0'
@@ -57,7 +60,7 @@ class SeleniumTests(TestCase):
             deploy_satchel.fake(components=selenium.name)
             print('-'*80)
 
-            # Confirm the most recent version was installed.
+            print('Confirming the most recent version was installed...')
             expected_version = selenium.get_most_recent_version()
             selenium.clear_caches()
             assert selenium.last_manifest.fingerprint == expected_version
