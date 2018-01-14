@@ -1,4 +1,9 @@
+"""
+Run specific tests like:
 
+    tox -c tox-full.ini -e py27-ubuntu_16_04_64 -- -s burlap/tests/functional_tests/test_selenium.py::SeleniumTests::test_selenium
+
+"""
 from fabric.contrib.files import exists
 
 from burlap.common import set_verbose
@@ -21,13 +26,16 @@ class SeleniumTests(TestCase):
             selenium.env.geckodriver_version = '0.13.0'
             selenium.clear_local_renderer()
             assert selenium.get_target_geckodriver_version_number() == '0.13.0'
+            print('Configuring selenium...')
             selenium.configure()
+            print('Writing manifest...')
             deploy_satchel.fake(components=selenium.name)
 
             # Confirm install succeeded.
             assert exists(selenium.geckodriver_path)
             assert not selenium.check_for_change()
             output = selenium.run('geckodriver --version')
+            print('Geckodriver version:', output)
             expected_version = selenium.env.geckodriver_version
             assert expected_version in output
 

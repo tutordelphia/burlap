@@ -13,7 +13,7 @@ from burlap import ContainerSatchel
 from burlap.constants import *
 from burlap.decorators import task
 from burlap.common import manifest_recorder, success_str, manifest_deployers_befores, topological_sort, resolve_deployer, \
-    manifest_deployers_takes_diff, manifest_deployers, str_to_component_list
+    manifest_deployers_takes_diff, manifest_deployers, str_to_component_list, assert_valid_satchel, clean_service_name
 from burlap import exceptions
 
 def iter_dict_differences(a, b):
@@ -123,17 +123,19 @@ class DeploySatchel(ContainerSatchel):
         manifest_data = {} # {component:data}
         for component_name, func in sorted(manifest_recorder.iteritems()):
             self.vprint('Checking thumbprint for component %s...' % component_name)
-            component_name = component_name.upper()
-            component_name_lower = component_name.lower()
-            if component_name_lower not in self.genv.services:
+            manifest_key = assert_valid_satchel(component_name)
+            service_name = clean_service_name(component_name)
+            if service_name not in self.genv.services:
                 self.vprint('Skipping unused component:', component_name)
                 continue
-            elif components and component_name_lower not in components:
+            elif components and service_name not in components:
                 self.vprint('Skipping non-matching component:', component_name)
                 continue
             try:
                 self.vprint('Retrieving manifest for %s...' % component_name)
-                manifest_data[component_name] = func()
+                manifest_data[manifest_key] = func()
+                if self.verbose:
+                    pprint(manifest_data[manifest_key], indent=4)
             except exceptions.AbortDeployment as e:
                 raise
             #except Exception as e:
@@ -164,9 +166,11 @@ class DeploySatchel(ContainerSatchel):
             manifest_data = {}
             raw_data = yaml.load(tp_text)
             for k, v in raw_data.items():
-                if components and k not in components:
+                manifest_key = assert_valid_satchel(k)
+                service_name = clean_service_name(k)
+                if components and service_name not in components:
                     continue
-                manifest_data[k] = v
+                manifest_data[manifest_key] = v
             return manifest_data
 
     @task

@@ -340,6 +340,11 @@ def str_to_list(s):
         raise NotImplementedError('Unknown type: %s' % type(s))
     return [_.strip().lower() for _ in (s or '').split(',') if _.strip()]
 
+def assert_valid_satchel(name):
+    name = name.strip().upper()
+    assert name in all_satchels
+    return name
+
 def clean_service_name(name):
     name = (name or '').strip().lower()
     return name
@@ -440,11 +445,6 @@ class _EnvProxy(object):
         if k in ('satchel',):
             return super(_EnvProxy, self).__setattr__(k, v)
         env[self.satchel.env_prefix + k] = v
-
-def assert_valid_satchel(name):
-    name = name.strip().upper()
-    assert name in all_satchels
-    return name
 
 def is_local():
     env.is_local = env.host_string in ('localhost', '127.0.0.1')
