@@ -56,7 +56,7 @@ before_script:
 
 script:
 -   set -e
--   ./pep8.sh
--   tox -c tox-travis.ini -e py27
+#-   ./pep8.sh
+#-   tox -c tox-travis.ini -e py27
 #-   tox -c tox-travis.ini -e py27 -- -s burlap/tests/functional_tests/test_js.py::JSTests::test_jshint
-#-   tox -c tox-travis.ini -e py27 -- -s burlap/tests/functional_tests/test_selenium.py::SeleniumTests::test_selenium
+-   tox -c tox-travis.ini -e py27 -- -s burlap/tests/functional_tests/test_selenium.py::SeleniumTests
