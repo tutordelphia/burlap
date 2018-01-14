@@ -71,7 +71,7 @@ class JiraHelperSatchel(ContainerSatchel):
         Finds all ticket numbers and updates their status in Jira.
         """
         from jira import JIRA, JIRAError
-        from burlap.deploy import get_last_current_diffs
+        #from burlap.deploy import get_last_current_diffs
         from burlap.git import gittracker, CURRENT_COMMIT
 
         r = self.local_renderer

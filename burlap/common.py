@@ -328,6 +328,31 @@ def add_class_methods_as_module_level_functions_for_fabric(instance, module_name
 
         return func
 
+def str_to_list(s):
+    """
+    Converts a string of comma delimited values and returns a list.
+    """
+    if s is None:
+        return []
+    elif isinstance(s, (tuple, list)):
+        return s
+    elif not isinstance(s, basestring):
+        raise NotImplementedError('Unknown type: %s' % type(s))
+    return [_.strip().lower() for _ in (s or '').split(',') if _.strip()]
+
+def assert_valid_satchel(name):
+    name = name.strip().upper()
+    assert name in all_satchels
+    return name
+
+def clean_service_name(name):
+    name = (name or '').strip().lower()
+    return name
+
+def str_to_component_list(s):
+    lst = [clean_service_name(name) for name in str_to_list(s)]
+    return lst
+
 def add_deployer(event, func, before=None, after=None, takes_diff=False):
 
     before = before or []
@@ -351,7 +376,6 @@ def add_deployer(event, func, before=None, after=None, takes_diff=False):
     manifest_deployers_takes_diff[func] = takes_diff
 
 def resolve_deployer(func_name):
-    print('resolve deployer:', func_name)
 
     if '.' in func_name:
         mod_name, func_name = func_name.split('.')
@@ -421,11 +445,6 @@ class _EnvProxy(object):
         if k in ('satchel',):
             return super(_EnvProxy, self).__setattr__(k, v)
         env[self.satchel.env_prefix + k] = v
-
-def assert_valid_satchel(name):
-    name = name.strip().upper()
-    assert name in all_satchels
-    return name
 
 def is_local():
     env.is_local = env.host_string in ('localhost', '127.0.0.1')
@@ -695,6 +714,12 @@ def reset_all_satchels():
     for name, satchel in all_satchels.items():
         satchel.clear_caches()
 
+def is_callable(obj, name):
+    """
+    A version of callable() that doesn't execute properties when doing the test for callability.
+    """
+    return callable(getattr(obj.__class__, name, None))
+
 class Satchel(object):
     """
     Represents a base unit of functionality that is deployed and maintained on one
@@ -804,6 +829,14 @@ class Satchel(object):
         if _key not in env:
             env[_key] = True
             self.set_defaults()
+
+    @staticmethod
+    def reset_all_satchels():
+        reset_all_satchels()
+
+    @staticmethod
+    def is_callable(*args, **kwargs):
+        return is_callable(*args, **kwargs)
 
     def clear_caches(self):
         self._local_renderer = None
@@ -961,17 +994,10 @@ class Satchel(object):
 
     @property
     def is_selected(self):
-#         print('self.genv.services:', self.genv.services)
-#         print('self.name.lower():', self.name.lower())
         return self.name.lower() in self.genv.services
 
     def get_satchel(self, name):
-#         try:
         return get_satchel(name)
-#         except KeyError:
-#             module = importlib.import_module("burlap.%s" % name)
-#             if hasattr(module, name):
-#                 return getattr(module, name)
 
     def define_cron_job(self, template, script_path, command=None, name='default', perms='600'):
         if 'cron' not in self.env:
@@ -1101,6 +1127,9 @@ class Satchel(object):
 
     def write_to_file(self, *args, **kwargs):
         return write_to_file(*args, **kwargs)
+
+    def upload_content(self, *args, **kwargs):
+        return upload_content(*args, **kwargs)
 
     def find_template(self, template):
         return find_template(template)
@@ -1845,6 +1874,8 @@ def files_exists_or_dryrun(path, *args, **kwargs):
 #         return False
 #     else:
     from fabric.contrib.files import exists
+    if env.host_string in LOCALHOSTS:
+        return os.path.exists(path)
     return exists(path, *args, **kwargs)
 
 def write_temp_file_or_dryrun(content, *args, **kwargs):
@@ -1920,8 +1951,9 @@ def run_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
+    cmd = args[0] if args else ''
+    assert cmd, 'No command specified.'
     if dryrun:
-        cmd = args[0]
         if BURLAP_COMMAND_PREFIX:
             print('%s run: %s' % (render_command_prefix(), cmd))
         else:
@@ -2461,6 +2493,13 @@ def get_packager():
     set_rc('common_packager', common_packager)
     return common_packager
 
+def _run_or_local(cmd):
+    if env.host_string in LOCALHOSTS:
+        ret = _local(cmd, capture=True)
+    else:
+        ret = _run(cmd)
+    return ret
+
 def get_os_version():
     """
     Returns a named tuple describing the operating system on the remote host.
@@ -2477,21 +2516,21 @@ def get_os_version():
     with settings(warn_only=True):
         with hide('running', 'stdout', 'stderr', 'warnings'):
 
-            ret = _run('cat /etc/lsb-release')
+            ret = _run_or_local('cat /etc/lsb-release')
             if ret.succeeded:
                 return OS(
                     type=LINUX,
                     distro=UBUNTU,
                     release=re.findall(r'DISTRIB_RELEASE=([0-9\.]+)', ret)[0])
 
-            ret = _run('cat /etc/debian_version')
+            ret = _run_or_local('cat /etc/debian_version')
             if ret.succeeded:
                 return OS(
                     type=LINUX,
                     distro=DEBIAN,
                     release=re.findall(r'([0-9\.]+)', ret)[0])
 
-            ret = _run('cat /etc/fedora-release')
+            ret = _run_or_local('cat /etc/fedora-release')
             if ret.succeeded:
                 return OS(
                     type=LINUX,
@@ -2620,7 +2659,7 @@ def install_script(*args, **kwargs):
     sudo_or_dryrun('chmod +x %s' % env.put_remote_path)
 
 def write_to_file(content, fn=None, **kwargs):
-    import tempfile
+
     dryrun = get_dryrun(kwargs.get('dryrun'))
 
     if not fn:
@@ -2640,6 +2679,11 @@ def write_to_file(content, fn=None, **kwargs):
         fout.write(content)
         fout.close()
     return fn
+
+def upload_content(content, fn, **kwargs):
+    tmp_fn = write_to_file(content=content, **kwargs)
+    use_sudo = kwargs.pop('use_sudo', env.host_string not in LOCALHOSTS)
+    put_or_dryrun(local_path=tmp_fn, remote_path=fn, use_sudo=use_sudo)
 
 def set_site(site):
     if site is None:
@@ -2735,9 +2779,16 @@ def get_current_hostname():
 #        translator = getattr(importlib.import_module(module_name), func_name)
     #ret = run_or_dryrun('hostname')#)
 
+    if not env.host_string:
+        env.host_string = LOCALHOST_NAME
+
     if env.host_string not in env[key]:
         with hide('running', 'stdout', 'stderr', 'warnings'):
-            ret = _run('hostname')
+            print('Retrieving hostname...')
+            if env.host_string in LOCALHOSTS:
+                ret = _local('hostname', capture=True)
+            else:
+                ret = _run('hostname')
         env[key][env.host_string] = str(ret).strip()
 
     return env[key][env.host_string]

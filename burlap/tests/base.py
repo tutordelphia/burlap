@@ -6,8 +6,9 @@ import unittest
 from commands import getstatusoutput
 # from pprint import pprint
 
-from burlap.common import set_state, get_state, clear_state, init_env, default_env, env, all_satchels, get_dryrun, set_dryrun, get_verbose, set_verbose
-from burlap.deploy import init_env as deploy_init_env, delete_plan_data_dir, clear_fs_cache
+from burlap.common import set_state, get_state, clear_state, init_env, default_env, env, all_satchels, get_dryrun, set_dryrun, get_verbose, set_verbose, \
+    is_callable
+#from burlap.deploy import init_env as deploy_init_env, delete_plan_data_dir, clear_fs_cache
 
 def clear_runs_once(func):
     if hasattr(func, 'return_value'):
@@ -61,6 +62,9 @@ class TestCase(unittest.TestCase):
             env[k] = v
 
     def setUp(self):
+        from burlap import deploy, manifest
+        from burlap.deploy import deploy as deploy_satchel
+
         # Always print the current test name before the test.
         rows, columns = map(int, os.popen('stty size', 'r').read().split())
         kwargs = dict(
@@ -77,47 +81,68 @@ class TestCase(unittest.TestCase):
         # Reset fabric state.
         #self.clear_env()
         #self.update_env(default_env)
+        print('setUp: initializing env...')
         init_env()
-        deploy_init_env()
+        #deploy_init_env()
+
+        if not env.host_string:
+            env.host_string = 'localhost'
+            env.hosts = [env.host_string]
 
         # Save cwd.
         self._cwd = os.getcwd()
         print('cwd:', self._cwd)
 
         # Save burlap state.
+        print('setUp: Saving burlap state...')
         self._burlap_state = get_state()
 
         self._dryrun = get_dryrun()
         self._verbose = get_verbose()
 
         # Clear runs_once on legacy runs_once methods.
-        from burlap import deploy, manifest
-        modules = [deploy, manifest]
+        print('setUp: Clearing runs_once methods...')
+        modules = [deploy, deploy_satchel, manifest]
         for module in modules:
+            print('setUp: Checking module:', module)
             for name in dir(module):
-                func = getattr(module, name)
-                if not callable(func):
+                print('setUp: Checking name:', name)
+                #func = getattr(module, name)
+                #if not callable(func):
+                if not is_callable(module, name):
                     continue
+                func = getattr(module, name)
+                print('clearing:', func)
                 clear_runs_once(func)
 
         # Clear runs_once on our custom runs_once methods.
+        print('setUp: Clearing custom runs_once methods...')
         from burlap.common import runs_once_methods
         for meth in runs_once_methods:
             clear_runs_once(func)
 
         # Ensure all satchels re-push all their local variables back into the global env.
+        print('setUp: Clearing satchels...')
         for satchel in all_satchels.values():
             satchel.register()
             satchel.clear_caches()
+
+        # Set satchel variables that should be customized just for unittests.
+        # For example, so we can run unittests locally, we want to change the default burlap paths so they don't conflict with the defaults,
+        # in case we're using burlap to deploy locally.
+        deploy_satchel.env.lockfile_path = '/tmp/burlap_unittests/deploy.lock'
+        deploy_satchel.env.data_dir = '/tmp/burlap_unittests'
 
         # Since these tests are automated, if we ever get a prompt, we should immediately fail,
         # because no action should ever be user-interactive.
         env.abort_on_prompts = True
         env.always_use_pty = False
 
-        delete_plan_data_dir()
+        print('setUp: Purging deployments...')
+        #delete_plan_data_dir()
+        deploy_satchel.purge()
 
-        clear_fs_cache()
+        #clear_fs_cache()
 
         super(TestCase, self).setUp()
 

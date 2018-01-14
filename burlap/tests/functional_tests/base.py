@@ -1,7 +1,7 @@
 from commands import getstatusoutput
 
 from burlap.tests.base import TestCase as _TestCase
-from burlap.deploy import thumbprint, clear_fs_cache, delete_plan_data_dir
+from burlap.deploy import deploy as deploy_satchel #thumbprint, clear_fs_cache, delete_plan_data_dir
 
 class TestCase(_TestCase):
 
@@ -25,7 +25,5 @@ class TestCase(_TestCase):
         return getstatusoutput(s)
 
     def thumbprint(self, components=None):
-        clear_fs_cache()
-        delete_plan_data_dir()
-        thumbprint(components=components)
-        clear_fs_cache()
+        deploy_satchel.purge()
+        deploy_satchel.fake(components=components)

@@ -1,1227 +1,319 @@
 from __future__ import print_function
 
-import os
-import re
 import sys
-import datetime
-import tempfile
-import json
-import functools
-import traceback
-import shutil
-from collections import defaultdict
 from pprint import pprint
+from functools import partial
+from StringIO import StringIO
 
 import yaml
 
-from fabric.api import env, sudo as _sudo, get as _get
-import fabric.contrib.files
-import fabric.api
+from fabric.api import execute, get
 
-from burlap import common
-from burlap.common import (
-    local_or_dryrun,
-    put_or_dryrun,
-    sudo_or_dryrun,
-    fail_str,
-    success_str,
-    get_current_hostname,
-)
-from burlap.decorators import task_or_dryrun, runs_once
+from burlap import ContainerSatchel
+from burlap.constants import *
+from burlap.decorators import task
+from burlap.common import manifest_recorder, success_str, manifest_deployers_befores, topological_sort, resolve_deployer, \
+    manifest_deployers_takes_diff, manifest_deployers, str_to_component_list, assert_valid_satchel, clean_service_name
 from burlap import exceptions
-from burlap.constants import LOCALHOSTS, STORAGE_LOCAL, STORAGE_REMOTE
 
-default_remote_path = '/var/local/burlap'
-
-def init_env():
-    env.plan_init = True
-    env.plan_root = None
-    env.plan_originals = {}
-    env.plan_storage = STORAGE_LOCAL
-    env.plan_lockfile_path = '/var/lock/burlap_deploy.lock'
-    env.plan = None
-    env.plan_data_dir = '%(burlap_data_dir)s/plans'
-    env.plan_digits = 3
-    env.plan_auto_truncate = True
-
-# Prevent globals from being reset by duplicate imports.
-if 'plan_init' not in env:
-    init_env()
-
-_originals = env.plan_originals
-
-RUN = 'run'
-SUDO = 'sudo'
-LOCAL = 'local'
-PUT = 'put'
-PLAN_METHODS = [RUN, SUDO, LOCAL, PUT]
-
-INITIAL = 'initial'
-
-_fs_cache = defaultdict(dict) # {func_name:{path:ret}}
-
-def clear_fs_cache():
-    _fs_cache.clear()
-    RemoteFile._file_cache.clear()
-
-def make_dir(d):
-    if d not in _fs_cache['make_dir']:
-        if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
-            sudo_or_dryrun('mkdir -p "{directory}"; chown {user}:{user} "{directory}"'.format(directory=d, user=env.user))
-        else:
-            if not os.path.isdir(d):
-                os.makedirs(d)
-        _fs_cache['make_dir'][d] = True
-    return _fs_cache['make_dir'][d]
-
-@task_or_dryrun
-def list_dir(d):
-    #print('list_dir.existing:', d, _fs_cache['list_dir'].get(d))
-    if d not in _fs_cache['list_dir']:
-        verbose = common.get_verbose()
-        if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
-            #print('listing remote path:', d)
-            #output = sudo_or_dryrun('ls "%s"' % d)
-            output = _sudo('ls "%s"' % d)
-            output = output.split()
-            if verbose:
-                print('output:', output)
-            ret = output
-        else:
-            #print('listing local path:', d)
-            ret = os.listdir(d)
-        _fs_cache['list_dir'][d] = ret
-    return _fs_cache['list_dir'][d]
-
-@task_or_dryrun
-def is_dir(d):
-    if d not in _fs_cache['is_dir']:
-        verbose = common.get_verbose()
-        if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
-            cmd = 'if [ -d "%s" ]; then echo 1; else echo 0; fi' % d
-            output = _sudo(cmd)
-            if verbose:
-                print('output:', output)
-            #ret = int(output)
-            ret = int(re.findall(r'^[0-9]+$', output, flags=re.DOTALL|re.I|re.M)[0])
-        else:
-            ret = os.path.isdir(d)
-        _fs_cache['is_dir'][d] = ret
-    return _fs_cache['is_dir'][d]
-
-@task_or_dryrun
-def is_file(fqfn):
-    if fqfn not in _fs_cache['is_file']:
-        verbose = common.get_verbose()
-        if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
-            cmd = 'if [ -f "%s" ]; then echo 1; else echo 0; fi' % fqfn
-            output = _sudo(cmd)
-            if verbose:
-                print('output:', output)
-            ret = int(re.findall(r'^[0-9]+$', output, flags=re.DOTALL|re.I|re.M)[0])
-        else:
-            ret = os.path.isfile(fqfn)
-        _fs_cache['is_file'][fqfn] = ret
-    return _fs_cache['is_file'][fqfn]
-
-# class Singleton(type):
-#     def __init__(cls, name, bases, dict):
-#         print('singleton.init')
-#         super(Singleton, cls).__init__(name, bases, dict)
-#         cls.instance = None
-#
-#     def __call__(cls, *args, **kw):
-#         print('singleton.call')
-#         return super(Singleton, cls).__call__(*args, **kw)
-#         if cls.instance is None:
-#             cls.instance = super(Singleton, cls).__call__(*args, **kw)
-#         return cls.instance
-
-class RemoteFile(object):
+def iter_dict_differences(a, b):
     """
-    A helper class for allowing a remote file to be read and written locally
-    while still ultimately being saved remotely.
+    Returns a generator yielding all the keys that have values that differ between each dictionary.
     """
+    common_keys = set(a).union(b)
+    for k in common_keys:
+        a_value = a.get(k)
+        b_value = b.get(k)
+        if a_value != b_value:
+            yield k, (a_value, b_value)
 
-#     __metaclass__ = Singleton
-
-    _file_cache = {} # {fqfn, obj}
-
-    #TODO:use meta-class instead?
-    #http://stackoverflow.com/questions/31875/is-there-a-simple-elegant-way-to-define-singletons-in-python/33201#33201
-
-    def __new__(cls, fqfn, *args, **kwargs):
-        # Remember and cache every class instance per unique file name.
-        if fqfn not in cls._file_cache:
-            cls._file_cache[fqfn] = super(RemoteFile, cls).__new__(cls, fqfn, *args, **kwargs)
-        return cls._file_cache[fqfn]
-
-    def __init__(self, fqfn, mode='r'):
-        super(RemoteFile, self).__init__() # causes instantiation error?
-
-        assert mode in ('r', 'w', 'a'), 'Invalid mode: %s' % mode
-
-        self.mode = mode
-
-        # Due to the singleton-nature of __new__, this may be called multiple times,
-        # so we check for and avoid duplicate calls.
-        if not hasattr(self, 'fqfn'):
-
-            self.fqfn = fqfn
-            self.content = ''
-            self.fresh = True
-
-            if mode in 'ra':
-
-                _, tmp_fn = tempfile.mkstemp()
-                os.remove(tmp_fn)
-                ret = _get(remote_path=fqfn, local_path=tmp_fn, use_sudo=True)
-                #ret = get_or_dryrun(remote_path=fqfn, local_path=tmp_fn, use_sudo=True)
-#                 print('ret:', ret)
-                _fn = ret[0]
-#                 print('reading:', _fn)
-                fin = open(_fn, 'rb')
-#                 print('reading2:', _fn)
-                self.content = fin.read()
-#                 print('closing')
-                fin.close()
-                #print('removing:', tmp_fn)
-                os.remove(tmp_fn)#TODO:memory leak?
-#                 print('done init load')
-
-            if mode in 'wa':
-
-                # Update file system cache.
-                _fs_cache['is_file'][fqfn] = True
-
-#         print('done init all')
-
-    def write(self, s):
-        assert self.mode in 'wa', 'File must be in write-mode.'
-        self.content += s
-        self.fresh = False
-        # Note, flush() must to be called to actually write this.
-
-    def read(self, *args, **kwargs):
-        return self.content
-
-    def readlines(self):
-        return self.content.split('\n')
-
-    def flush(self):
-        if self.fresh:
-            return
-
-        print('Flushing contents to remote file.')
-        _, tmp_fn = tempfile.mkstemp()
-        os.remove(tmp_fn)
-        fout = open(tmp_fn, 'w')
-        #print('content:')
-        #print(self.content)
-        fout.write(self.content)
-        fout.close()
-        fqdir = os.path.split(self.fqfn)[0]
-        _sudo('mkdir -p %s' % fqdir)
-        put_or_dryrun(
-            local_path=tmp_fn,
-            remote_path=self.fqfn,
-            use_sudo=True)
-        os.remove(tmp_fn)#TODO:memory leak?
-        self.fresh = True
-
-        # Update file system cache.
-        _fs_cache['is_file'][self.fqfn] = True
-
-    def close(self):
-        print('Closing remote file.')
-        self.flush()
-
-def open_file(fqfn, mode='r'):
-    verbose = common.get_verbose()
-    if env.plan_storage == STORAGE_REMOTE and env.host_string not in LOCALHOSTS:
-        return RemoteFile(fqfn, mode)
-    return open(fqfn, mode)
-
-def get_plan_data_dir():
-    common.init_burlap_data_dir()
-    d = env.plan_data_dir % env
-    return d
-
-def init_plan_data_dir():
-    d = get_plan_data_dir()
-    make_dir(d)
-    return d
-
-def delete_plan_data_dir():
-    d = get_plan_data_dir()
-    if env.plan_storage == STORAGE_REMOTE and env.host_string:
-        _sudo('rm -Rf %s' % d)
-    elif env.plan_storage == STORAGE_LOCAL:
-        if os.path.isdir(d):
-            shutil.rmtree(d)
-
-class Colors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-def fail(s):
-    return Colors.FAIL + str(s) + Colors.ENDC
-
-def success(s):
-    return Colors.OKGREEN + str(s) + Colors.ENDC
-
-def ongoing(s):
-    return Colors.WARNING + str(s) + Colors.ENDC
-
-def iter_plan_names(role=None):
-    d = get_plan_dir(role=role)
-    #print('iter_plan_names.d:', d)
-    try:
-        assert is_dir(d), 'Plan directory %s does not exist.' % d
-    except AssertionError as e:
-        #print('iter_plan_names.e:', e)
-        if common.get_dryrun():
-            # During dryrun, and the directory is missing, assume the host has been reset
-            # and there are no prior plan files.
-            return
-        else:
-            raise
-    plan_subfolders = sorted(list_dir(d))
-    #print('iter_plan_names.subfolders:', plan_subfolders)
-    for name in plan_subfolders:
-        #print('iter_plan_names.name:', iter_plan_names)
-        fqfn = os.path.join(d, name)
-        if not is_dir(fqfn):
-            continue
-        yield name
-
-def get_thumbprint_path(role, name):
-    d = get_plan_dir(role=role, name=name)
-    d = os.path.join(d, 'thumbprints')
-    make_dir(d)
-    return d
-
-def get_thumbprint_filename():
-    return 'thumbprint'
-
-class Step(object):
+def get_component_order(component_names):
     """
-    A single piece of a plan.
+    Given a list of components, re-orders them according to inter-component dependencies so the most depended upon are first.
     """
-
-    def __init__(self, command, host, method, user=None, key=None, args=None, kwargs=None):
-
-        args = args or []
-        kargs = kwargs or {}
-
-        self.command = command
-        self.host = host
-        self.user = user
-        self.method = method
-
-        assert method in PLAN_METHODS
-
-        self.key = key
-        # The value entity attributes are set to as a result
-        # of executing this step.
-        self.args = args
-        self.kwargs = kwargs
-
-    @classmethod
-    def from_line(cls, line):
-        matches = re.findall(
-            r'\[(?P<user>[^@]+)@(?P<host>[^\]]+)(?P<extra>{[^}]+})?]\s+(?P<method>[^\:]+):\s+(?P<command>.*?)$',
-            line, flags=re.I|re.DOTALL)
-        assert matches
-        #print(matches)
-        kwargs = dict(zip(['user', 'host', 'extra', 'method', 'command'], matches[0]))
-
-        extra = {}
-        if kwargs['extra']:
-            extra = json.loads(kwargs['extra'])
-        del kwargs['extra']
-
-        if 'key' in extra:
-            key = extra['key']
-            del extra['key']
-            kwargs['key'] = key
-
-        step = Step(**kwargs)
-        return step
-
-    def execute(self):
-        method = getattr(common, '%s_or_dryrun' % self.method)
-        env.user = self.user
-        env.host_string = self.host
-        if self.key:
-            env.key_filename = self.key
-        else:
-            env.key_filename = None
-        method(self.command)
-
-    def __str__(self):
-        user_str = '%s@' % (self.user) if self.user else ''
-        return '[%s%s] %s %s' % (
-            user_str,
-            self.host,
-            self.method+':',
-            self.command,
-        )
-
-    def __repr__(self):
-        return str(self.__dict__)
-
-HISTORY_HEADERS = ['step', 'start', 'end']
-
-def get_plan_dir(role=None, name=None):
-    role = role or env.ROLE
-    assert role, 'No role defined.'
-    if name:
-        d = os.path.join(init_plan_data_dir(), role, name)
-    else:
-        d = os.path.join(init_plan_data_dir(), role)
-
-    if env.plan_storage == STORAGE_REMOTE and not d.startswith('/'):
-        d = '/home/%s/%s' % (env.user, d)
-
-    make_dir(d)
-    return d
-
-class Plan(object):
-    """
-    A sequence of steps for accomplishing a state change.
-    """
-
-    def __init__(self, name, role=None):
-
-        self.verbose = verbose = common.get_verbose()
-
-        self.name = name
-
-        self.role = role or env.ROLE
-
-        self.vprint('Using plan storage type:', env.plan_storage)
-        self.vprint('init plan dir')
-        self.plan_dir = get_plan_dir(role, name)
-        self.vprint('Using plan_dir:', self.plan_dir)
-        make_dir(self.plan_dir)
-        assert is_dir(self.plan_dir)
-
-        self.vprint('init plan history dir')
-        self.plan_dir_history = os.path.join(self.plan_dir, 'history')
-        if not is_file(self.plan_dir_history):
-            fout = open_file(self.plan_dir_history, 'w')
-            fout.write(','.join(HISTORY_HEADERS))
-            fout.close()
-        self.vprint('loading plan history')
-
-        self.load_history()
-
-        self.vprint('init plan index')
-        self.plan_dir_index = os.path.join(self.plan_dir, 'index')
-        if not is_file(self.plan_dir_index):
-            fout = open_file(self.plan_dir_index, 'w')
-            fout.write(str(0))
-            fout.close()
-        self.vprint('loading plan index')
-        self.load_index()
-
-        self.vprint('init plan steps')
-        self.plan_dir_steps = os.path.join(self.plan_dir, 'steps')
-        if not is_file(self.plan_dir_steps):
-            fout = open_file(self.plan_dir_steps, 'w')
-            fout.write('')
-            fout.close()
-        self.vprint('loading plan steps')
-        self.load_steps()
-
-        self.vprint('init plan hosts')
-        self.plan_dir_hosts = os.path.join(self.plan_dir, 'hosts')
-        if self.role == env.ROLE and not is_file(self.plan_dir_hosts):
-            fout = open_file(self.plan_dir_hosts, 'w')
-            fout.write('\n'.join(sorted(env.hosts)))
-            fout.close()
-        self.vprint('loading plan hosts')
-        self.load_hosts()
-
-        #self.plan_thumbprint_fn = os.path.join(self.plan_dir, 'thumbprint')
-
-        self.vprint('plan init done')
-
-    def vprint(self, *args, **kwargs):
-        """
-        When verbose is set, acts like the normal print() function.
-        Otherwise, does nothing.
-        """
-        if common.get_verbose():
-            print(*args, **kwargs)
-
-    def __cmp__(self, other):
-        if not isinstance(other, Plan):
-            return NotImplemented
-        return cmp((self.name, self.role), (other.name, other.role))
-
-    def __unicode__(self):
-        return unicode(self.name)
-
-    def __repr__(self):
-        return u'<%s: %s>' % (type(self).__name__, unicode(self))
-
-    def is_complete(self):
-        #return self.percent_complete == 100
-        return self.all_hosts_thumbprinted and self.index == len(self._steps)
-
-    @property
-    def number(self):
-        try:
-            return int(re.findall('^[0-9]+', self.name)[0])
-        except IndexError:
-            #print('No number in "%s"' % self.name
-            return 0
-
-    def failed(self):
-        return False #TODO
-
-    def load_hosts(self):
-        self.hosts = []
-        if self.verbose: print('Loading hosts, opening from %s' % self.plan_dir_hosts)
-        fin = open_file(self.plan_dir_hosts, 'r')
-        if self.verbose: print('loading hosts, readlines')
-        lines = fin.readlines()
-        if self.verbose: print('loading hosts, lines:', lines)
-        for line in lines:
-            if not line.strip():
-                continue
-            self.hosts.append(line.strip())
-        if self.verbose: print('loading hosts, done')
-
-    @property
-    def all_hosts_thumbprinted(self):
-        for host in self.hosts:
-            fn = self.get_thumbprint_filename(host)
-            if not is_file(fn):
-                return False
-        return True
-
-    def load_history(self):
-        pass
-
-    def get_thumbprint_filename(self, host_string):
-        d = os.path.join(self.plan_dir, 'thumbprints')
-        make_dir(d)
-        fn = os.path.join(d, env.host_string)
-        return fn
-
-    @property
-    def thumbprint(self):
-        verbose = common.get_verbose()
-        self.vprint('plan.thumbprint')
-        fn = self.get_thumbprint_filename(env.host_string)
-        self.vprint('plan.thumbprint.fn:', fn)
-        content = open_file(fn).read()
-        self.vprint('plan.thumbprint.yaml.raw:', content)
-        data = yaml.load(content)
-        self.vprint('plan.thumbprint.yaml.data:', data)
-        return data
-
-    @thumbprint.setter
-    def thumbprint(self, data):
-        assert isinstance(data, dict)
-        if not common.get_dryrun():
-            fn = self.get_thumbprint_filename(env.host_string)
-            fout = open_file(fn, 'w')
-            yaml.dump(data, fout, default_flow_style=False, indent=4)
-            fout.flush()
-
-    def record_thumbprint(self, only_components=None):
-        """
-        Creates a thumbprint file for the current host in the current role and name.
-        """
-        #print('record_thumbprint.only_components:', only_components)
-        only_components = only_components or []
-        data = get_current_thumbprint(role=self.role, name=self.name, only_components=only_components)
-        print('Recording thumbprint for host %s with deployment %s on %s.' % (env.host_string, self.name, self.role))
-        #print('data:', data)
-        self.thumbprint = data
-
-    @property
-    def remaining_step_count(self):
-        return len(self._steps) - self.index
-
-    def add_history(self, index, start, end):
-        fout = open_file(self.plan_dir_history, 'a')
-        fout.write('%s,%s,%s\n' % (index, start, end))
-        fout.flush()
-        fout.close()
-
-    def load_index(self):
-        self._index = int(open_file(self.plan_dir_index).read().strip())
-
-    @property
-    def index(self):
-        return self._index
-
-    def is_initial(self):
-        return set(self.name) == set(['0'])
-
-    @property
-    def percent_complete(self):
-        if self.is_initial():
-            return 100
-        if not self._steps:
-            return 100
-        return self.index/float(len(self._steps))*100
-
-    @index.setter
-    def index(self, v):
-        self._index = int(v)
-        fout = open_file(self.plan_dir_index, 'w')
-        fout.write(str(self._index))
-        fout.flush()
-        fout.close()
-
-    def load_steps(self):
-        self._steps = []
-        lines = open_file(self.plan_dir_steps).readlines()
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            elif '] executing task ' in line.lower():
-                continue
-            elif line.lower().startswith('done'):
-                continue
-            s = Step.from_line(line)
-            self.add_step(s)
-
-    @classmethod
-    def get_or_create_next(cls, role=None, last_plan=None):
-        role = role or env.ROLE
-        last_plan = last_plan or get_last_plan(role=role)
-        if last_plan:
-            number = last_plan.number + 1
-        else:
-            number = 0
-        assert len(str(number)) <= env.plan_digits, 'Too many deployments. Truncate existing or increase `plan_digits`.'
-        plan = Plan(role=role, name=('%0'+str(env.plan_digits)+'i') % number)
-        return plan
-
-    @classmethod
-    def load(cls, name, role=None):
-        verbose = common.get_verbose()
-        if verbose:
-            print('loading plan:', name)
-        plan = cls(name, role=role)
-        return plan
-
-    def add_step(self, s):
-        assert isinstance(s, Step)
-        self._steps.append(s)
-
-    @property
-    def steps(self):
-        return list(self._steps)
-
-    def clear(self):
-        self.index = 0
-        self._steps = []
-
-    def execute(self, i=None, j=None):
-        i = i or self.index
-        steps_ran = []
-        for step_i, step in enumerate(self.steps):
-            if step_i < i:
-                continue
-
-            # Run command.
-            t0 = datetime.datetime.utcnow().isoformat()
-            step.execute()
-            t1 = datetime.datetime.utcnow().isoformat()
-            steps_ran.append(step)
-
-            # Record success.
-            if not common.get_dryrun():
-                self.index = step_i + 1
-                self.add_history(self.index, t0, t1)
-
-            if j is not None and step_i >= j:
-                break
-
-        return steps_ran
-
-#DEPRECATED
-@task_or_dryrun
-def record(name):
-    common.set_dryrun(1)
-    env.plan = Plan(name=name)
-
-#DEPRECATED
-@task_or_dryrun
-def execute(name):
-    verbose = common.get_verbose()
-    plan = Plan.load(name, verbose=int(verbose))
-    if verbose:
-        if plan.is_complete():
-            print('Execution of plan %s is complete.' % (plan.name,), file=sys.stderr)
-        else:
-            print('Execution of plan %s is %.02f%% complete.' % (plan.name, plan.percent_complete), file=sys.stderr)
-    steps = []
-    if not plan.is_complete():
-        steps = plan.execute()
-        if verbose:
-            if plan.is_complete():
-                print('Execution of plan %s is complete.' % (plan.name,), file=sys.stderr)
-            else:
-                print('Execution of plan %s is %.02f%% complete.' % (plan.name, plan.percent_complete), file=sys.stderr)
-    if verbose:
-        print('Executed %i steps.' % (len(steps),), file=sys.stderr)
-
-def get_last_completed_plan():
-    """
-    Returns the last plan completed.
-    """
-    verbose = common.get_verbose()
-    if verbose:
-        print('get_last_completed_plan')
-    for _name in reversed(sorted(list(iter_plan_names()))):
-        #print('get_last_completed_plan._name:', _name)
-        plan = Plan.load(_name)
-        if verbose:
-            print('plan:', plan.name)
-            print('plan.completed:', plan.is_complete())
-        if plan.is_complete():
-            return plan
-
-def get_last_plan(role=None):
-    """
-    Returns the last plan created.
-    """
-    for _name in reversed(sorted(list(iter_plan_names(role=role)))):
-        plan = Plan.load(_name, role=role)
-        return plan
-
-@task_or_dryrun
-def has_outstanding_plans():
-    """
-    Returns true if there are plans for this role that have not been executed.
-    """
-    verbose = common.get_verbose()
-    last_completed = get_last_completed_plan()
-    if verbose:
-        print('last_completed plan:', last_completed)
-    last = get_last_plan()
-    if verbose:
-        print('last plan:', last)
-        print('eq:', last == last_completed)
-    return last != last_completed
-
-@task_or_dryrun
-def status(name=None):
-    """
-    Reports the status of any pending plans for the current role.
-    """
-    #plan_dir = get_plan_dir()
-    #plan_dir = get_plan_data_dir()
-    burlap_dir = common.init_burlap_data_dir()
-    print('burlap directory:', burlap_dir)
-    plan_count = len(list(iter_plan_names()))
-    print('total plans:', plan_count)
-    #print('plan,complete,percent')
-    #for _name in iter_plan_names():
-        ##print(_name)
-        #plan = Plan.load(_name)
-        #output = '%s,%s,%s' % (_name, int(plan.is_complete()), plan.percent_complete)
-        #if plan.is_complete():
-            #output = success(output)
-        #elif plan.failed:
-            #output = fail(output)
-        #else:
-            #output = ongoing(output)
-        #print(output)
-
-def get_current_thumbprint(role=None, name=None, reraise=0, only_components=None):
-    """
-    Retrieves a snapshot of the current code state.
-    """
-    if name == INITIAL:
-        name = '0'*env.plan_digits
-
-    last = get_last_thumbprint()
-    only_components = only_components or []
-    only_components = [_.upper() for _ in only_components]
-    data = {} # {component:data}
-    manifest_data = (last and last.copy()) or {}
-    for component_name, func in sorted(common.manifest_recorder.iteritems()):
-        component_name = component_name.upper()
-        #print('component_name:', component_name)
-
-        if only_components and component_name not in only_components:
-            if common.get_verbose():
-                print('Skipping ignored component:', component_name)
-            continue
-
-        if component_name.lower() not in env.services:
-            if common.get_verbose():
-                print('Skipping unused component:', component_name)
-            continue
-
-        try:
-            manifest_data[component_name] = func()
-        except exceptions.AbortDeployment as e:
-            raise
-        except Exception as e:
-            if int(reraise):
-                raise
-            print(traceback.format_exc(), file=sys.stderr)
-
-    return manifest_data
-
-@task_or_dryrun
-def get_last_thumbprint():
-    """
-    Returns thumbprint from the last complete deployment.
-    """
-    verbose = common.get_verbose()
-    plan = get_last_completed_plan()
-    #print('get_last_thumbprint.last_completed_plan:', plan)
-    if verbose: print('get_last_thumbprint.last completed plan:', plan and plan.name)
-    last_thumbprint = (plan and plan.thumbprint) or {}
-    if verbose: print('get_last_thumbprint.last_thumbprint:', last_thumbprint)
-    return last_thumbprint
-
-def iter_thumbprint_differences(only_components=None, local_verbose=0):
-    only_components = only_components or []
-    local_verbose = int(local_verbose)
-    verbose = common.get_verbose() or local_verbose
-    #if verbose: print('getting last thumbprint')
-    last = get_last_thumbprint()
-    #if verbose: print('getting current thumbprint')
-    current = get_current_thumbprint()
-    #if verbose: print('comparing thumbprints')
-    for k in current:
-        if only_components and k not in only_components:
-#             print('iter_thumbprint_differences.skipping:', k)
-            continue
-#         print('iter:',k); raw_input('enter')
-#         if verbose: print('iter_thumbprint_differences.NOT skipping:', k)
-        if current[k] != last.get(k):
-            if verbose:
-                print('DIFFERENCE! k:', k, current[k], last.get(k))
-                print('Current:')
-                pprint(current[k], indent=4)
-                print('Last:')
-                pprint(last.get(k), indent=4)
-            yield k, (last, current)
-#     if verbose: print('iter_thumbprint_differences done')
-
-@task_or_dryrun
-def explain(name, **kwargs):
-    #common.set_verbose(1)
-    kwargs = kwargs or {}
-    name = common.assert_valid_satchel(name)
-    kwargs['only_components'] = [name]
-    kwargs['local_verbose'] = 1
-    diffs = dict(iter_thumbprint_differences(**kwargs))
-    last, current = diffs.get(name, (None, None))
-    if last is None and current is None:
-        print('There are no differences.')
-    else:
-        last = last[name]
-        current = current[name]
-        print('='*80)
-        print('These keys differ:')
-        for key in set(last.keys()).union(current.keys()):
-
-            last_value = last.get(key)
-            if isinstance(last_value, dict):
-                last_value = sorted(last_value.items())
-
-            current_value = current.get(key)
-            if isinstance(current_value, dict):
-                current_value = sorted(current_value.items())
-
-            if last_value == current_value:
-                continue
-            print('-'*80)
-            print('Change: %s\n\tLast: %s\n\tCurrent: %s' % (key, last_value, current_value))
-#         last = last or {}
-#         last.setdefault(name, {})
-#         print('last:')
-#         pprint(last[name], indent=4)
-#         print('current:')
-#         pprint(current[name], indent=4)
-
-@task_or_dryrun
-def show_diff(only=None):
-    """
-    Inspects differences between the last deployment and the current code state.
-    """
-    print('-'*80)
-    hostname = get_current_hostname() or env.host_string
-    print('Checking for changes on host %s...' % hostname)
-    changes = False
-    for k, (last, current) in iter_thumbprint_differences():
-        if only and k.lower() != only.lower():
-            continue
-        print('Component %s has changed.' % k)
-        changes = True
-        last = last.get(k)
-        current = current.get(k)
-        if isinstance(last, dict) and isinstance(current, dict):
-            for _k in sorted(set(last).union(current)):
-                _a = last.get(_k)
-                _b = current.get(_k)
-                if _a != _b:
-                    print('DIFF: %s: %s -> %s' % (_k, _a, _b))
-        else:
-            print('DIFF:', last, current)
-    if changes:
-        print(fail_str('Changes found for host %s.' % hostname))
-    else:
-        print(success_str('No changes found for host %s.' % hostname))
-
-@task_or_dryrun
-def show_last(name):
-    last = get_last_thumbprint()[name.upper()]
-    print('Last thumbprint for %s.' % name)
-    pprint(last)
-
-@task_or_dryrun
-def info():
-    d = os.path.join(init_plan_data_dir(), env.ROLE)
-    print('storage:', env.plan_storage)
-    print('dir:', d)
-
-@task_or_dryrun
-def reset():
-    """
-    Deletes all recorded plan executions.
-    This will cause the planner to think everything needs to be re-deployed.
-    """
-    d = os.path.join(init_plan_data_dir(), env.ROLE)
-    env.plan_storage = env.plan_storage or STORAGE_REMOTE
-    if env.plan_storage == STORAGE_LOCAL or env.host_string in LOCALHOSTS:
-        local_or_dryrun('rm -Rf "%s"' % d)
-        local_or_dryrun('mkdir -p "%s"' % d)
-    elif env.plan_storage == STORAGE_REMOTE:
-        sudo_or_dryrun('rm -Rf "%s"' % d)
-        sudo_or_dryrun('mkdir -p "%s"' % d)
-    else:
-        raise NotImplementedError("Unknown storage type: %s" % env.plan_storage)
-
-@task_or_dryrun
-@runs_once
-def truncate():
-    """
-    Compacts all deployment records into a single initial deployment.
-    """
-    if env.host_string == env.hosts[0]:
-        reset()
-        if not common.get_dryrun():
-            fabric.api.execute(thumbprint, hosts=env.hosts)
-
-@task_or_dryrun
-def thumbprint(components=None, set_satchels=None):
-    """
-    Creates a manifest file for the current host, listing all current settings
-    so that a future deployment can use it as a reference to perform an
-    idempotent deployment.
-
-    Paramaters:
-
-    components = comma-delimited list of satchel names to limit the thumbprinting to
-    """
-
-    only_components = components or []
-    if isinstance(only_components, basestring):
-        only_components = [_.strip() for _ in only_components.split(',') if _.strip()]
-
-    if set_satchels:
-        from burlap.debug import debug
-        parts = set_satchels.split(';')
-        for part in parts:
-            print('part:', part)
-            satchel_name, _key, _value = part.split('-')
-            print('satchel_name, _key, _value:', satchel_name, _key, _value)
-            debug.set_satchel_value(satchel_name, _key, _value)
-
-    plan = get_last_plan()
-    #print('last plan:', plan)
-    if not plan:
-        plan = Plan.get_or_create_next()
-    plan.record_thumbprint(only_components=only_components)
-
-@task_or_dryrun
-@runs_once
-def preview(**kwargs):
-    """
-    Lists the likely pending deployment steps.
-    """
-    try:
-        return auto(preview=1, **kwargs)
-    except exceptions.AbortDeployment as e:
-        common.print_fail('\n%s\n' % str(e))
-
-def get_last_current_diffs(target_component):
-    """
-    Retrieves differing manifests between the current and last snapshot.
-    """
-    target_component = target_component.strip().upper()
-
-    all_services = set(_.strip().upper() for _ in env.services)
-    diffs = list(iter_thumbprint_differences())
-    components = set()
-    component_thumbprints = {}
-    for component, (last, current) in diffs:
-        if component not in all_services:
-            continue
-        component_thumbprints[component] = last, current
-
-    print('component_thumbprints:', component_thumbprints.keys())
-    last, current = component_thumbprints[target_component]
-    return last, current
-
-@task_or_dryrun
-def auto(fake=0, preview=0, check_outstanding=1, components=None, explain=0, enable_plans=True, force=False):
-    """
-    Generates a plan based on the components that have changed since the last deployment.
-
-    The overall steps ran for each host:
-
-        1. create plan
-        2. run plan
-        3. create thumbprint
-
-    fake := If true, generates the plan and records the run as successful, but does not apply any
-        changes to the hosts.
-
-    components := list of names of components found in the services list
-
-    force := If true and specific components are specified, treats them as changed, even if no changes have been found
-    """
-    verbose = common.get_verbose()
-
-    explain = int(explain)
-    only_components = components or []
-    if isinstance(only_components, basestring):
-        only_components = [_.strip().upper() for _ in only_components.split(',') if _.strip()]
-    if only_components:
-        print('Limiting deployment to components: %s' % only_components)
-
-    def get_deploy_funcs(components):
-        for component in components:
-
-            if only_components and component not in only_components:
-                continue
-
-            funcs = common.manifest_deployers.get(component, [])
-            for func_name in funcs:
-
-                #TODO:remove this after burlap.* naming prefix bug fixed
-                if func_name.startswith('burlap.'):
-                    print('skipping %s' % func_name)
-                    continue
-
-                takes_diff = common.manifest_deployers_takes_diff.get(func_name, False)
-#                 print(func_name, takes_diff)
-
-                if preview:
-                    #print(success((' '*4)+func_name))
-                    #continue
-                    yield func_name, None
-                else:
-                    func = common.resolve_deployer(func_name)
-                    last, current = component_thumbprints[component]
-                    if not fake:
-                        if takes_diff:
-                            yield func_name, functools.partial(func, last=last, current=current)
-                        else:
-                            yield func_name, functools.partial(func)
-
-    fake = int(fake)
-    preview = int(preview)
-    check_outstanding = int(check_outstanding)
-
-    all_services = set(_.strip().upper() for _ in env.services)
-    if verbose:
-        print('&'*80)
-        print('services:', env.services)
-
-    if enable_plans:
-        last_plan = get_last_completed_plan()
-        outstanding = has_outstanding_plans()
-        if verbose:
-            print('outstanding plans:', outstanding)
-        if check_outstanding and outstanding:
-            print(fail((
-                'There are outstanding plans pending execution! '
-                'Run `fab %s deploy.status` for details.\n'
-                'To ignore these, re-run with :check_outstanding=0.'
-            ) % env.ROLE))
-            sys.exit(1)
-
-    if verbose:
-        print('iter_thumbprint_differences')
-    diffs = list(iter_thumbprint_differences(only_components=only_components))
-    if diffs:
-        if verbose:
-            print('Differences detected!')
-
-    # Create plan.
-    components = set()
-    component_thumbprints = {}
-    for component, (last, current) in diffs:
-        if component not in all_services:
-            print('ignoring component:', component)
-            continue
-#         if only_components and component not in only_components:
-#             continue
-        component_thumbprints[component] = last, current
-        components.add(component)
-    if force and only_components:
-        components.update(only_components)
+    assert isinstance(component_names, (tuple, list))
     component_dependences = {}
+    for _name in component_names:
+        deps = set(manifest_deployers_befores.get(_name, []))
+        deps = deps.intersection(component_names)
+        component_dependences[_name] = deps
+    component_order = list(topological_sort(component_dependences.items()))
+    return component_order
 
-    if verbose:
-        print('all_services:', all_services)
-        print('manifest_deployers_befores:', common.manifest_deployers_befores.keys())
-        print('*'*80)
-        print('all components:', components)
-
-    all_components = set(common.all_satchels)
-    if only_components and not all_components.issuperset(only_components):
-        unknown_components = set(only_components).difference(all_components)
-        raise Exception('Unknown components: %s' % ', '.join(sorted(unknown_components)))
-
-    for _c in components:
-        if verbose:
-            print('checking:', _c)
-        deps = set(common.manifest_deployers_befores.get(_c, []))
-        if verbose:
-            print('deps0:', deps)
-        deps = deps.intersection(components)
-        if verbose:
-            print('deps1:', deps)
-        component_dependences[_c] = deps
-
-    if verbose:
-        print('dependencies:')
-        for _c in component_dependences:
-            print(_c, component_dependences[_c])
-
-    components = list(common.topological_sort(component_dependences.items()))
-    plan_funcs = list(get_deploy_funcs(components))
-    if components and plan_funcs:
-        print('These components have changed:\n')
-        for component in sorted(components):
-            print((' '*4)+component)
-        print('\nDeployment plan:\n')
-        for func_name, _ in plan_funcs:
-            print(success((' '*4)+func_name))
-    else:
-        print(success_str('\nNothing to do!\n'))
-        return False
-
-    # Execute plan.
-    if preview:
-        print('\nTo execute this plan on all hosts run:\n\n    fab %s deploy.run' % env.ROLE)
-        return components, plan_funcs
-    else:
-        with open('/tmp/burlap.progress', 'w') as fout:
-            print('%s Beginning plan execution!' % (datetime.datetime.now(),), file=fout)
-            fout.flush()
-            for func_name, plan_func in plan_funcs:
-                print('%s Executing step %s...' % (datetime.datetime.now(), func_name))
-                print('%s Executing step %s...' % (datetime.datetime.now(), func_name), file=fout)
-                fout.flush()
-                if callable(plan_func):
-                    plan_func()
-
-                    # Record this step complete.
-                    if not only_components:
-                        try:
-                            thumbprint(components=func_name.split('.')[0])
-                        except AssertionError:
-                            # On new installs where the host is not yet present, this may fail.
-                            pass
-
-                print('%s Done!' % (datetime.datetime.now(),), file=fout)
-                fout.flush()
-            print('%s Plan execution complete!' % (datetime.datetime.now(),), file=fout)
-            fout.flush()
-
-    # Create thumbprint.
-    if enable_plans and not preview and not common.get_dryrun():
-        plan = Plan.get_or_create_next(last_plan=last_plan)
-        plan.record_thumbprint(only_components=only_components)
-
-        if env.plan_auto_truncate:
-            truncate()
-
-@task_or_dryrun
-def run(*args, **kwargs):
+def get_deploy_funcs(components, current_thumbprint, previous_thumbprint, preview=False):
     """
-    Performs a full deployment.
-
-    Parameters:
-
-        components := name of satchel to limit deployment to
+    Returns a generator yielding the named functions needed for a deployment.
     """
-    from burlap import notifier
-    from burlap.common import all_satchels, get_satchel
+    for component in components:
+        funcs = manifest_deployers.get(component, [])
+        for func_name in funcs:
 
-    service = get_satchel('service')
+            #TODO:remove this after burlap.* naming prefix bug fixed
+            if func_name.startswith('burlap.'):
+                print('skipping %s' % func_name)
+                continue
 
-    assume_yes = int(kwargs.pop('assume_yes', 0)) or int(kwargs.pop('yes', 0))
-    fake = int(kwargs.get('fake', 0))
+            takes_diff = manifest_deployers_takes_diff.get(func_name, False)
 
-    # Allow satchels to configure connection parameters before we try contacting the hosts.
-    #TODO:support ordering?
-    services_set = set(env.services)
-    for name, satchel in all_satchels.iteritems():
+            #if preview:
+                #yield func_name, None
+            #else:
+            func = resolve_deployer(func_name)
+            #last, current = component_thumbprints[component]
+            current = current_thumbprint.get(component)
+            last = previous_thumbprint.get(component)
+            if takes_diff:
+                yield func_name, partial(func, last=last, current=current)
+            else:
+                yield func_name, partial(func)
 
-        # Skip satchels that we're not using.
-        if name.lower() not in services_set:
-            continue
+class DeploySatchel(ContainerSatchel):
 
-        if hasattr(satchel, 'deploy_pre_run'):
+    name = 'deploy'
+
+    def set_defaults(self):
+        #self.env.lockfile_path = '/var/lock/burlap_deploy.lock'
+        #self.env.data_dir = '/var/local/burlap/deploy'
+        self.env.lockfile_path = '~/burlap/deploy.lock'
+        self.env.data_dir = '~/burlap'
+        self._plan_funcs = None
+
+    @task
+    def init(self):
+        """
+        Initializes the configuration files on the remote server.
+        """
+        r = self.local_renderer
+        #r.sudo('mkdir -p {data_dir}; chown {user}:{user} {data_dir}')
+        r.run_or_local('mkdir -p {data_dir}')
+
+    @task
+    def purge(self):
+        """
+        The opposite of init(). Completely removes any manifest records from the remote host.
+        """
+        r = self.local_renderer
+        r.run_or_local('[ -d {data_dir} ] && rm -Rf {data_dir} || true')
+
+    @property
+    def manifest_filename(self):
+        """
+        Returns the path to the manifest file.
+        """
+        r = self.local_renderer
+        tp_fn = r.format(r.env.data_dir + '/manifest.yaml')
+        return tp_fn
+
+    def get_current_thumbprint(self, components=None):
+        """
+        Returns a dictionary representing the current configuration state.
+
+        Thumbprint is of the form:
+
+            {
+                component_name1: {key: value},
+                component_name2: {key: value},
+                ...
+            }
+
+        """
+        components = str_to_component_list(components)
+        if self.verbose:
+            print('deploy.get_current_thumbprint.components:', components)
+        manifest_data = {} # {component:data}
+        for component_name, func in sorted(manifest_recorder.iteritems()):
+            self.vprint('Checking thumbprint for component %s...' % component_name)
+            manifest_key = assert_valid_satchel(component_name)
+            service_name = clean_service_name(component_name)
+            if service_name not in self.genv.services:
+                self.vprint('Skipping unused component:', component_name)
+                continue
+            elif components and service_name not in components:
+                self.vprint('Skipping non-matching component:', component_name)
+                continue
             try:
-                satchel.deploy_pre_run()
-            except Exception as e:
-                print('Error running %s pre-runner: %s' % (name, e))
+                self.vprint('Retrieving manifest for %s...' % component_name)
+                manifest_data[manifest_key] = func()
+                if self.verbose:
+                    pprint(manifest_data[manifest_key], indent=4)
+            except exceptions.AbortDeployment as e:
+                raise
+            #except Exception as e:
+                #print('Error getting current thumbnail:', file=sys.stderr)
+                #traceback.print_exc()
+        return manifest_data
 
-    if env.host_string == env.hosts[0]:
-        pending = preview(*args, **kwargs)
-        if pending:
-            # There are changes that need to be deployed, but confirm first with user.
-            if not assume_yes \
-            and not raw_input('\nBegin deployment? [yn] ').strip().lower().startswith('y'):
-                sys.exit(1)
+    def get_previous_thumbprint(self, components=None):
+        """
+        Returns a dictionary representing the previous configuration state.
+
+        Thumbprint is of the form:
+
+            {
+                component_name1: {key: value},
+                component_name2: {key: value},
+                ...
+            }
+
+        """
+        components = str_to_component_list(components)
+        tp_fn = self.manifest_filename
+        tp_text = None
+        if self.file_exists(tp_fn):
+            fd = StringIO()
+            get(tp_fn, fd)
+            tp_text = fd.getvalue()
+            manifest_data = {}
+            raw_data = yaml.load(tp_text)
+            for k, v in raw_data.items():
+                manifest_key = assert_valid_satchel(k)
+                service_name = clean_service_name(k)
+                if components and service_name not in components:
+                    continue
+                manifest_data[manifest_key] = v
+            return manifest_data
+
+    @task
+    def lock(self):
+        """
+        Marks the remote server as currently being deployed to.
+        """
+        r = self.local_renderer
+        if self.file_exists(r.env.lockfile_path):
+            raise exceptions.AbortDeployment('Lock file %s exists. Perhaps another deployment is currently underway?' % r.env.lockfile_path)
         else:
-            # There are no changes pending, so abort all further tasks.
-            sys.exit(1)
+            r.run_or_local('touch {lockfile_path}')
 
-    if not fake:
-        service.pre_deploy()
+    @task
+    def unlock(self):
+        """
+        Unmarks the remote server as currently being deployed to.
+        """
+        r = self.local_renderer
+        if self.file_exists(r.env.lockfile_path):
+            r.run_or_local('rm -f {lockfile_path}')
 
-    kwargs['check_outstanding'] = 0
-    auto(*args, **kwargs)
+    @task
+    def fake(self, components=None):#, set_satchels=None):
+        """
+        Update the thumbprint on the remote server but execute no satchel configurators.
 
-    if not fake:
-        service.post_deploy()
-        notifier.notify_post_deployment()
+        components = A comma-delimited list of satchel names to limit the fake deployment to.
+        set_satchels = A semi-colon delimited list of key-value pairs to set in satchels before recording a fake deployment.
+        """
 
-@task_or_dryrun
-def test_remotefile():
-    f = RemoteFile('/var/log/auth.log')
-    f.read()
-    print(id(f))
-    print('-'*80)
-    f = RemoteFile('/var/log/auth.log')
-    print(id(f))
+        #if set_satchels:
+            #from burlap.debug import debug
+            #parts = set_satchels.split(';')
+            #for part in parts:
+                #print('part:', part)
+                #satchel_name, _key, _value = part.split('-')
+                #print('satchel_name, _key, _value:', satchel_name, _key, _value)
+                #debug.set_satchel_value(satchel_name, _key, _value)
+
+        self.init()
+
+        # In cases where we only want to fake deployment of a specific satchel, then simply copy the last thumbprint and overwrite with a subset
+        # of the current thumbprint filtered by our target components.
+        if components:
+            current_tp = self.get_previous_thumbprint() or {}
+            current_tp.update(self.get_current_thumbprint(components=components) or {})
+        else:
+            current_tp = self.get_current_thumbprint(components=components) or {}
+
+        tp_text = yaml.dump(current_tp)
+        r = self.local_renderer
+        r.upload_content(content=tp_text, fn=self.manifest_filename)
+        #r.sudo('chown {user}:{user} "%s"' % self.manifest_filename)
+
+        # Ensure all cached manifests are cleared, so they reflect the newly deployed changes.
+        self.reset_all_satchels()
+
+    def get_component_funcs(self, components=None):
+        """
+        Calculates the components functions that need to be executed for a deployment.
+        """
+
+        current_tp = self.get_current_thumbprint(components=components) or {}
+        previous_tp = self.get_previous_thumbprint(components=components) or {}
+
+        if self.verbose:
+            print('Current thumbprint:')
+            pprint(current_tp, indent=4)
+            print('Previous thumbprint:')
+            pprint(previous_tp, indent=4)
+
+        differences = list(iter_dict_differences(current_tp, previous_tp))
+        if self.verbose:
+            print('Differences:')
+            pprint(differences, indent=4)
+        component_order = get_component_order([k for k, (_, _) in differences])
+        if self.verbose:
+            print('component_order:')
+            pprint(component_order, indent=4)
+        plan_funcs = list(get_deploy_funcs(component_order, current_tp, previous_tp))
+
+        return component_order, plan_funcs
+
+    @task
+    def preview(self, components=None, ask=0):
+        """
+        Inspects differences between the last deployment and the current code state.
+        """
+
+        ask = int(ask)
+
+        self.init()
+
+        component_order, plan_funcs = self.get_component_funcs(components=components)
+
+        print('\n%i changes found for host %s.\n' % (len(component_order), self.genv.host_string))
+        if component_order and plan_funcs:
+            if self.verbose:
+                print('These components have changed:\n')
+                for component in sorted(component_order):
+                    print((' '*4)+component)
+            print('Deployment plan for host %s:\n' % self.genv.host_string)
+            for func_name, _ in plan_funcs:
+                print(success_str((' '*4)+func_name))
+        if component_order:
+            print()
+
+        if ask and self.genv.host_string == self.genv.hosts[-1]:
+            if component_order:
+                if not raw_input('Begin deployment? [yn] ').strip().lower().startswith('y'):
+                    sys.exit(0)
+            else:
+                sys.exit(0)
+
+    @task
+    def push(self, components=None, yes=0):
+        """
+        Executes all satchel configurators to apply pending changes to the server.
+        """
+        from burlap import notifier
+        service = self.get_satchel('service')
+        self.lock()
+        try:
+
+            yes = int(yes)
+            if not yes:
+                # If we want to confirm the deployment with the user, and we're at the first server,
+                # then run the preview.
+                if self.genv.host_string == self.genv.hosts[0]:
+                    execute(partial(self.preview, components=components, ask=1))
+
+            component_order, plan_funcs = self.get_component_funcs(components=components)
+
+            service.pre_deploy()
+            for func_name, plan_func in plan_funcs:
+                print('Executing %s...' % func_name)
+                plan_func()
+            self.fake(components=components)
+            service.post_deploy()
+            notifier.notify_post_deployment()
+
+        finally:
+            self.unlock()
+
+deploy = DeploySatchel()

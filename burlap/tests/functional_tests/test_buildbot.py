@@ -32,7 +32,7 @@ class BuildbotTests(TestCase):
             #assert exists(buildbot.env.cron_check_command_path)
             #assert exists(buildbot.env.cron_check_crontab_path)
 
-            #self.thumbprint(components=buildbot.name)
+            #self.fake(components=buildbot.name)
 
             #buildbot.env.cron_check_enabled = False
             #buildbot.update_cron_check()
@@ -81,7 +81,7 @@ class BuildbotTests(TestCase):
 #             assert exists(buildbot.env.cron_check_command_path)
 #             assert exists(buildbot.env.cron_check_crontab_path)
 #
-#             self.thumbprint(components=buildbot.name)
+#             self.fake(components=buildbot.name)
 #
 #             buildbot.env.cron_check_enabled = False
 #             buildbot.configure()

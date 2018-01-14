@@ -5,12 +5,14 @@ from __future__ import print_function
 from burlap.common import set_verbose
 from burlap.js import jshint
 from burlap.tests.functional_tests.base import TestCase
-from burlap.deploy import thumbprint, clear_fs_cache, delete_plan_data_dir
-#from burlap.packager import packager
+from burlap.deploy import deploy as deploy_satchel
 
 class JSTests(TestCase):
 
-    def test_jshint(self):
+    def test_jshint0(self):
+        pass
+
+    def test_jshint1(self):
 
         set_verbose(True)
         jshint.genv.ROLE = 'local'
@@ -27,12 +29,10 @@ class JSTests(TestCase):
         #jshint.sudo('apt-get purge nodejs-legacy nodejs')
         #jshint.sudo('apt-get update --fix-missing; DEBIAN_FRONTEND=noninteractive apt-get -f -o Dpkg::Options::="--force-overwrite" install --yes npm')
         jshint.configure()
-        clear_fs_cache()
-        delete_plan_data_dir()
+        deploy_satchel.purge()
         print('-'*80)
         print('Thumbprinting...')
-        thumbprint(components=jshint.name)
-        clear_fs_cache()
+        deploy_satchel.fake(components=jshint.name)
         print('-'*80)
 
         # Confirm jshint was installed.
@@ -48,3 +48,6 @@ class JSTests(TestCase):
 
         # Confirm jshint was uninstalled.
         #assert not exists('/usr/local/bin/jshint')
+
+    def test_jshint2(self):
+        pass
