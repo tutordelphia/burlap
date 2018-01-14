@@ -1,5 +1,10 @@
 """
 Tests for the common module.
+
+Run like:
+
+    tox -c tox-full.ini -e py27-ubuntu_16_04_64 -- -s burlap/tests/test_common.py::CommonTests::test_satchel_ordering
+
 """
 from __future__ import print_function
 
@@ -245,7 +250,7 @@ set_by_include3: 'some special setting'
         assert not get_verbose()
 
     def test_satchel_ordering(self):
-        from burlap.deploy import preview, init_plan_data_dir
+        from burlap.deploy import deploy as deploy_satchel
 
         # Purge any pre-existing satchels from global registeries so we only get results for our custom satchels.
         clear_state()
@@ -282,11 +287,14 @@ set_by_include3: 'some special setting'
         try:
 
             assert set(all_satchels) == set(['A', 'B', 'C'])
+            deploy_satchel.genv.services = ['a', 'b', 'c']
 
-            assert init_plan_data_dir() == '.burlap/plans'
+            #assert init_plan_data_dir() == '.burlap/plans'
 
             env.ROLE = 'local'
-            components, plan_funcs = preview(components=['A', 'B', 'C'], enable_plans=False, force=True)
+            #components, plan_funcs = deploy.preview(components=['A', 'B', 'C'])
+            deploy_satchel.verbose = True
+            components, plan_funcs = deploy_satchel.get_component_funcs(components=['A', 'B', 'C'])
             expected_components = ['C', 'A', 'B']
             print()
             print('components:', components)
@@ -311,10 +319,10 @@ set_by_include3: 'some special setting'
         from burlap.common import get_state, clear_state, set_state, all_satchels
 
         actual = sorted(all_satchels.keys())
-        print('all_satchels.a:', actual)
+        print('actual satchels:\n', actual)
         expected = [
             'APACHE', 'AVAHI', 'BLUETOOTH', 'BUILDBOT', 'CELERY', 'CLOUDFRONT', 'CRON',
-            'DEBUG', 'DEPLOYMENTNOTIFIER', 'DJ', 'DNS', 'EC2MONITOR', 'ELASTICSEARCH', 'FILE',
+            'DEBUG', 'DEPLOY', 'DEPLOYMENTNOTIFIER', 'DJ', 'DNS', 'EC2MONITOR', 'ELASTICSEARCH', 'FILE',
             'GIT', 'GITCHECKER', 'GITTRACKER', 'GPSD', 'GROUP', 'HOST', 'HOSTNAME', 'HOSTSFILE',
             'IP', 'JIRAHELPER', 'JSHINT', 'LOCALES', 'LOGINNOTIFIER', 'MANIFEST', 'MONGODB', 'MOTION', 'MYSQL', 'MYSQLCLIENT', 'NM',
             'NTPCLIENT', 'PACKAGER', 'PHANTOMJS', 'PIP', 'POSTFIX', 'POSTGRESQL', 'POSTGRESQLCLIENT', 'PROJECT',
@@ -322,6 +330,7 @@ set_by_include3: 'some special setting'
             'SSHNICE', 'SSL', 'SUPERVISOR', 'TARBALL', 'TIMEZONE', 'UBUNTUMULTIVERSE',
             'UNATTENDEDUPGRADES', 'USER', 'VAGRANT', 'VIRTUALBOX',
         ]
+        print('expected satchels:\n', expected)
         assert actual == expected
 
         burlap_state = get_state()
