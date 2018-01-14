@@ -226,6 +226,9 @@ class DeploySatchel(ContainerSatchel):
         r.upload_content(content=tp_text, fn=self.manifest_filename)
         #r.sudo('chown {user}:{user} "%s"' % self.manifest_filename)
 
+        # Ensure all cached manifests are cleared, so they reflect the newly deployed changes.
+        self.reset_all_satchels()
+
     def get_component_funcs(self, components=None):
         """
         Calculates the components functions that need to be executed for a deployment.
@@ -284,7 +287,7 @@ class DeploySatchel(ContainerSatchel):
                 sys.exit(0)
 
     @task
-    def run(self, components=None, yes=0):
+    def push(self, components=None, yes=0):
         """
         Executes all satchel configurators to apply pending changes to the server.
         """

@@ -824,6 +824,10 @@ class Satchel(object):
             env[_key] = True
             self.set_defaults()
 
+    @staticmethod
+    def reset_all_satchels():
+        reset_all_satchels()
+
     def clear_caches(self):
         self._local_renderer = None
         self._last_manifest = None
@@ -1937,8 +1941,9 @@ def run_or_dryrun(*args, **kwargs):
     dryrun = get_dryrun(kwargs.get('dryrun'))
     if 'dryrun' in kwargs:
         del kwargs['dryrun']
+    cmd = args[0] if args else ''
+    assert cmd, 'No command specified.'
     if dryrun:
-        cmd = args[0]
         if BURLAP_COMMAND_PREFIX:
             print('%s run: %s' % (render_command_prefix(), cmd))
         else:

@@ -1,7 +1,7 @@
 """
 Run specific tests like:
 
-    tox -c tox-full.ini -e py27-ubuntu_16_04_64 -- -s burlap/tests/functional_tests/test_selenium.py::SeleniumTests::test_selenium
+    tox -c tox-full.ini -e py27-ubuntu_14_04_64 -- -s burlap/tests/functional_tests/test_selenium.py::SeleniumTests::test_selenium
 
 """
 from fabric.contrib.files import exists
@@ -15,6 +15,12 @@ class SeleniumTests(TestCase):
 
     def test_selenium(self):
         try:
+            print('deploy_satchel.env.lockfile_path:', deploy_satchel.env.lockfile_path)
+            print('deploy_satchel.env.data_dir:', deploy_satchel.env.data_dir)
+            assert deploy_satchel.env.lockfile_path == '/tmp/burlap_unittests/deploy.lock'
+            assert deploy_satchel.env.data_dir == '/tmp/burlap_unittests'
+            assert deploy_satchel.manifest_filename == '/tmp/burlap_unittests/manifest.yaml'
+
             set_verbose(True)
             print('selenium.geckodriver_path:', selenium.geckodriver_path)
             selenium.genv.ROLE = 'local'
@@ -23,6 +29,7 @@ class SeleniumTests(TestCase):
 
             print('Enabling selenium/gecko to install and track old version.')
             print('selenium._last_manifest.1:', selenium._last_manifest)
+            print('selenium.last_manifest.1:', selenium.last_manifest)
             selenium.env.enabled = True
             selenium.env.geckodriver_version = '0.13.0'
             selenium.clear_local_renderer()
@@ -30,9 +37,13 @@ class SeleniumTests(TestCase):
             print('Configuring selenium...')
             selenium.configure()
             print('selenium._last_manifest.2:', selenium._last_manifest)
+            print('selenium.last_manifest.2:', selenium.last_manifest)
             print('Writing manifest...')
             deploy_satchel.fake(components=selenium.name)
+            deploy_satchel.run('ls -lah %s' % deploy_satchel.manifest_filename)
+            deploy_satchel.run('cat %s' % deploy_satchel.manifest_filename)
             print('selenium._last_manifest.3:', selenium._last_manifest)
+            print('selenium.last_manifest.3:', selenium.last_manifest)
 
             print('Confirming install succeeded...')
             assert exists(selenium.geckodriver_path)
