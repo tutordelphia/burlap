@@ -96,12 +96,6 @@ class TestCase(unittest.TestCase):
         print('setUp: Saving burlap state...')
         self._burlap_state = get_state()
 
-        # Set satchel variables that should be customized just for unittests.
-        # For example, so we can run unittests locally, we want to change the default burlap paths so they don't conflict with the defaults,
-        # in case we're using burlap to deploy locally.
-        deploy_satchel.env.lockfile_path = '/tmp/burlap_unittests/deploy.lock'
-        deploy_satchel.env.data_dir = '/tmp/burlap_unittests'
-
         self._dryrun = get_dryrun()
         self._verbose = get_verbose()
 
@@ -129,6 +123,12 @@ class TestCase(unittest.TestCase):
         for satchel in all_satchels.values():
             satchel.register()
             satchel.clear_caches()
+
+        # Set satchel variables that should be customized just for unittests.
+        # For example, so we can run unittests locally, we want to change the default burlap paths so they don't conflict with the defaults,
+        # in case we're using burlap to deploy locally.
+        deploy_satchel.env.lockfile_path = '/tmp/burlap_unittests/deploy.lock'
+        deploy_satchel.env.data_dir = '/tmp/burlap_unittests'
 
         # Since these tests are automated, if we ever get a prompt, we should immediately fail,
         # because no action should ever be user-interactive.

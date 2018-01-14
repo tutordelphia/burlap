@@ -13,6 +13,13 @@ from burlap.deploy import deploy as deploy_satchel
 
 class SeleniumTests(TestCase):
 
+    def test_paths(self):
+        print('deploy_satchel.env.lockfile_path:', deploy_satchel.env.lockfile_path)
+        print('deploy_satchel.env.data_dir:', deploy_satchel.env.data_dir)
+        assert deploy_satchel.env.lockfile_path == '/tmp/burlap_unittests/deploy.lock'
+        assert deploy_satchel.env.data_dir == '/tmp/burlap_unittests'
+        assert deploy_satchel.manifest_filename == '/tmp/burlap_unittests/manifest.yaml'
+
     def test_selenium(self):
         try:
             print('deploy_satchel.env.lockfile_path:', deploy_satchel.env.lockfile_path)
@@ -90,3 +97,10 @@ class SeleniumTests(TestCase):
 
         finally:
             selenium.uninstall_geckodriver()
+
+    def test_selenium_2(self):
+        print('deploy_satchel.env.lockfile_path:', deploy_satchel.env.lockfile_path)
+        print('deploy_satchel.env.data_dir:', deploy_satchel.env.data_dir)
+        assert deploy_satchel.env.lockfile_path == '/tmp/burlap_unittests/deploy.lock'
+        assert deploy_satchel.env.data_dir == '/tmp/burlap_unittests'
+        assert deploy_satchel.manifest_filename == '/tmp/burlap_unittests/manifest.yaml'
