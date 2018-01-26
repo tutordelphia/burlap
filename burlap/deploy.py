@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import sys
+import socket
 from pprint import pprint
 from functools import partial
 from StringIO import StringIO
@@ -55,11 +56,7 @@ def get_deploy_funcs(components, current_thumbprint, previous_thumbprint, previe
 
             takes_diff = manifest_deployers_takes_diff.get(func_name, False)
 
-            #if preview:
-                #yield func_name, None
-            #else:
             func = resolve_deployer(func_name)
-            #last, current = component_thumbprints[component]
             current = current_thumbprint.get(component)
             last = previous_thumbprint.get(component)
             if takes_diff:
@@ -72,8 +69,6 @@ class DeploySatchel(ContainerSatchel):
     name = 'deploy'
 
     def set_defaults(self):
-        #self.env.lockfile_path = '/var/lock/burlap_deploy.lock'
-        #self.env.data_dir = '/var/local/burlap/deploy'
         self.env.lockfile_path = '~/burlap/deploy.lock'
         self.env.data_dir = '~/burlap'
         self._plan_funcs = None
@@ -138,9 +133,6 @@ class DeploySatchel(ContainerSatchel):
                     pprint(manifest_data[manifest_key], indent=4)
             except exceptions.AbortDeployment as e:
                 raise
-            #except Exception as e:
-                #print('Error getting current thumbnail:', file=sys.stderr)
-                #traceback.print_exc()
         return manifest_data
 
     def get_previous_thumbprint(self, components=None):
@@ -183,7 +175,9 @@ class DeploySatchel(ContainerSatchel):
         if self.file_exists(r.env.lockfile_path):
             raise exceptions.AbortDeployment('Lock file %s exists. Perhaps another deployment is currently underway?' % r.env.lockfile_path)
         else:
-            r.run_or_local('touch {lockfile_path}')
+            self.vprint('Locking %s.' % r.env.lockfile_path)
+            r.env.hostname = socket.gethostname()
+            r.run_or_local('echo "{hostname}" > {lockfile_path}')
 
     @task
     def unlock(self):
@@ -193,6 +187,7 @@ class DeploySatchel(ContainerSatchel):
         self.init()
         r = self.local_renderer
         if self.file_exists(r.env.lockfile_path):
+            self.vprint('Unlocking %s.' % r.env.lockfile_path)
             r.run_or_local('rm -f {lockfile_path}')
 
     @task
@@ -203,15 +198,6 @@ class DeploySatchel(ContainerSatchel):
         components = A comma-delimited list of satchel names to limit the fake deployment to.
         set_satchels = A semi-colon delimited list of key-value pairs to set in satchels before recording a fake deployment.
         """
-
-        #if set_satchels:
-            #from burlap.debug import debug
-            #parts = set_satchels.split(';')
-            #for part in parts:
-                #print('part:', part)
-                #satchel_name, _key, _value = part.split('-')
-                #print('satchel_name, _key, _value:', satchel_name, _key, _value)
-                #debug.set_satchel_value(satchel_name, _key, _value)
 
         self.init()
 
@@ -226,7 +212,6 @@ class DeploySatchel(ContainerSatchel):
         tp_text = yaml.dump(current_tp)
         r = self.local_renderer
         r.upload_content(content=tp_text, fn=self.manifest_filename)
-        #r.sudo('chown {user}:{user} "%s"' % self.manifest_filename)
 
         # Ensure all cached manifests are cleared, so they reflect the newly deployed changes.
         self.reset_all_satchels()
