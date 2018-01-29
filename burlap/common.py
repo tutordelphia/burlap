@@ -1874,6 +1874,9 @@ def files_exists_or_dryrun(path, *args, **kwargs):
 #         return False
 #     else:
     from fabric.contrib.files import exists
+    # Expand ~, since this isn't done automatically.
+    if path and path.startswith('~'):
+        path = '/home/%s/%s' % (env.user, path[1:])
     if env.host_string in LOCALHOSTS:
         return os.path.exists(path)
     return exists(path, *args, **kwargs)
