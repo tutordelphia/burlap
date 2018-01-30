@@ -35,9 +35,9 @@ install:
 -   sudo apt-get -yq purge virtualbox*
 # The Oracle Java install routinely times out, and we're not using it, so uninstall it.
 -   sudo apt-get -yq purge oracle-java*
--   sudo apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
+-   sudo apt-get -o Dpkg::Options::="--force-confnew" --allow-downgrades --allow-remove-essential --allow-change-held-packages -fuy dist-upgrade
 -   sudo apt-get -yq install build-essential
--   sudo apt-get -yq --force-yes install linux-headers-`uname -r`
+-   sudo apt-get -yq --allow-downgrades --allow-remove-essential --allow-change-held-packages install linux-headers-`uname -r`
 -   sudo apt-get -yq install pandoc
 -   sudo pip install -r requirements-test.txt
 #TODO: Get fab to test fab

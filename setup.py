@@ -33,7 +33,7 @@ def get_reqs(fn):
     return [
         _.strip()
         for _ in open(os.path.join(CURRENT_DIR, fn)).readlines()
-        if _.strip()
+        if _.strip() and not _.strip().startswith('#')
     ]
 
 class Tox(TestCommand):
