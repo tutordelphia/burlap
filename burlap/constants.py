@@ -81,3 +81,6 @@ STORAGES = (
 )
 
 LOCALHOSTS = ('localhost', '127.0.0.1')
+
+LOCAL_VERBOSE = 1
+GLOBAL_VERBOSE = 2

@@ -1466,7 +1466,7 @@ class Satchel(object):
     @verbose.setter
     def verbose(self, v):
         # 1 or True=local verbose only, 2=global verbose, None=clears local
-        if v == 1:
+        if v == LOCAL_VERBOSE:
             self._verbose = True
         elif v is None:
             self._verbose = None
