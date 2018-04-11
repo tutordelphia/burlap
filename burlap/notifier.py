@@ -48,6 +48,7 @@ class DeploymentNotifierSatchel(Satchel):
         s.ehlo()
         s.starttls()
         s.ehlo()
+        self.vprint('user:', self.env.email_host_user, 'password:', self.env.email_host_password)
         s.login(self.env.email_host_user, self.env.email_host_password)
         s.sendmail(from_email, recipient_list, msg.as_string())
         s.quit()

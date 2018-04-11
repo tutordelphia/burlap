@@ -193,6 +193,7 @@ class MySQLSatchel(DatabaseSatchel):
         v = self.get_mysql_version()
         v = tuple(map(int, v.split('.')))
         self.vprint('mysql version:', v)
+        self.vprint('mysql password method:', method)
         if method == MYSQLADMIN:
             r = self.database_renderer(**kwargs)
             r.env.root_password = password or r.env.db_root_password
@@ -251,7 +252,7 @@ class MySQLSatchel(DatabaseSatchel):
 
             self.start()
         else:
-            raise NotImplementedError('Unknowne method: %s' % method)
+            raise NotImplementedError('Unknown method: %s' % method)
 
     @task
     def dumpload(self, site=None, role=None):
