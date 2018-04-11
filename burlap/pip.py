@@ -49,6 +49,7 @@ class PIPSatchel(Satchel):
         self.env.perms = '775'
         self.env.virtualenv_dir = '.env'
         self.env.requirements = 'pip-requirements.txt'
+        self.env.quiet_flag = ' -q '
 
     @task
     def has_pip(self):
@@ -87,8 +88,8 @@ class PIPSatchel(Satchel):
         else:
             raise NotImplementedError('Unknown pip bootstrap method: %s' % r.env.bootstrap_method)
 
-        r.sudo('pip install --upgrade pip')
-        r.sudo('pip install --upgrade virtualenv')
+        r.sudo('pip {quiet_flag} install --upgrade pip')
+        r.sudo('pip {quiet_flag} install --upgrade virtualenv')
 
     @task
     def clean_virtualenv(self, virtualenv_dir=None):
@@ -219,11 +220,11 @@ class PIPSatchel(Satchel):
 
         # Ensure we're always using the latest pip.
         if self.is_local:
-            r.run_or_local('{virtualenv_dir}/bin/pip install -U pip')
+            r.run_or_local('{virtualenv_dir}/bin/pip {quiet_flag} install -U pip')
         else:
-            r.sudo('{virtualenv_dir}/bin/pip install -U pip')
+            r.sudo('{virtualenv_dir}/bin/pip {quiet_flag} install -U pip')
 
-        cmd = "{virtualenv_dir}/bin/pip install -r {pip_remote_requirements_fn}"
+        cmd = "{virtualenv_dir}/bin/pip {quiet_flag} install -r {pip_remote_requirements_fn}"
         if self.is_local:
             r.run_or_local(cmd)
         else:

@@ -1,0 +1,34 @@
+; http://supervisord.org/configuration.html
+; 
+; This file should be installed to:
+;
+;   sudo -H nano /etc/supervisor/conf.d/buildbot.conf
+;
+; If this file is changed, run:
+;
+;   sudo supervisorctl reload
+;   sudo supervisorctl restart all
+
+{% if workerN == 1 %}
+[program:buildbot-master]
+command={{ buildbot_project_dir }}/.env/bin/buildbot --verbose start --nodaemon master
+directory={{ buildbot_project_dir }}/src/buildbot
+autostart=true
+autorestart=true
+stopasgroup=true
+startretries=3
+user={{buildbot_bb_user}}
+stdout_logfile=/var/log/buildbot-master.log
+stderr_logfile=/var/log/buildbot-master.log
+{% endif %}
+
+[program:buildbot-worker{{ workerN }}]
+command={{ buildbot_project_dir }}/.env/bin/buildbot-worker --verbose start --nodaemon worker{{ workerN }}
+directory={{ buildbot_project_dir }}/src/buildbot
+autostart=true
+autorestart=true
+stopasgroup=true
+startretries=10
+user={{buildbot_bb_user}}
+stdout_logfile=/var/log/buildbot-worker{{ workerN }}.log
+stderr_logfile=/var/log/buildbot-worker{{ workerN }}.log

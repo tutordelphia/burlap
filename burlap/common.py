@@ -999,14 +999,20 @@ class Satchel(object):
     def get_satchel(self, name):
         return get_satchel(name)
 
-    def define_cron_job(self, template, script_path, command=None, name='default', perms='600'):
+    def define_cron_job(self, template, script_path=None, command=None, name=None, perms='600', user='root', schedule='* * * * *'):
+        assert name, 'No name specified!'
         if 'cron' not in self.env:
             self.env.cron = type(env)()
         self.env.cron[name] = type(env)()
         self.env.cron[name].template = '%s/%s' % (self.name, template)
+
+        script_path = script_path or ('/etc/cron.d/%s' % name)
         self.env.cron[name].script_path = script_path
+
         self.env.cron[name].command = command
         self.env.cron[name].perms = '600'
+        self.env.cron[name].user = user
+        self.env.cron[name].schedule = schedule
         self.templates = list(self.templates)
         self.templates.append(template)
 
@@ -1466,7 +1472,7 @@ class Satchel(object):
     @verbose.setter
     def verbose(self, v):
         # 1 or True=local verbose only, 2=global verbose, None=clears local
-        if v == 1:
+        if v == LOCAL_VERBOSE:
             self._verbose = True
         elif v is None:
             self._verbose = None

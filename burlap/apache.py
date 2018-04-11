@@ -604,6 +604,7 @@ class ApacheSatchel(ServiceSatchel):
                 r.pc('Writing site configuration for site %s...' % _site)
                 from functools import partial
                 genv = r.collect_genv()
+                genv['current_hostname'] = self.current_hostname
                 print('*'*80)
                 print('apache_wsgi_scriptalias:', genv.apache_wsgi_scriptalias)
                 print('apache_auth_basic_authuserfile:', self.env.auth_basic_authuserfile)

@@ -84,14 +84,15 @@ class SettingsTracker(BaseTracker):
 
     Has only two custom parameters:
 
-        satchel = the satchel instance that contains the settings to track
-        names = a comma or space delimited list of setting names
+        satchel = The satchel instance that contains the settings to track.
+        names = A comma or space delimited list of setting names. If nothing specified, all names in the satchel will be tracked.
     """
 
-    def __init__(self, satchel, names, *args, **kwargs):
-        assert names, 'No setting names specified.'
+    def __init__(self, satchel, names=None, *args, **kwargs):
+        # assert names, 'No setting names specified.'
         if isinstance(names, basestring):
             names = names.replace(',', ' ').split(' ')
+        names = names or []
         assert isinstance(names, (tuple, list, set))
         names = sorted(set(_.strip() for _ in names if _.strip()))
         super(SettingsTracker, self).__init__(*args, **kwargs)
@@ -113,6 +114,10 @@ class SettingsTracker(BaseTracker):
         Calculates the current thumbprint of the item being tracked.
         """
         d = {}
+        if self.names:
+            names = self.names
+        else:
+            names = list(self.satchel.lenv)
         for name in self.names:
             d[name] = deepcopy(self.satchel.env[name])
         return d

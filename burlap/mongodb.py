@@ -30,6 +30,33 @@ class MongoDBSatchel(DatabaseSatchel):
 
         self.env.db_port = 9001
 
+        self.env.watchdog_enabled = False
+        self.env.watchdog_cron_schedule = None
+
+        self.define_cron_job(
+            name='mongomonitor',
+            template='etc_crond_mongomonitor',
+            # script_path='/etc/cron.d/mongomonitor',
+            command='/usr/local/bin/mongomonitor',
+            schedule=self.env.watchdog_cron_schedule
+        )
+
+    @task
+    def install_watchdog(self):
+        if not self.env.watchdog_enabled:
+            return
+        assert self.env.watchdog_cron_schedule, 'No schedule defined for the watchdog!'
+        self.install_script(
+            local_path='mongodb/mongomonitor',
+            remote_path='/usr/local/bin/mongomonitor',
+        )
+        self.install_cron_job(name='mongomonitor')
+
+    @task
+    def configure(self, *args, **kwargs):
+        super(MongoDBSatchel, self).configure(*args, **kwargs)
+        self.install_watchdog()
+
     @property
     def packager_system_packages(self):
         return {
@@ -55,6 +82,8 @@ class MongoDBSatchel(DatabaseSatchel):
                     }
                     return d
                 elif ver.release == '16.04':
+                    # https://www.digitalocean.com/community/tutorials/how-to-install-and-secure-mongodb-on-ubuntu-16-04
+                    # https://docs.mongodb.com/manual/tutorial/install-mongodb-on-ubuntu/
                     d = {
                         APT_SOURCE: [
                             (
