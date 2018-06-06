@@ -6,6 +6,6 @@ python-vagrant>=0.5.0
 mkdocs>=0.16.1
 
 #TODO: change once 1.7.1 bug fixed: https://github.com/PyCQA/pylint/issues/1388
-pylint<=1.6.5
+pylint==1.9.2
 
 pypandoc
