@@ -155,8 +155,11 @@ class RabbitMQSatchel(ServiceSatchel):
         reinstalled.
         """
         r = self.local_renderer
-        r.sudo('killall rabbitmq-server')
-        r.sudo('killall beam.smp')
+        self.stop()
+        with settings(warn_only=True):
+            r.sudo('killall rabbitmq-server')
+        with settings(warn_only=True):
+            r.sudo('killall beam.smp')
         #TODO:explicitly delete all subfolders, star-delete doesn't work
         r.sudo('rm -Rf /var/lib/rabbitmq/mnesia/*')
 
