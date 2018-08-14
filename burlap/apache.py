@@ -222,6 +222,8 @@ class ApacheSatchel(ServiceSatchel):
             'HTTPS',
             'HTTP',
             'HTTP_HOST',
+            'HTTP_USER_AGENT',
+            'REMOTE_ADDR',
         ]
 
         # The local and remote relative directory where the SSL certificates are stored.

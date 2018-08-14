@@ -81,6 +81,9 @@ class DjangoSatchel(Satchel):
         # Modules whose name start with one of these values will be deleted before settings are imported.
         self.env.delete_module_with_prefixes = []
 
+        # Modules whose name contains any of these values will be deleted before settings are imported.
+        self.env.delete_module_containing = []
+
         self.env.configure_media_command = 'cd {local_project_dir}; {manage_cmd} collectstatic --noinput'
 
     def has_database(self, name, site=None, role=None):
@@ -125,6 +128,12 @@ class DjangoSatchel(Satchel):
                                 del sys.modules[name]
                                 break
 
+                for name in list(sys.modules):
+                    for s in r.env.delete_module_containing:
+                        if s in name:
+                            del sys.modules[name]
+                            break
+
                 if r.env.settings_module in sys.modules:
                     del sys.modules[r.env.settings_module]
 
@@ -139,6 +148,9 @@ class DjangoSatchel(Satchel):
                 if self.verbose:
                     print('r.env.settings_module:', r.env.settings_module, r.format(r.env.settings_module))
                 module = import_module(r.format(r.env.settings_module))
+
+                if site:
+                    assert site == module.SITE, 'Unable to set SITE.'
 
                 # Works as long as settings.py doesn't also reload anything.
                 import imp
@@ -315,6 +327,7 @@ class DjangoSatchel(Satchel):
         r.env.options_str = ' '.join(options)
         if self.is_local:
             r.env.project_dir = r.env.local_project_dir
+        r.genv.SITE = r.genv.SITE or site
         r.run_or_local('export SITE={SITE}; export ROLE={ROLE}; cd {project_dir}; {manage_cmd} {createsuperuser_cmd} {options_str}')
 
     @task
