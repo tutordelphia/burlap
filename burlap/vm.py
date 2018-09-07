@@ -116,6 +116,7 @@ def get_ec2_connection():
         aws_access_key_id=env.vm_ec2_aws_access_key_id,
         aws_secret_access_key=env.vm_ec2_aws_secret_access_key,
     )
+    assert conn, 'Unable to create EC2 connection with region %s and access key %s.' % (env.vm_ec2_region, env.vm_ec2_aws_access_key_id)
     return conn
 
 def get_all_ec2_instances(instance_ids=None):
@@ -151,6 +152,8 @@ def list_instances(show=1, name=None, group=None, release=None, except_release=N
 
     data = type(env)()
     if env.vm_type == EC2:
+        if verbose:
+            print('Checking EC2...')
         for instance in get_all_running_ec2_instances():
             name = instance.tags.get(env.vm_name_tag)
             group = instance.tags.get(env.vm_group_tag)

@@ -150,7 +150,7 @@ class DjangoSatchel(Satchel):
                 module = import_module(r.format(r.env.settings_module))
 
                 if site:
-                    assert site == module.SITE, 'Unable to set SITE.'
+                    assert site == module.SITE, 'Unable to set SITE to "%s" Instead it is set to "%s".' % (site, module.SITE)
 
                 # Works as long as settings.py doesn't also reload anything.
                 import imp
