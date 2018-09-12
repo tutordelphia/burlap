@@ -302,4 +302,8 @@ class VagrantSatchel(ContainerSatchel):
         else:
             raise NotImplementedError('Unsupported family: %s' % family)
 
+    @task(precursors=['packager', 'user'])
+    def configure(self, *args, **kwargs):
+        self.install_from_upstream()
+
 vagrant = VagrantSatchel()
