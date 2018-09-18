@@ -26,7 +26,7 @@ class MemcachedSatchel(ServiceSatchel):
                 UBUNTU: 'service memcached stop',
             },
             STATUS:{
-                FEDORA: 'systemctl stop status',
+                FEDORA: 'systemctl status memcached',
                 UBUNTU: 'service memcached status',
             },
             DISABLE:{
